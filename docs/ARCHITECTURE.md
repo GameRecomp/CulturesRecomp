@@ -51,7 +51,9 @@ reads its own data files from the user's install. We never convert or redistribu
   lifted functions and HLE thunks. An unknown target is a fatal error that names the address, and gets fixed in the manifest.
 - **HLE**: every imported function has the same signature as lifted code (`void f(rc_cpu *)`). It reads its
   arguments from the guest stack and pops them (`stdcall`). Imports get reserved guest addresses in a
-  thunk region, so `call [IAT]` lands in `rc_dispatch`, which calls the HLE function.
+  thunk region (`0xF0000000+`, 16 bytes apart), so `call [IAT]` lands in `rc_dispatch`, which calls the HLE
+  function. An import without an implementation gets a *trap* thunk. The game loads anyway and fails with
+  `unimplemented import dll!Name` only when it calls one. A later registration upgrades the trap in place.
 - **COM**: DirectX interfaces are COM objects that live in guest memory. Their vtables point at thunk
   addresses, so the game's own vtable calls work unchanged.
 - **x87**: a fast mode on host doubles first. An exact 80-bit mode is added only if a game depends on it (both engines
@@ -98,13 +100,15 @@ scaling), input events, audio device and clock. It also has a `null` backend for
 | File          | Purpose |
 |---------------|---------|
 | `game.toml`   | Manifest: variants (installers, media), pinned binaries with role and treatment, discovery seeds, jump tables, no-return functions, patches. |
-| `CMakeLists.txt` | Calls `rc_add_game()` from `cmake/lift.cmake`. |
-| `main.c`      | Shell: argument parsing, locating the install, choosing the variant, starting the runtime. |
+| `CMakeLists.txt` | Calls `rc_add_game(<id> TITLE … EXES …)` from `cmake/lift.cmake`. That generates the shell's `main()` from `cmake/game_main.c.in`, and the shell calls `rc_game_main()` in `runtime/src/game.c` (arguments, locating the install, later hash check and boot). The executable is `cultures-<id>`. |
 | `patches.c` *(later)* | Hooks at guest addresses, such as skipping the CD check, larger resolutions or fixes. Every patch is opt-in or documented. |
 
 ## Generated code (generated/, git-ignored)
 
-The layout is `generated/<game>/<variant-or-binary>/code_XXXX.c`, `functions.h` and `dispatch_table.c`. It is
+The layout is `generated/<game>/<binary>/code_XXXX.c`, `functions.h` and `dispatch_table.c`. All binaries of a
+game link into one executable. Each gets its own symbol prefix and an `rc_generated_binary` entry (`rc/game.h`),
+and the shell picks the one whose SHA-256 matches the user's copy. `cmake/lift.cmake` compiles everything below
+`generated/<game>/` and defines `RC_HAVE_GENERATED`. It is
 derived from copyrighted code, so it is **never committed**, never uploaded and never put into issues. Builds
 regenerate it locally from the user's own files.
 
@@ -112,9 +116,9 @@ regenerate it locally from the user's own files.
 
 ```
 .github/workflows/   CI: audit, Rust (fmt/clippy/test), C (Linux/Windows/macOS)
-cmake/               lift.cmake: rc_add_game(), linking generated code when present
+cmake/               lift.cmake: rc_add_game(), linking generated code when present; game_main.c.in
 docs/                PLAN, ARCHITECTURE, TARGETS, RESEARCH, WORKFLOWS, notes/
-games/               one directory per game: game.toml, CMakeLists.txt, main.c
+games/               one directory per game: game.toml, CMakeLists.txt (patches.c later)
 hle/                 Win32/DirectX/middleware reimplementations, one subdirectory per DLL
 platform/            SDL3 backend + null backend
 recomp/              Rust workspace: the recompiler and the `recomp` CLI

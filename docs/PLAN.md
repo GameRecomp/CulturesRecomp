@@ -42,7 +42,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 
 | #   | Milestone                                  | Status | Exit criterion |
 |-----|--------------------------------------------|--------|----------------|
-| M0  | Foundation                                 | 🔶 | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
+| M0  | Foundation                                 | ✅ | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
 | M1  | Read the inputs                            | 🔶 | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
 | M2  | Find the code (C1)                         | ⬜ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
 | M3  | Lifter, integer core                       | ⬜ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
@@ -59,14 +59,19 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M14 | Converter                                  | ⬜ | `recomp convert <installer|iso>` produces a runnable build in one step. Later the browser page (the toolchain is built for wasm32). |
 | M15 | Polish and more platforms                  | ⬜ | Opt-in high resolutions and widescreen, integer scaling, settings UI, performance work, then Android and WebAssembly. |
 
-### M0 – Foundation 🔶
+### M0 – Foundation ✅
 
 - [x] Repository layout, MIT license, README and docs skeleton
-- [ ] CMake (C11) with presets, the runtime, HLE and platform libraries, and per-game shells
+- [x] CMake (C11) with presets (`dev`, `release`, `ci`), `cmake/lift.cmake` and generated per-game shells (`cultures-<id>`)
+- [x] Runtime core with tests: 4 GiB guest memory, CPU state, dispatcher (hash table, fatal on unknown targets),
+      HLE registry with trap thunks for unimplemented imports, case-insensitive VFS lookup, logging
+- [x] Platform layer: SDL3 backend (window, letterboxed 16-bit present, input, clock) and a null backend
+- [x] HLE module table covering every imported DLL; first functions `GetTickCount` and `timeGetTime`
 - [x] Cargo workspace with `rc-pe`, `rc-manifest` and `rc-cli` (`recomp identify`, `recomp info`)
 - [x] `games/*/game.toml` for all five games (incl. the Saga), with every installer and binary pinned
-- [ ] `tools/audit.sh` and the pre-commit hook (SPDX headers, no game files, no absolute paths)
-- [ ] CI: audit, Rust fmt/clippy/test, C build and tests on Linux, Windows and macOS
+- [x] `tools/audit.sh`, the pre-commit hook (SPDX headers, no game files, no absolute paths) and the commit-msg hook
+- [x] `tools/dev-extract.sh` (innoextract / unshield / unzip) as a stopgap until `recomp extract`
+- [x] CI: audit, Rust fmt/clippy/test, C build and tests on Linux, Windows and macOS (only Linux was verified locally)
 
 ### M1 – Read the inputs
 
@@ -209,4 +214,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | 2026-11-18 | `binkw32.dll`, `DPlayDLL.dll` and `gedx8musicdrv.dll` are lifted. Miles (`mss32`) and all system DLLs are HLE. GOG's `winmm.dll` wrapper is not used. |
 | 2026-11-18 | SDL3 is the only platform dependency. The project uses host fonts only and bundles no assets. |
 | 2026-11-18 | Docs, code and comments are in English. |
+| 2026-11-19 | All lifted binaries of a game link into one executable `cultures-<id>`. Each binary gets its own symbol prefix, and the shell picks the binary whose hash matches the user's copy. |
+| 2026-11-19 | HLE thunks live at `0xF0000000+` (kernel space for a Win32 guest, never touched by the games). Unknown imports resolve to trap thunks, so a game loads with gaps and fails only when it calls one. |
+| 2026-11-19 | Store extras (GOG Galaxy DLLs, GOG's Ogg/Vorbis wrapper dependencies, uninstallers) are skipped by name in `recomp identify`, not pinned. |
 | 2026-11-18 | *Cultures – Die Saga* (German retail, supplied as a zip of an installed copy) is a separate game `saga` on the C2 engine, because its executables, data archive and content differ from Northland and 8th Wonder. Both single-player builds (`Game.exe` 2003, `GameSaga.exe` 2005) are pinned. |

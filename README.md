@@ -47,8 +47,10 @@ Sources and details are in [`docs/RESEARCH.md`](docs/RESEARCH.md#editions).
 
 ## Status
 
-**M0, Foundation: in progress.** Docs, target manifests and the Rust toolchain (`rc-pe`, `rc-manifest`, `recomp`) are in place. The C side (CMake, runtime, HLE, platform), CI and the audit hook are still to do.
-The `recomp` CLI already identifies every supported installer, ISO and executable.
+**M0, Foundation: done.** The docs, target manifests, Rust toolchain (`rc-pe`, `rc-manifest`, `recomp`),
+C runtime core (guest memory, dispatcher, HLE registry, VFS lookup), the SDL3/null platform layer, game shells,
+audit hooks and CI are in place. The `recomp` CLI already identifies every supported installer, ISO, zip and executable.
+Next up is M1: reading installers without third-party tools, and the PE loader.
 Nothing is playable yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)
@@ -67,6 +69,9 @@ recomp/target/release/recomp identify orig/
 cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev
+
+# A game shell (reports "no lifted code" until M3+)
+build/dev/games/cultures1/cultures-cultures1 --help
 ```
 
 Put your own game files in `orig/` (git-ignored). Read [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) for the details.

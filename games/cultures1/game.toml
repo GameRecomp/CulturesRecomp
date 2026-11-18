@@ -139,6 +139,33 @@ size = 64526
 sha256 = "f2006e090eae1cecb8d5ec9b2f983a99c0d657e88be22ce714b5c284d58c6327"
 variants = ["gog-de"]
 
+[[binary]]
+name = "RegisterCultures.exe"
+role = "library"
+treatment = "ignore"
+notes = "Retail installer helper."
+size = 49152
+sha256 = "ff58e23be49a4b83bb609a7fb4b940f56e9d758f78b742dcc6f105f8bc3e0bec"
+variants = ["gold-de"]
+
+[[binary]]
+name = "UninstallCultures.dll"
+role = "library"
+treatment = "ignore"
+notes = "Retail installer helper."
+size = 49152
+sha256 = "87caef4320f7fb2ce76c29c66b94c50e7e79745431756590a2398e88ea105cde"
+variants = ["gold-de"]
+
+[[binary]]
+name = "UnregisterCultures.exe"
+role = "library"
+treatment = "ignore"
+notes = "Retail installer helper."
+size = 49152
+sha256 = "1e63fdf7a7978447c92763d8a963df20cbe7087cb9d4b8fe49dd050b605299de"
+variants = ["gold-de"]
+
 # --- discovery / patches (filled in from M2 on) ------------------------------
 # [discover]
 # seeds = []            # extra function entry points

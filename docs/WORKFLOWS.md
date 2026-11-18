@@ -20,11 +20,12 @@ size only**. Do not attach the file.
 
 ## Extracting (until `recomp extract` exists, M1)
 
-`tools/dev-extract.sh` wraps `innoextract` (GOG) and `unshield` + `isoinfo` (Gold ISO):
+`tools/dev-extract.sh` wraps `innoextract` (GOG), `unshield` + `isoinfo` (Gold ISO) and `unzip` (Saga):
 
 ```sh
 tools/dev-extract.sh orig/setup_cultures_2.1.0.12.exe   cultures1 gog-en
 tools/dev-extract.sh "orig/Cultures (Gold Edition).iso" cultures1 gold-de
+tools/dev-extract.sh "orig/Cultures Saga.zip"          saga retail-de
 ```
 
 The result is `orig/<game>/<variant>/` with the installed layout (for example `Cultures.exe`, `data_l/`, …).
@@ -45,10 +46,12 @@ ctest --preset dev
 cmake --preset release        # RelWithDebInfo, build/release
 ```
 
+The game shells end up in `build/<preset>/games/<id>/cultures-<id>`.
+
 SDL3 is used when CMake finds it (`-DRC_WITH_SDL3=ON|OFF|AUTO`, default `AUTO`). Without it, the null
 platform is built. That is enough for tests.
 
-Once lifting exists (M3+), `cmake/lift.cmake` picks up `generated/<game>/<variant>/*.c` automatically. Without
+Once lifting exists (M3+), `cmake/lift.cmake` picks up `generated/<game>/**/*.c` automatically. Without
 generated code, each game shell builds and only reports that the code has not been lifted yet.
 
 ## Rust toolchain
@@ -64,8 +67,8 @@ cargo test -- --ignored        # tests that need your files in ../orig/
 ## Before committing
 
 ```sh
-git config core.hooksPath tools/hooks     # once per clone
-tools/audit.sh                            # what the hook and CI run
+git config core.hooksPath tools/hooks     # once per clone: pre-commit (audit) + commit-msg
+tools/audit.sh                            # what the pre-commit hook and CI run
 ```
 
 ## Adding a new variant or binary

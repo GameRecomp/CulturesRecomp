@@ -107,6 +107,25 @@ fn has_ext(p: &Path, exts: &[&str]) -> bool {
         .is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))
 }
 
+/// Store and installer extras that differ per release and are never used by the games
+/// (GOG Galaxy glue, GOG's Ogg/Vorbis CD-audio wrapper dependencies, uninstallers).
+/// They are skipped instead of being reported as unknown. Prefixes, lower case.
+const IGNORED_PREFIXES: &[&str] = &[
+    "goggame-",
+    "gameuxinstallhelper",
+    "webcache.zip",
+    "libogg-",
+    "libvorbis",
+    "unins",
+];
+
+fn is_ignored_extra(p: &Path) -> bool {
+    p.file_name()
+        .and_then(|n| n.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|n| IGNORED_PREFIXES.iter().any(|pre| n.starts_with(pre)))
+}
+
 fn identify(o: Opts) -> Result<ExitCode, String> {
     if o.paths.is_empty() {
         return Err("identify needs at least one PATH".into());
@@ -132,7 +151,7 @@ fn identify(o: Opts) -> Result<ExitCode, String> {
         let hash = rc_manifest::sha256_file(f).map_err(|e| format!("{}: {e}", f.display()))?;
         let hits = cat.lookup(&hash);
         if hits.is_empty() {
-            if candidate {
+            if candidate && !is_ignored_extra(f) {
                 unknown += 1;
                 println!("unknown  {}  {}", &hash[..16], f.display());
             }
@@ -299,6 +318,15 @@ fn info(o: Opts) -> Result<ExitCode, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn store_extras_are_ignored() {
+        assert!(is_ignored_extra(Path::new("app/goggame-1207663793.dll")));
+        assert!(is_ignored_extra(Path::new("GameuxInstallHelper.dll")));
+        assert!(is_ignored_extra(Path::new("libvorbisfile-3.dll")));
+        assert!(!is_ignored_extra(Path::new("Cultures.exe")));
+        assert!(!is_ignored_extra(Path::new("winmm.dll")));
+    }
 
     #[test]
     fn timestamps() {

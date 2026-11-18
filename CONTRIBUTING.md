@@ -5,7 +5,7 @@ Thanks for helping. Please read this first. Rule 1 protects the project.
 ## Setup
 
 ```sh
-git config core.hooksPath tools/hooks    # once per clone: runs tools/audit.sh before each commit
+git config core.hooksPath tools/hooks    # once per clone: audit before each commit, commit message check
 ```
 
 ## Rules
@@ -33,5 +33,7 @@ git config core.hooksPath tools/hooks    # once per clone: runs tools/audit.sh b
 
 ## Commits and PRs
 
+- Commit messages describe the change only. They do not mention AI tools, models, vendors or sessions, and they
+  carry no attribution trailers for them. `tools/hooks/commit-msg` enforces this.
 - One topic per PR. Reference the milestone (for example `M2: resolve jump tables in Cultures.exe`).
 - Update the status in [docs/PLAN.md](docs/PLAN.md) when a checklist item is done.
