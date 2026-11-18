@@ -1,0 +1,481 @@
+// SPDX-License-Identifier: MIT
+//! Loader for `games/<id>/game.toml` and a hash catalogue over all of them.
+//!
+//! The manifests are the single source of truth for which installers, media and binaries
+//! the project accepts (see `docs/TARGETS.md`).
+
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::fs;
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+
+pub const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Manifest {
+    pub schema: u32,
+    pub game: Game,
+    #[serde(rename = "variant")]
+    pub variants: Vec<Variant>,
+    #[serde(rename = "binary", default)]
+    pub binaries: Vec<Binary>,
+    /// Discovery hints (seeds, jump tables, no-return functions), filled in from M2 on.
+    #[serde(default)]
+    pub discover: Option<toml::Table>,
+    /// Patch definitions, filled in later.
+    #[serde(default)]
+    pub patch: Option<toml::Table>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Game {
+    pub id: String,
+    pub title: String,
+    pub title_de: String,
+    pub engine: Engine,
+    pub gog_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Engine {
+    C1,
+    C2,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Variant {
+    pub id: String,
+    pub store: String,
+    pub language: String,
+    pub content: Vec<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+    pub media: Vec<Media>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Media {
+    pub file: String,
+    pub kind: MediaKind,
+    pub size: u64,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MediaKind {
+    /// Inno Setup installer (GOG).
+    Inno,
+    /// ISO 9660 CD image.
+    Iso,
+    /// Zip archive of an installed copy (the original directory layout, uncompressed or deflated).
+    Zip,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Binary {
+    pub name: String,
+    pub role: Role,
+    pub treatment: Treatment,
+    pub size: u64,
+    pub sha256: String,
+    pub variants: Vec<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Main,
+    /// Another single-player build shipped next to `main` (e.g. the Saga's `GameSaga.exe`).
+    Alternate,
+    Multiplayer,
+    Editor,
+    Library,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Treatment {
+    /// Statically recompiled.
+    Lift,
+    /// Reimplemented in `hle/`.
+    Hle,
+    /// Not needed at all.
+    Ignore,
+}
+
+macro_rules! display_lower {
+    ($($t:ty),*) => {$(
+        impl fmt::Display for $t {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&format!("{self:?}").to_lowercase())
+            }
+        }
+    )*};
+}
+display_lower!(Engine, MediaKind, Role, Treatment);
+
+#[derive(Debug)]
+pub enum Error {
+    Io(PathBuf, io::Error),
+    Parse(PathBuf, String),
+    Invalid(Vec<String>),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Io(p, e) => write!(f, "{}: {e}", p.display()),
+            Error::Parse(p, e) => write!(f, "{}: {e}", p.display()),
+            Error::Invalid(errs) => write!(f, "invalid manifests:\n  {}", errs.join("\n  ")),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+pub fn parse_str(text: &str, origin: &Path) -> Result<Manifest, Error> {
+    toml::from_str(text).map_err(|e| Error::Parse(origin.to_owned(), e.to_string()))
+}
+
+/// Load every `<dir>/*/game.toml`, sorted by game id, and validate them together.
+pub fn load_dir(dir: &Path) -> Result<Vec<Manifest>, Error> {
+    let mut out = Vec::new();
+    let entries = fs::read_dir(dir).map_err(|e| Error::Io(dir.to_owned(), e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| Error::Io(dir.to_owned(), e))?;
+        let path = entry.path().join("game.toml");
+        if !path.is_file() {
+            continue;
+        }
+        let text = fs::read_to_string(&path).map_err(|e| Error::Io(path.clone(), e))?;
+        out.push(parse_str(&text, &path)?);
+    }
+    out.sort_by(|a, b| a.game.id.cmp(&b.game.id));
+    validate(&out)?;
+    Ok(out)
+}
+
+fn is_sha256(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// Cross-check a set of manifests. Every problem is collected, not just the first.
+pub fn validate(manifests: &[Manifest]) -> Result<(), Error> {
+    let mut errs = Vec::new();
+    let mut game_ids = BTreeSet::new();
+    let mut media_hashes = BTreeMap::new();
+    for m in manifests {
+        let g = &m.game.id;
+        if m.schema != SCHEMA_VERSION {
+            errs.push(format!(
+                "{g}: schema {} (expected {SCHEMA_VERSION})",
+                m.schema
+            ));
+        }
+        if !game_ids.insert(g.clone()) {
+            errs.push(format!("{g}: duplicate game id"));
+        }
+        let mut variant_ids = BTreeSet::new();
+        for v in &m.variants {
+            if !variant_ids.insert(v.id.as_str()) {
+                errs.push(format!("{g}/{}: duplicate variant id", v.id));
+            }
+            if v.media.is_empty() {
+                errs.push(format!("{g}/{}: no media", v.id));
+            }
+            for md in &v.media {
+                if !is_sha256(&md.sha256) {
+                    errs.push(format!("{g}/{}: bad sha256 for {}", v.id, md.file));
+                }
+                if let Some(prev) = media_hashes.insert(md.sha256.clone(), format!("{g}/{}", v.id))
+                {
+                    errs.push(format!(
+                        "{g}/{}: media {} also listed by {prev}",
+                        v.id, md.file
+                    ));
+                }
+            }
+        }
+        let mut seen = BTreeSet::new();
+        for b in &m.binaries {
+            if !is_sha256(&b.sha256) {
+                errs.push(format!("{g}: bad sha256 for {}", b.name));
+            }
+            if !seen.insert(b.sha256.as_str()) {
+                errs.push(format!("{g}: {} ({}) listed twice", b.name, b.sha256));
+            }
+            if b.variants.is_empty() {
+                errs.push(format!("{g}: {} has no variants", b.name));
+            }
+            for v in &b.variants {
+                if !variant_ids.contains(v.as_str()) {
+                    errs.push(format!("{g}: {} refers to unknown variant {v}", b.name));
+                }
+            }
+        }
+        for v in &m.variants {
+            let mains = m
+                .binaries
+                .iter()
+                .filter(|b| b.role == Role::Main && b.variants.contains(&v.id))
+                .count();
+            if mains != 1 {
+                errs.push(format!("{g}/{}: {mains} main executables (need 1)", v.id));
+            }
+        }
+    }
+    if errs.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Invalid(errs))
+    }
+}
+
+/// What a hash matched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hit {
+    Media {
+        game: String,
+        variant: String,
+        kind: MediaKind,
+        file: String,
+    },
+    Binary {
+        game: String,
+        variants: Vec<String>,
+        name: String,
+        role: Role,
+        treatment: Treatment,
+    },
+}
+
+impl fmt::Display for Hit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Hit::Media {
+                game,
+                variant,
+                kind,
+                file,
+            } => write!(f, "{game}/{variant} {kind} media ({file})"),
+            Hit::Binary {
+                game,
+                variants,
+                name,
+                role,
+                treatment,
+            } => write!(
+                f,
+                "{game}/{} {name} [{role}, {treatment}]",
+                variants.join(",")
+            ),
+        }
+    }
+}
+
+/// Hash → matches over all manifests. A binary can appear in several games
+/// (for example `gedx8musicdrv.dll`), so one hash may yield several hits.
+#[derive(Debug, Default)]
+pub struct Catalog {
+    by_hash: BTreeMap<String, Vec<Hit>>,
+    sizes: BTreeSet<u64>,
+}
+
+impl Catalog {
+    pub fn new(manifests: &[Manifest]) -> Self {
+        let mut c = Catalog::default();
+        for m in manifests {
+            for v in &m.variants {
+                for md in &v.media {
+                    c.sizes.insert(md.size);
+                    c.by_hash
+                        .entry(md.sha256.clone())
+                        .or_default()
+                        .push(Hit::Media {
+                            game: m.game.id.clone(),
+                            variant: v.id.clone(),
+                            kind: md.kind,
+                            file: md.file.clone(),
+                        });
+                }
+            }
+            for b in &m.binaries {
+                c.sizes.insert(b.size);
+                c.by_hash
+                    .entry(b.sha256.clone())
+                    .or_default()
+                    .push(Hit::Binary {
+                        game: m.game.id.clone(),
+                        variants: b.variants.clone(),
+                        name: b.name.clone(),
+                        role: b.role,
+                        treatment: b.treatment,
+                    });
+            }
+        }
+        c
+    }
+
+    /// Cheap pre-filter: only files with a known size need hashing.
+    pub fn is_known_size(&self, size: u64) -> bool {
+        self.sizes.contains(&size)
+    }
+
+    pub fn lookup(&self, sha256: &str) -> &[Hit] {
+        self.by_hash.get(sha256).map_or(&[], Vec::as_slice)
+    }
+
+    pub fn len(&self) -> usize {
+        self.by_hash.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.by_hash.is_empty()
+    }
+}
+
+/// Lower-case hex SHA-256 of a byte slice.
+pub fn sha256_hex(data: &[u8]) -> String {
+    hex(&Sha256::digest(data))
+}
+
+/// Lower-case hex SHA-256 of a file, streamed.
+pub fn sha256_file(path: &Path) -> io::Result<String> {
+    let mut f = fs::File::open(path)?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Ok(hex(&h.finalize()))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Locate the `games/` directory: `$RC_GAMES_DIR`, else the nearest `games/` in the current
+/// directory or one of its parents, else the copy in this source tree.
+pub fn default_games_dir() -> PathBuf {
+    if let Some(d) = std::env::var_os("RC_GAMES_DIR") {
+        return PathBuf::from(d);
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        for dir in cwd.ancestors() {
+            let g = dir.join("games");
+            if g.join("cultures1").join("game.toml").is_file() {
+                return g;
+            }
+        }
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../games")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn repo_games() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../games")
+    }
+
+    #[test]
+    fn all_manifests_are_consistent() {
+        let ms = load_dir(&repo_games()).unwrap_or_else(|e| panic!("{e}"));
+        let ids: Vec<_> = ms.iter().map(|m| m.game.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "cultures1",
+                "cultures2",
+                "eighthwonder",
+                "northland",
+                "saga"
+            ]
+        );
+        let c = Catalog::new(&ms);
+        // 12 media files, 9 distinct single-player executables (main + alternate).
+        let media = ms.iter().flat_map(|m| &m.variants).count();
+        assert_eq!(media, 12);
+        let mains: BTreeSet<_> = ms
+            .iter()
+            .flat_map(|m| &m.binaries)
+            .filter(|b| matches!(b.role, Role::Main | Role::Alternate))
+            .map(|b| b.sha256.as_str())
+            .collect();
+        assert_eq!(mains.len(), 9);
+        assert!(!c.is_empty());
+    }
+
+    #[test]
+    fn shared_dll_hits_every_game() {
+        let ms = load_dir(&repo_games()).unwrap();
+        let c = Catalog::new(&ms);
+        let hits = c.lookup("547c5571c39dbcb921a2b8fff2d1568f11ceab9b79a7a2d5a2a82fb5601395bf");
+        assert_eq!(
+            hits.len(),
+            4,
+            "gedx8musicdrv.dll is shared by all four C2-engine games"
+        );
+        assert!(c.is_known_size(77824));
+        assert!(c.lookup(&"0".repeat(64)).is_empty());
+    }
+
+    #[test]
+    fn validation_reports_errors() {
+        let text = r#"
+            schema = 1
+            [game]
+            id = "x"
+            title = "X"
+            title_de = "X"
+            engine = "c1"
+            [[variant]]
+            id = "a"
+            store = "gog"
+            language = "en"
+            content = ["base"]
+            media = [{ file = "f", kind = "inno", size = 1, sha256 = "nothex" }]
+            [[binary]]
+            name = "X.exe"
+            role = "main"
+            treatment = "lift"
+            size = 1
+            sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+            variants = ["b"]
+        "#;
+        let m = parse_str(text, Path::new("test")).unwrap();
+        let Err(Error::Invalid(errs)) = validate(&[m]) else {
+            panic!("expected validation errors")
+        };
+        assert!(errs.iter().any(|e| e.contains("bad sha256")));
+        assert!(errs.iter().any(|e| e.contains("unknown variant b")));
+        assert!(errs.iter().any(|e| e.contains("0 main executables")));
+    }
+
+    #[test]
+    fn sha256_known_vector() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+}

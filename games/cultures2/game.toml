@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: MIT
+# Manifest for Cultures 2. Human-readable overview: docs/TARGETS.md
+schema = 1
+
+[game]
+id = "cultures2"
+title = "Cultures 2: The Gates of Asgard"
+title_de = "Cultures 2 – Die Tore Asgards"
+engine = "c2"
+gog_id = "1207663813"
+
+[[variant]]
+id = "gog-en"
+store = "gog"
+language = "en"
+content = ["base"]
+media = [
+  { file = "setup_cultures2_2.1.0.10.exe", kind = "inno", size = 297513816, sha256 = "cc8f07c30cb1320444022ed163c278db6b392de04b49e00650cc615d2ed48e87" },
+]
+
+[[variant]]
+id = "gog-de"
+store = "gog"
+language = "de"
+content = ["base"]
+media = [
+  { file = "setup_cultures2_german_2.1.0.11.exe", kind = "inno", size = 332675808, sha256 = "fee5ba73a65f53d3a3df5217a8038275067dc64f7bdf287769bb5862fa742632" },
+]
+
+# --- executables -------------------------------------------------------------
+
+[[binary]]
+name = "Cultures2.exe"
+role = "main"
+treatment = "lift"
+notes = "PE rewritten by GOG in 2017; extra .cms_t/.cms_d sections (see docs/RESEARCH.md)."
+size = 1393664
+sha256 = "e3ba0b2216f75fa2dd53e70974cab8c43dac52212462d89f0e22043bdcab4fde"
+variants = ["gog-en", "gog-de"]
+
+[[binary]]
+name = "Cultures2MP.exe"
+role = "multiplayer"
+treatment = "lift"
+size = 1110016
+sha256 = "01beaa3189791df220a30564f4ee261cede3a8935cb028cdbd22ab1eb7d4414a"
+variants = ["gog-en", "gog-de"]
+
+# --- libraries ---------------------------------------------------------------
+
+[[binary]]
+name = "binkw32.dll"
+role = "library"
+treatment = "lift"
+size = 310835
+sha256 = "ee68dcf51e8e3b482f9fb5ef617f44a2d9e970d03f3ed21fe26d40cd63c57a48"
+variants = ["gog-en", "gog-de"]
+
+[[binary]]
+name = "gedx8musicdrv.dll"
+role = "library"
+treatment = "lift"
+size = 77824
+sha256 = "547c5571c39dbcb921a2b8fff2d1568f11ceab9b79a7a2d5a2a82fb5601395bf"
+variants = ["gog-en", "gog-de"]
+
+[[binary]]
+name = "Mss32.dll"
+role = "library"
+treatment = "hle"
+size = 348160
+sha256 = "2a515199cc7a2e1ccd8d756efdaab07cedd5c3052309ef1c7499c2560e2097bd"
+variants = ["gog-en", "gog-de"]
+
+[[binary]]
+name = "Mp3dec.asi"
+role = "library"
+treatment = "ignore"
+size = 125952
+sha256 = "0a6db88a5fad28168c1dac700473c5709b17802c33e36b2668c3300c1e580fad"
+variants = ["gog-en", "gog-de"]

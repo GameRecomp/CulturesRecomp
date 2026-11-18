@@ -1,0 +1,146 @@
+# SPDX-License-Identifier: MIT
+# Manifest for Cultures 1. Human-readable overview: docs/TARGETS.md
+schema = 1
+
+[game]
+id = "cultures1"
+title = "Cultures: Discovery of Vinland"
+title_de = "Cultures – Die Entdeckung Vinlands"
+engine = "c1"
+gog_id = "1207663793"
+
+[[variant]]
+id = "gog-en"
+store = "gog"
+language = "en"
+content = ["base"]
+media = [
+  { file = "setup_cultures_2.1.0.12.exe", kind = "inno", size = 195201296, sha256 = "4800a05b4c32cc8ae6fbce76732f605894aa4536a69b11875df01e9d4c3eb3b2" },
+]
+
+[[variant]]
+id = "gog-de"
+store = "gog"
+language = "de"
+content = ["base"]
+media = [
+  { file = "setup_cultures_german_2.1.0.12.exe", kind = "inno", size = 215289544, sha256 = "e8bf7d293b85d5efd073be131df2121c2ceab63d05a43c89df0500c2b9e31542" },
+]
+
+[[variant]]
+id = "gold-de"
+store = "retail"
+language = "de"
+content = ["base", "addon-rache-des-regengottes"]
+notes = "German Gold Edition CD (data track only, no CD-audio music). InstallShield 5 setup."
+media = [
+  { file = "Cultures (Gold Edition).iso", kind = "iso", size = 433559552, sha256 = "a7f8631a1faf09de1da0a5cf3866c379cea1e3a51d2bb4584b1682c659586674" },
+]
+
+# --- executables -------------------------------------------------------------
+
+[[binary]]
+name = "Cultures.exe"
+role = "main"
+treatment = "lift"
+size = 782336
+sha256 = "65417291a96241d650d5664b6b40ee7a1485f963f5cc959760a951130a1cbfc1"
+variants = ["gog-en"]
+
+[[binary]]
+name = "Cultures.exe"
+role = "main"
+treatment = "lift"
+size = 782336
+sha256 = "3fc2f057f169013568816ba1fb48e5926536eb9da82bc71a913adeece322099c"
+variants = ["gog-de"]
+
+[[binary]]
+name = "Cultures.exe"
+role = "main"
+treatment = "lift"
+size = 786432
+sha256 = "ff5b8acd577fa77e81e2f1a89c4da3555a007d7ded783c4f1bf4008d9e6cecf6"
+variants = ["gold-de"]
+
+# --- libraries ---------------------------------------------------------------
+
+[[binary]]
+name = "binkw32.dll"
+role = "library"
+treatment = "lift"
+size = 291840
+sha256 = "70f28f6e469eceaecd5e5795d58b017f096a536227584c2684bc74cd279bcce8"
+variants = ["gog-en", "gold-de"]
+
+[[binary]]
+name = "binkw32.dll"
+role = "library"
+treatment = "lift"
+size = 310835
+sha256 = "ee68dcf51e8e3b482f9fb5ef617f44a2d9e970d03f3ed21fe26d40cd63c57a48"
+variants = ["gog-de"]
+
+[[binary]]
+name = "DPlayDLL.dll"
+role = "library"
+treatment = "lift"
+size = 114688
+sha256 = "628db393586430dd3d867777669b3db6800b68c78a1eedf53299f85f37f1afd2"
+variants = ["gog-en"]
+
+[[binary]]
+name = "DPlayDLL.dll"
+role = "library"
+treatment = "lift"
+size = 102400
+sha256 = "3b0169c7e0ecb61e10fdc8c1f48e0e3eddddd2c1e31af7381a4d26c837fefb64"
+variants = ["gog-de", "gold-de"]
+
+[[binary]]
+name = "Mss32.dll"
+role = "library"
+treatment = "hle"
+size = 351744
+sha256 = "fe62f1eb6ba407df77619d16927abbefad3c726014f6bd1f8c37a7c3d6b781cc"
+variants = ["gog-en", "gold-de"]
+
+[[binary]]
+name = "Mss32.dll"
+role = "library"
+treatment = "hle"
+size = 348160
+sha256 = "2a515199cc7a2e1ccd8d756efdaab07cedd5c3052309ef1c7499c2560e2097bd"
+variants = ["gog-de"]
+
+[[binary]]
+name = "Mp3dec.asi"
+role = "library"
+treatment = "ignore"
+size = 126464
+sha256 = "51765b5a747bd2c5255b727557a7927c8318e09919bd9b4ef4b4019e801cd562"
+variants = ["gog-en", "gog-de", "gold-de"]
+
+[[binary]]
+name = "winmm.dll"
+role = "library"
+treatment = "ignore"
+notes = "GOG CD-audio-to-OGG wrapper; replaced by our winmm HLE."
+size = 64526
+sha256 = "3dfadd865d95b597469a616c4961dcadc6970d41d411657e4682a2ffdcde1f2e"
+variants = ["gog-en"]
+
+[[binary]]
+name = "winmm.dll"
+role = "library"
+treatment = "ignore"
+notes = "GOG CD-audio-to-OGG wrapper; replaced by our winmm HLE."
+size = 64526
+sha256 = "f2006e090eae1cecb8d5ec9b2f983a99c0d657e88be22ce714b5c284d58c6327"
+variants = ["gog-de"]
+
+# --- discovery / patches (filled in from M2 on) ------------------------------
+# [discover]
+# seeds = []            # extra function entry points
+# no_return = []        # functions that never return
+# jump_tables = []      # { at = 0x..., table = 0x..., count = n }

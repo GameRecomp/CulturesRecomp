@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: MIT
+# Manifest for Cultures: Northland. Human-readable overview: docs/TARGETS.md
+schema = 1
+
+[game]
+id = "northland"
+title = "Cultures: Northland"
+title_de = "Cultures – Reise nach Nordland"
+engine = "c2"
+gog_id = "1207663833"
+
+[[variant]]
+id = "gog-en"
+store = "gog"
+language = "en"
+content = ["base"]
+media = [
+  { file = "setup_northland_2.1.0.9.exe", kind = "inno", size = 185408048, sha256 = "b21024df011a62c218f59907d3fb0a81a6414fe942a1fde8b402041678dff3a0" },
+]
+
+[[variant]]
+id = "gog-de"
+store = "gog"
+language = "de"
+content = ["base"]
+media = [
+  { file = "setup_northland_german_2.1.0.9.exe", kind = "inno", size = 188623424, sha256 = "26b1b09e1a6912139111697fa3f1cb389aa32a86d59aa252079cf17575514da4" },
+]
+
+[[variant]]
+id = "gog-es"
+store = "gog"
+language = "es"
+content = ["base"]
+media = [
+  { file = "setup_northland_spanish_2.1.0.9.exe", kind = "inno", size = 211958320, sha256 = "b435eb427081f2a5dc5a8cd79241eee60d2be2ed9fb7c84a15b4198b1f97e5c5" },
+]
+
+# --- executables -------------------------------------------------------------
+
+[[binary]]
+name = "Game.exe"
+role = "main"
+treatment = "lift"
+size = 1122304
+sha256 = "538fce0d3c60c981f8237c40a9fd8aa0572324416a93076e71ad30541973b56d"
+variants = ["gog-en", "gog-de", "gog-es"]
+
+[[binary]]
+name = "GameMp.exe"
+role = "multiplayer"
+treatment = "lift"
+size = 1175552
+sha256 = "698539de05c4b79c3731e438fbfffa39cc480e932a95c55656edee548e2c819d"
+variants = ["gog-en", "gog-es"]
+
+[[binary]]
+name = "GameMp.exe"
+role = "multiplayer"
+treatment = "lift"
+size = 1114112
+sha256 = "c2657bcf1e9c4707c8d984b52b63a8daae83bbd6f8d4c33c9afc07f9e0f14bdb"
+variants = ["gog-de"]
+
+[[binary]]
+name = "Editor.exe"
+role = "editor"
+treatment = "lift"
+size = 1105920
+sha256 = "43e34c821ae456f56f9179cccc8a87f91f4d67efa0caf5f76c9a24fa78c29019"
+variants = ["gog-en", "gog-es"]
+
+[[binary]]
+name = "Editor.exe"
+role = "editor"
+treatment = "lift"
+size = 1110016
+sha256 = "a31a3c4051820897e6e565810bdaffca5e04eb1e011756b4f6761d9b84d3ed43"
+variants = ["gog-de"]
+
+# --- libraries ---------------------------------------------------------------
+
+[[binary]]
+name = "gedx8musicdrv.dll"
+role = "library"
+treatment = "lift"
+size = 77824
+sha256 = "547c5571c39dbcb921a2b8fff2d1568f11ceab9b79a7a2d5a2a82fb5601395bf"
+variants = ["gog-en", "gog-de", "gog-es"]

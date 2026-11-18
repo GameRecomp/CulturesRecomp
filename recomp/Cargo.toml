@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+rust-version = "1.80"
+publish = false
+
+[workspace.dependencies]
+rc-pe = { path = "crates/rc-pe" }
+rc-manifest = { path = "crates/rc-manifest" }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+toml = "0.8"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+debug = 1

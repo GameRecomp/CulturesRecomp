@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: MIT
+# Manifest for Cultures: 8th Wonder of the World. Human-readable overview: docs/TARGETS.md
+schema = 1
+
+[game]
+id = "eighthwonder"
+title = "Cultures: 8th Wonder of the World"
+title_de = "Cultures – Das Achte Weltwunder"
+engine = "c2"
+gog_id = "1207663853"
+
+[[variant]]
+id = "gog-en"
+store = "gog"
+language = "en"
+content = ["base"]
+media = [
+  { file = "setup_8th_wonder_2.1.0.9.exe", kind = "inno", size = 208859192, sha256 = "8a0a624791581cfa6ef3efe4b2ab730a4766615b423689331b24959c4946b94d" },
+]
+
+[[variant]]
+id = "gog-de"
+store = "gog"
+language = "de"
+content = ["base"]
+media = [
+  { file = "setup_8th_wonder_german_2.1.0.9.exe", kind = "inno", size = 210929320, sha256 = "866b833e7d8110861332f439cf331d92e70e44bda81461c299dd1aea1b569139" },
+]
+
+[[variant]]
+id = "gog-es"
+store = "gog"
+language = "es"
+content = ["base"]
+media = [
+  { file = "setup_8th_wonder_spanish_2.1.0.9.exe", kind = "inno", size = 215327224, sha256 = "5888b0e1050ece11536f19677df0f20eda252a8619d2d45b36cc45305c3a50bc" },
+]
+
+# --- executables -------------------------------------------------------------
+
+[[binary]]
+name = "Game.exe"
+role = "main"
+treatment = "lift"
+size = 1146880
+sha256 = "7ea1ff9d9cac9a2df1155379a0b314586a538cc5433430d48c34aa3b0188edb4"
+variants = ["gog-en", "gog-de"]
+
+[[binary]]
+name = "Game.exe"
+role = "main"
+treatment = "lift"
+notes = "Older build (2003-06-19) than EN/DE."
+size = 1138688
+sha256 = "5d0c5751ab2a8f18ad2a9c428e08301d8ad965b5217bee854751b3a1fc7f49fc"
+variants = ["gog-es"]
+
+[[binary]]
+name = "GameMp.exe"
+role = "multiplayer"
+treatment = "lift"
+size = 1134592
+sha256 = "bdf07c34afe355b54be9dd512f4a267e79700d177d21d65c22f0ae8d460a9894"
+variants = ["gog-en"]
+
+[[binary]]
+name = "GameMp.exe"
+role = "multiplayer"
+treatment = "lift"
+size = 1142784
+sha256 = "f3d9715525d77306f3eb81498f098e433a5e605441add9d8fbb291be172fc407"
+variants = ["gog-de"]
+
+[[binary]]
+name = "GameMp.exe"
+role = "multiplayer"
+treatment = "lift"
+size = 1134592
+sha256 = "0488895e8f0dbbddfb1dfac646c2631742bd71c7167c9cbc666058a093f1e815"
+variants = ["gog-es"]
+
+[[binary]]
+name = "Editor.exe"
+role = "editor"
+treatment = "lift"
+size = 1118208
+sha256 = "30d05acc22d22de33da9c2553d97a5d934fa7698247a404c9507573bef087c7d"
+variants = ["gog-en", "gog-es"]
+
+[[binary]]
+name = "Editor.exe"
+role = "editor"
+treatment = "lift"
+size = 1126400
+sha256 = "383afe583317a00844392f55bc4605215f267ce564f062e0bd1618db06399eaa"
+variants = ["gog-de"]
+
+# --- libraries ---------------------------------------------------------------
+
+[[binary]]
+name = "gedx8musicdrv.dll"
+role = "library"
+treatment = "lift"
+size = 77824
+sha256 = "547c5571c39dbcb921a2b8fff2d1568f11ceab9b79a7a2d5a2a82fb5601395bf"
+variants = ["gog-en", "gog-de", "gog-es"]
