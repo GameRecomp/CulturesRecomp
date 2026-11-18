@@ -8,6 +8,7 @@ add_library(rc_runtime STATIC
   src/hle.c
   src/log.c
   src/mem.c
+  src/pe.c
   src/vfs.c)
 target_include_directories(rc_runtime
   PUBLIC include

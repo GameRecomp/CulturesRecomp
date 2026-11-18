@@ -43,7 +43,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | #   | Milestone                                  | Status | Exit criterion |
 |-----|--------------------------------------------|--------|----------------|
 | M0  | Foundation                                 | ✅ | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
-| M1  | Read the inputs                            | 🔶 | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
+| M1  | Read the inputs                            | ✅ | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
 | M2  | Find the code (C1)                         | ⬜ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
 | M3  | Lifter, integer core                       | ⬜ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
 | M4  | x87 and the whole game                     | ⬜ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
@@ -73,16 +73,24 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 - [x] `tools/dev-extract.sh` (innoextract / unshield / unzip) as a stopgap until `recomp extract`
 - [x] CI: audit, Rust fmt/clippy/test, C build and tests on Linux, Windows and macOS (only Linux was verified locally)
 
-### M1 – Read the inputs
+### M1 – Read the inputs ✅
 
 - [x] PE parser: sections, imports by name and ordinal, exports, relocation directory, Rich header
 - [x] Hash identification of installers, ISO and binaries
-- [ ] `rc-inno`: Inno Setup 5.5.0 (unicode) reader. This needs LZMA1 and the setup header and file list; it is the same family as GOG's other titles
-- [ ] `rc-iso`: an ISO 9660 reader (no Joliet/Rock Ridge needed for the Gold CD)
-- [ ] `rc-iscab`: InstallShield 5/6 `DATA1.HDR` + `DATA1.CAB` reader (zlib-compressed files)
-- [ ] Zip reader for installed copies (the Saga): stored and deflate entries, CP437/CP1252 file names (`Österreich`, `Königs`)
-- [ ] `recomp extract`: write `orig/<game>/<variant>/` with original file names, then verify against the manifest
-- [ ] PE loader in the runtime: map the sections at the image base and build the IAT thunks
+- [x] `rc-media` crate, one module per format, with a common `Archive` interface:
+  - [x] Inno Setup 5.5.0 (unicode): loader table, setup header and entry lists, data entries, LZMA2 chunks,
+        x86 call filter reversal, SHA-1 check of every file
+  - [x] Own streaming LZMA1/LZMA2 decoder (no native dependency, wasm-friendly for M14)
+  - [x] ISO 9660 (primary volume and Joliet)
+  - [x] InstallShield 5 cabinets (`DATA1.HDR` + `DATA1.CAB`, chunked raw deflate, de-obfuscation)
+  - [x] Zip (stored/deflate, UTF-8/CP437 names, CRC-32 check, empty directories)
+- [x] `recomp list` and `recomp extract`: identify by hash, unpack to `orig/<game>/<variant>/`, verify every pinned binary
+- [x] Verified: all 10 GOG installers, the Gold ISO and the Saga zip extract **byte-identical** to innoextract,
+      unshield and unzip (including empty directories); `cargo test -p rc-cli -- --ignored` checks the media in `orig/`
+- [x] PE loader in the runtime (`rc/pe.h`): maps headers and sections at the image base, fills the IAT with HLE
+      thunks (by name and ordinal); `cultures-<id> --check` loads the user's exe and reports the missing imports
+- [ ] Later (M14 or when needed): faster LZMA (currently ~25 MB/s, about 10–20 s per installer), InstallShield
+      v6+ and spanned cabinets, Inno versions other than 5.5.0 (u)
 
 ### M2 – Find the code (C1)
 
@@ -214,6 +222,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | 2026-11-18 | `binkw32.dll`, `DPlayDLL.dll` and `gedx8musicdrv.dll` are lifted. Miles (`mss32`) and all system DLLs are HLE. GOG's `winmm.dll` wrapper is not used. |
 | 2026-11-18 | SDL3 is the only platform dependency. The project uses host fonts only and bundles no assets. |
 | 2026-11-18 | Docs, code and comments are in English. |
+| 2026-11-19 | One crate `rc-media` for all media formats instead of `rc-inno`/`rc-iso`/`rc-iscab`/`rc-zip`. The LZMA1/LZMA2 decoder is our own: `lzma-rs` buffers whole LZMA2 streams in memory (250+ MB here), and a pure-Rust decoder keeps the browser converter possible. |
 | 2026-11-19 | All lifted binaries of a game link into one executable `cultures-<id>`. Each binary gets its own symbol prefix, and the shell picks the binary whose hash matches the user's copy. |
 | 2026-11-19 | HLE thunks live at `0xF0000000+` (kernel space for a Win32 guest, never touched by the games). Unknown imports resolve to trap thunks, so a game loads with gaps and fails only when it calls one. |
 | 2026-11-19 | Store extras (GOG Galaxy DLLs, GOG's Ogg/Vorbis wrapper dependencies, uninstallers) are skipped by name in `recomp identify`, not pinned. |

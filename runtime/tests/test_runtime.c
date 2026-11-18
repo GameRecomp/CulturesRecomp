@@ -4,6 +4,7 @@
 #include "rc/hle.h"
 #include "rc/log.h"
 #include "rc/mem.h"
+#include "rc/pe.h"
 #include "rc/vfs.h"
 #include "rc_test.h"
 
@@ -147,6 +148,111 @@ static void test_hle(void) {
     CHECK_EQ_U32(rc_hle_count(), 0);
 }
 
+
+static void put16(uint8_t *b, size_t o, uint16_t v) {
+    b[o] = (uint8_t)v;
+    b[o + 1] = (uint8_t)(v >> 8);
+}
+static void put32(uint8_t *b, size_t o, uint32_t v) {
+    put16(b, o, (uint16_t)v);
+    put16(b, o + 2, (uint16_t)(v >> 16));
+}
+
+/* Synthetic PE32: .text (ret) at 0x1000, .idata at 0x2000 importing
+ * KERNEL32.dll!GetTickCount by name and DSOUND.dll #1 by ordinal. */
+static uint8_t pe_file[0x600];
+
+static void build_pe(void) {
+    uint8_t *f = pe_file;
+    memset(f, 0, sizeof pe_file);
+    f[0] = 'M';
+    f[1] = 'Z';
+    put32(f, 0x3c, 0x80);
+    memcpy(f + 0x80, "PE\0\0", 4);
+    const size_t coff = 0x84, opt = coff + 20;
+    put16(f, coff, 0x014c);
+    put16(f, coff + 2, 2);
+    put16(f, coff + 16, 224);
+    put16(f, coff + 18, 0x010f);
+    put16(f, opt, 0x10b);
+    put32(f, opt + 16, 0x1000);     /* entry */
+    put32(f, opt + 28, 0x00400000); /* image base */
+    put32(f, opt + 56, 0x3000);     /* size of image */
+    put32(f, opt + 60, 0x200);      /* size of headers */
+    put32(f, opt + 92, 16);
+    put32(f, opt + 104, 0x2000); /* import directory */
+    put32(f, opt + 108, 0x3c);
+    const size_t sec = opt + 224;
+    memcpy(f + sec, ".text", 5);
+    put32(f, sec + 8, 0x100);
+    put32(f, sec + 12, 0x1000);
+    put32(f, sec + 16, 0x200);
+    put32(f, sec + 20, 0x200);
+    memcpy(f + sec + 40, ".idata", 6);
+    put32(f, sec + 48, 0x200);
+    put32(f, sec + 52, 0x2000);
+    put32(f, sec + 56, 0x200);
+    put32(f, sec + 60, 0x400);
+    f[0x200] = 0xc3;
+#define R(rva) (0x400 + (rva) - 0x2000)
+    put32(f, R(0x2000), 0x2040); /* KERNEL32: ILT, name, IAT */
+    put32(f, R(0x200c), 0x2070);
+    put32(f, R(0x2010), 0x2050);
+    put32(f, R(0x2014), 0x2090); /* DSOUND */
+    put32(f, R(0x2020), 0x2080);
+    put32(f, R(0x2024), 0x2098);
+    put32(f, R(0x2040), 0x20a0);
+    put32(f, R(0x2050), 0x20a0);
+    memcpy(f + R(0x2070), "KERNEL32.dll", 13);
+    memcpy(f + R(0x2080), "DSOUND.dll", 11);
+    put32(f, R(0x2090), 0x80000001u);
+    put32(f, R(0x2098), 0x80000001u);
+    memcpy(f + R(0x20a2), "GetTickCount", 13);
+#undef R
+}
+
+static void fake_ticks(rc_cpu *c) { rc_hle_return(c, 1234, 0); }
+
+static void test_pe(void) {
+    rc_hle_reset();
+    rc_hle_register("kernel32.dll", "GetTickCount", 0, fake_ticks);
+    build_pe();
+    rc_pe_image img;
+    char err[256] = "";
+    CHECK(rc_pe_load(pe_file, sizeof pe_file, &img, err, sizeof err) == 0);
+    if (err[0]) fprintf(stderr, "pe: %s\n", err);
+    CHECK_EQ_U32(img.image_base, 0x00400000);
+    CHECK_EQ_U32(img.entry, 0x00401000);
+    CHECK_EQ_U32(img.section_count, 2);
+    CHECK_EQ_U32(img.import_dlls, 2);
+    CHECK_EQ_U32(img.imports, 2);
+    CHECK_EQ_U32(img.imports_missing, 1); /* DSOUND #1 has no implementation yet */
+    CHECK(!img.is_dll);
+    CHECK_EQ_U32(rc_ld8(0x00401000), 0xc3);
+    CHECK_EQ_U32(rc_ld16(0x00400000), 0x5a4d); /* headers mapped */
+    uint32_t t = rc_ld32(0x00402050);
+    CHECK_EQ_U32(t, rc_hle_resolve("KERNEL32.dll", "GetTickCount"));
+    CHECK_EQ_U32(rc_ld32(0x00402098), rc_hle_resolve_ordinal("dsound", 1));
+    CHECK(strcmp(rc_hle_thunk_label(rc_ld32(0x00402098)), "dsound.dll!#1") == 0);
+
+    /* The lifted `call [0x402050]` reaches the HLE function through the thunk. */
+    rc_cpu c;
+    rc_cpu_init(&c, 0x00110000);
+    rc_push32(&c, 0x00401000);
+    rc_dispatch(&c, rc_ld32(0x00402050));
+    CHECK_EQ_U32(c.eax, 1234);
+    CHECK_EQ_U32(c.esp, 0x00110000);
+
+    CHECK(rc_pe_load(pe_file, sizeof pe_file, &img, err, sizeof err) != 0); /* range in use */
+    CHECK(strstr(err, "already in use") != NULL);
+    CHECK(rc_mem_unmap(0x00400000, 0x3000) == 0);
+    CHECK(rc_pe_load(pe_file, 0x100, &img, err, sizeof err) != 0); /* truncated */
+    pe_file[0x84] = 0x64; /* machine: AMD64 */
+    CHECK(rc_pe_load(pe_file, sizeof pe_file, &img, err, sizeof err) != 0);
+    CHECK(strstr(err, "i386") != NULL);
+    rc_hle_reset();
+}
+
 static void touch(const char *path) {
     FILE *f = fopen(path, "wb");
     if (f) fclose(f);
@@ -185,6 +291,7 @@ int main(int argc, char **argv) {
     RUN(test_cpu_stack);
     RUN(test_dispatch);
     RUN(test_hle);
+    RUN(test_pe);
     RUN(test_vfs);
     rc_mem_shutdown();
     return TEST_EXIT();

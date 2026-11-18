@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! `recomp`: the Cultures recompiler command line.
 //!
-//! Implemented: `identify`, `info`. Planned (see docs/PLAN.md): `extract` (M1),
+//! Implemented: `identify`, `info`, `list`, `extract`. Planned (see docs/PLAN.md):
 //! `discover` (M2), `lift` (M3/M4), `convert` (M14).
+
+mod media;
 
 use rc_manifest::{Catalog, Hit};
 use std::collections::BTreeMap;
@@ -17,6 +19,10 @@ USAGE:
     recomp identify [--games DIR] PATH...   match files (installers, ISO, binaries) by SHA-256
     recomp info [--games DIR] [--imports] FILE
                                             show PE facts and manifest matches for one file
+    recomp list MEDIA                       list the files of an installer, CD image or zip
+    recomp extract [--games DIR] [--dest DIR] [--force] MEDIA
+                                            unpack MEDIA (default: orig/<game>/<variant>/) and
+                                            verify the binaries against the manifest
     recomp help | --help
     recomp version | --version
 
@@ -36,6 +42,8 @@ fn main() -> ExitCode {
 struct Opts {
     games: PathBuf,
     imports: bool,
+    dest: Option<PathBuf>,
+    force: bool,
     paths: Vec<PathBuf>,
 }
 
@@ -43,6 +51,8 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
     let mut o = Opts {
         games: rc_manifest::default_games_dir(),
         imports: false,
+        dest: None,
+        force: false,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -50,6 +60,8 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         match a.as_str() {
             "--games" => o.games = it.next().ok_or("--games needs a directory")?.into(),
             "--imports" => o.imports = true,
+            "--dest" => o.dest = Some(it.next().ok_or("--dest needs a directory")?.into()),
+            "--force" => o.force = true,
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             p => o.paths.push(p.into()),
         }
@@ -65,6 +77,14 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
     match cmd.as_str() {
         "identify" => identify(parse_opts(rest)?),
         "info" => info(parse_opts(rest)?),
+        "list" => {
+            let o = parse_opts(rest)?;
+            media::list(&o.paths)
+        }
+        "extract" => {
+            let o = parse_opts(rest)?;
+            media::extract(&o.games, o.dest.as_deref(), o.force, &o.paths)
+        }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");
             Ok(ExitCode::SUCCESS)

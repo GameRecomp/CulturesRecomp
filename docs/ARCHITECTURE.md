@@ -27,13 +27,13 @@ reads its own data files from the user's install. We never convert or redistribu
 |-------------|----------------|-----|
 | identify    | `rc-manifest`  | Load `games/*/game.toml`, match files by SHA-256 against all variants. |
 | load        | `rc-pe`        | Parse the PE: sections, imports (by name and ordinal), exports, relocations, Rich header. Refuse any binary whose hash is not in a manifest. |
-| extract     | `rc-inno`, `rc-iso`, `rc-iscab`, `rc-zip` *(M1)* | Read GOG Inno Setup 5.5 installers, the ISO 9660 image, InstallShield 5 cabinets and zip archives of installed copies (the Saga) without third-party tools. |
+| extract     | `rc-media`     | Read GOG Inno Setup 5.5 installers (own LZMA1/LZMA2 decoder), ISO 9660 images, InstallShield 5 cabinets and zip archives of installed copies (the Saga) without third-party tools. Every file is checked (SHA-1, CRC-32 or the manifest hash). |
 | discover    | `rc-discover` *(M2)* | Build the code map. Seeds are the entry point, exports, import thunks, vtables (MSVC RTTI and `??_7` patterns), switch jump tables, constant pointers into `.text`, and manifest seeds. Recursive descent plus a careful linear sweep, because **no target has relocations**. Report coverage. |
 | lift        | `rc-x86` → `rc-ir` *(M3)* | Decode with `iced-x86` and turn each instruction into IR statements plus one terminator. Unmodelled instructions become named traps, not build failures. |
 | emit        | `rc-emit-c` *(M3)* | Write one C function per guest function (`f_00401000`), grouped as `code_XXXX.c` per 64 KiB of guest address space. Output is deterministic. |
 | verify      | `rc-difftest` *(M3, dev only)* | Run lifted code against a reference CPU model (unicorn or a small interpreter) on random states, per instruction class. |
 | convert     | `rc-convert` *(M14)* | End to end: installer → extract → lift → build, the user-facing path. |
-| CLI         | `rc-cli` (`recomp`) | `identify`, `info`, later `extract`, `discover`, `lift`, `convert`. |
+| CLI         | `rc-cli` (`recomp`) | `identify`, `info`, `list`, `extract`; later `discover`, `lift`, `convert`. |
 
 ## Runtime model (runtime/)
 
@@ -49,6 +49,8 @@ reads its own data files from the user's install. We never convert or redistribu
 - **Calls**: direct calls are C calls. Indirect calls and jumps (vtables, function pointers, jump tables
   not resolved statically) go through `rc_dispatch(cpu, target)`, which looks the target up in a hash table of
   lifted functions and HLE thunks. An unknown target is a fatal error that names the address, and gets fixed in the manifest.
+- **PE loader** (`rc/pe.h`): maps headers and sections of an exe or DLL at its preferred base and writes
+  an HLE thunk address into every IAT slot. Relocation is not needed (no target has relocations) and not supported.
 - **HLE**: every imported function has the same signature as lifted code (`void f(rc_cpu *)`). It reads its
   arguments from the guest stack and pops them (`stdcall`). Imports get reserved guest addresses in a
   thunk region (`0xF0000000+`, 16 bytes apart), so `call [IAT]` lands in `rc_dispatch`, which calls the HLE

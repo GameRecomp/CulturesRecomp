@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 rc-pe.workspace = true
 rc-manifest.workspace = true
+rc-media.workspace = true
 
 [lints]
 workspace = true

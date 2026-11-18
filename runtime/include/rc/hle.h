@@ -37,6 +37,12 @@ uint32_t rc_hle_resolve_ordinal(const char *dll, uint16_t ordinal);
 
 /* Non-zero if the import has a real implementation (not a trap). */
 int rc_hle_is_implemented(const char *dll, const char *name);
+/* Same, by thunk address (works for imports by ordinal too). */
+int rc_hle_thunk_is_implemented(uint32_t thunk);
+/* Non-zero if the thunk was handed out by rc_hle_resolve*() (i.e. something imports it). */
+int rc_hle_thunk_is_imported(uint32_t thunk);
+/* "dll!name" or "dll!#ordinal" of a thunk, NULL if it is not one. */
+const char *rc_hle_thunk_label(uint32_t thunk);
 size_t rc_hle_count(void);
 void rc_hle_reset(void);
 

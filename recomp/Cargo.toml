@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 rc-pe = { path = "crates/rc-pe" }
 rc-manifest = { path = "crates/rc-manifest" }
+rc-media = { path = "crates/rc-media" }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 toml = "0.8"

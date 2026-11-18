@@ -50,7 +50,9 @@ Sources and details are in [`docs/RESEARCH.md`](docs/RESEARCH.md#editions).
 **M0, Foundation: done.** The docs, target manifests, Rust toolchain (`rc-pe`, `rc-manifest`, `recomp`),
 C runtime core (guest memory, dispatcher, HLE registry, VFS lookup), the SDL3/null platform layer, game shells,
 audit hooks and CI are in place. The `recomp` CLI already identifies every supported installer, ISO, zip and executable.
-Next up is M1: reading installers without third-party tools, and the PE loader.
+**M1, Read the inputs: done.** `recomp extract` unpacks every supported installer, the Gold ISO and the Saga zip
+without third-party tools (verified byte-identical against innoextract/unshield/unzip), and the runtime's PE loader
+maps every target executable. Next up is M2: finding the code in the Cultures 1 executables.
 Nothing is playable yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)
@@ -65,6 +67,9 @@ cargo test --manifest-path recomp/Cargo.toml
 # Identify your game files (installers, ISO, or an installed folder)
 recomp/target/release/recomp identify orig/
 
+# Unpack one (→ orig/<game>/<variant>/, binaries verified)
+recomp/target/release/recomp extract orig/setup_cultures_2.1.0.12.exe
+
 # Runtime, HLE and game shells (C)
 cmake --preset dev
 cmake --build --preset dev
@@ -72,6 +77,7 @@ ctest --preset dev
 
 # A game shell (reports "no lifted code" until M3+)
 build/dev/games/cultures1/cultures-cultures1 --help
+build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en
 ```
 
 Put your own game files in `orig/` (git-ignored). Read [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) for the details.

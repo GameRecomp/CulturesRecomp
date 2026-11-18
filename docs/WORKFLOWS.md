@@ -18,17 +18,33 @@ Every recognised file is printed with its game, variant and role. Unknown execut
 `unknown`. If you have a build that is not in [TARGETS.md](TARGETS.md), open an issue with its **SHA-256 and
 size only**. Do not attach the file.
 
-## Extracting (until `recomp extract` exists, M1)
+## Extracting
 
-`tools/dev-extract.sh` wraps `innoextract` (GOG), `unshield` + `isoinfo` (Gold ISO) and `unzip` (Saga):
+`recomp extract` reads the installers, the Gold ISO and the Saga zip itself (no external tools). It recognises the
+medium by its hash, unpacks it to `orig/<game>/<variant>/` and verifies every pinned binary:
 
 ```sh
-tools/dev-extract.sh orig/setup_cultures_2.1.0.12.exe   cultures1 gog-en
-tools/dev-extract.sh "orig/Cultures (Gold Edition).iso" cultures1 gold-de
-tools/dev-extract.sh "orig/Cultures Saga.zip"          saga retail-de
+recomp=recomp/target/release/recomp
+$recomp extract orig/setup_cultures_2.1.0.12.exe           # → orig/cultures1/gog-en/
+$recomp extract "orig/Cultures (Gold Edition).iso"         # → orig/cultures1/gold-de/
+$recomp extract "orig/Cultures Saga.zip"                   # → orig/saga/retail-de/
+$recomp extract --dest /some/dir orig/setup_northland_2.1.0.9.exe
+$recomp list orig/setup_cultures2_2.1.0.10.exe              # just list the files
 ```
 
-The result is `orig/<game>/<variant>/` with the installed layout (for example `Cultures.exe`, `data_l/`, …).
+An unknown medium needs `--dest`, and a non-empty destination needs `--force`. A GOG installer takes 10–20 s.
+
+`tools/dev-extract.sh` (innoextract, unshield, unzip) stays as an independent reference for comparisons.
+
+## Checking an install against the runtime
+
+```sh
+build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en
+RC_LOG=debug build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en   # + list
+```
+
+`--check` maps the exe with the runtime's PE loader, resolves every import and prints, per DLL, how many imports the
+HLE layer implements. It needs no lifted code.
 
 ## Inspecting a binary
 

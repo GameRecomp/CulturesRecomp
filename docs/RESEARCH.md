@@ -136,6 +136,23 @@ Working hypothesis: GOG removed the original copy protection and left the protec
 **(open)** Find out whether `.cms_t` is ever executed. If it is, it gets lifted like any other code.
 If it is not, discovery excludes it. `Cultures2MP.exe`, which is untouched, is the control sample.
 
+## Media formats
+
+Findings from M1, verified by extracting every medium byte-identically against innoextract, unshield and unzip.
+
+- **GOG installers (all 10):** Inno Setup data version `5.5.0 (u)`. The loader offset table (magic `rDlPtS…`,
+  revision 1, CRC-32 valid) sits at file offset `0x3a7d4` in every installer. File data is embedded from `0x3b400`.
+  The setup headers sit at the end of the exe. Header blocks use LZMA1. File chunks use **LZMA2** (header compression
+  value 4). The GOG Galaxy helpers (`goggame-*.dll`, `webcache.zip`, …) are ordinary `{app}` files.
+  Empty directories (`Data_m` in Cultures 1, `__support/app` in German Cultures 2) come from Inno directory entries.
+- **Gold CD:** InstallShield 5 (header version `0x01005201`), one file group "Program Files". `DATA1.CAB` alone
+  holds all 85 files (volume header: first file 0, last file 84). `DATA2.CAB` and `DATA3.CAB` (87 MB each,
+  byte-identical, no InstallShield header) are filler, probably part of the CD's copy protection. The image uses the
+  primary volume only (no Joliet). The long names that `isoinfo -R` shows come from Rock Ridge.
+- **Saga zip:** stored entries (no compression), UTF-8 flagged names (`Österreich`, `Münzsammler`). Some local
+  headers carry the name in another encoding than the central directory, so `unzip` warns. We use the central
+  directory, as `unzip` does. Everything sits below one top-level folder `Cultures Saga/`.
+
 ## CD audio
 
 - Cultures 1 plays music from Red Book CD tracks through MCI. GOG ships `MUSIC/Track02.ogg` … `Track16.ogg`

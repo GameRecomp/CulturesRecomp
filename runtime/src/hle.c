@@ -13,6 +13,7 @@ typedef struct hle_entry {
     char *name;  /* NULL for ordinal-only */
     uint16_t ordinal;
     int implemented;
+    int imported; /* reached through rc_hle_resolve*() */
     uint32_t thunk;
     char *label; /* "dll!name" or "dll!#ordinal", referenced by the dispatch table */
 } hle_entry;
@@ -74,6 +75,7 @@ static hle_entry *add(const char *ndll, const char *name, uint16_t ordinal) {
     }
     e->ordinal = ordinal;
     e->implemented = 0;
+    e->imported = 0;
     e->thunk = RC_HLE_THUNK_BASE + (uint32_t)count * RC_HLE_THUNK_STRIDE;
     count++;
     return e;
@@ -96,11 +98,13 @@ static uint32_t resolve(const char *dll, const char *name, uint16_t ordinal) {
     char ndll[64];
     normalise_dll(dll, ndll, sizeof ndll);
     hle_entry *e = find(ndll, name, ordinal);
-    if (e) return e->thunk;
-    e = add(ndll, name, ordinal);
-    if (!e || rc_dispatch_register(e->thunk, trap, e->label) != 0) {
-        rc_fatal("HLE thunk table exhausted while resolving %s", dll);
+    if (!e) {
+        e = add(ndll, name, ordinal);
+        if (!e || rc_dispatch_register(e->thunk, trap, e->label) != 0) {
+            rc_fatal("HLE thunk table exhausted while resolving %s", dll);
+        }
     }
+    e->imported = 1;
     return e->thunk;
 }
 
@@ -115,6 +119,27 @@ int rc_hle_is_implemented(const char *dll, const char *name) {
     normalise_dll(dll, ndll, sizeof ndll);
     hle_entry *e = find(ndll, name, 0);
     return e && e->implemented;
+}
+
+static hle_entry *by_thunk(uint32_t thunk) {
+    if (thunk < RC_HLE_THUNK_BASE || (thunk - RC_HLE_THUNK_BASE) % RC_HLE_THUNK_STRIDE) return NULL;
+    size_t i = (thunk - RC_HLE_THUNK_BASE) / RC_HLE_THUNK_STRIDE;
+    return i < count ? &entries[i] : NULL;
+}
+
+int rc_hle_thunk_is_implemented(uint32_t thunk) {
+    hle_entry *e = by_thunk(thunk);
+    return e && e->implemented;
+}
+
+int rc_hle_thunk_is_imported(uint32_t thunk) {
+    hle_entry *e = by_thunk(thunk);
+    return e && e->imported;
+}
+
+const char *rc_hle_thunk_label(uint32_t thunk) {
+    hle_entry *e = by_thunk(thunk);
+    return e ? e->label : NULL;
 }
 
 size_t rc_hle_count(void) { return count; }
