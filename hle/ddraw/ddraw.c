@@ -1114,7 +1114,7 @@ static void k_CreatePalette(rc_cpu *c)
         p->rgb[i] = ((e & 0xff) << 16) | (e & 0xff00) | ((e >> 16) & 0xff);
     }
     rc_st32(out, iface(o, 1));
-    RC_RETURN(c, DD_OK, 4);
+    RC_RETURN(c, DD_OK, 5); /* this, flags, entries, result, outer */
 }
 
 static void k_SetEntries(rc_cpu *c)
