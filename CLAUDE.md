@@ -11,7 +11,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M1 Read the inputs | done | `rc-media` (Inno 5.5.0u, own LZMA1/LZMA2, ISO 9660, InstallShield 5, zip), `recomp list/extract`, runtime PE loader, `--check` |
 | M2 Find the code (C1) | done | `rc-discover` (descent, jump tables, SEH/EH, vtables, pointer scans with trial decoding, gaps, no-return fixed point, rebasing, reloc check), `recomp discover/codediff`, per-binary manifest hints (`seeds`, `no_return`, `returns`, `data`, `jump_tables`); 100 % of every C1 binary, no leftover |
 | M3 Lifter, integer core | done | TropicoRecomp's `rc-ir`, `rc-x86`, `rc-emit-c`, `rc-difftest` adapted; `recomp lift`; runtime on Tropico's `rc_cpu` layout, `lifted.h`, `x87`; all C1 binaries lift, compile warning-free (gcc, clang) and link; difftest 18720/18720 |
-| M4 x87 and the whole game | done | x87; DLL rebasing in the loader; MMX probably dead (`cpuid` says none), watched while playing |
+| M4 x87 and the whole game | done | x87 and MMX (both difftested); DLL rebasing in the loader |
 | M5 Boot to the main loop | done | runtime/hle/platform from TropicoRecomp + rc_shell (`runtime/src/game.c`); new HLE: advapi32, dinput, dsound (no device), dmusic (DX7 check), shell32, MCI CD audio |
 | M6 Picture and input | done | intro, menus and a scenario (1024x768x8) render; mouse and keyboard; all three C1 builds start |
 | M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
@@ -20,7 +20,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 
 Check `git log` for the latest work.
 
-## Next steps: M7/M8 (Cultures 1: save/load, a whole mission, then M9 release) and M10 (Cultures 2: DirectMusic, MMX)
+## Next steps: M7/M8 (Cultures 1: a whole mission played by hand, then M9 release) and M10 (Cultures 2: past the serial prompt, music)
 
 See `docs/PLAN.md`. Run the game (after `recomp lift` of the C1 binaries and a dev build with SDL3):
 
