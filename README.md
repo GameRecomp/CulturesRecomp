@@ -61,7 +61,8 @@ TropicoRecomp; every instruction form checked against the real CPU). The C compi
 the game shell.
 **M4/M5: done.** The runtime, HLE and platform layers come from TropicoRecomp; with the modules Cultures adds
 (registry, DirectInput, CD audio, …) the recompiled `Cultures.exe` boots, plays its intro movie and shows the main
-menu, which responds to the mouse. **M6 (picture and input) is in progress.**
+menu, starts a scenario and runs it (scripted runs: menus, briefing, building panels, 30,000 frames without a
+trap). **M7 (sound) and M8 (playing a mission through) are in progress.**
 Nothing is playable to the end yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)

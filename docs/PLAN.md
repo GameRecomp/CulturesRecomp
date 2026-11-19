@@ -48,9 +48,9 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M3  | Lifter, integer core                       | ✅ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
 | M4  | x87 and the whole game                     | ✅ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
 | M5  | Boot to the main loop                      | ✅ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
-| M6  | Picture and input                          | 🔶 | Main menu rendered (16-bit DirectDraw → SDL3). Mouse and keyboard work. Cursors are shown. |
-| M7  | Sound, music and video                     | ⬜ | Bink intro plays. Miles samples and streams work. CD music plays from `MUSIC/TrackNN.ogg`. |
-| M8  | In game                                    | ⬜ | First campaign mission played to the end. Save/load round-trips. A one-hour soak runs without crash on Linux and Windows. |
+| M6  | Picture and input                          | ✅ | Main menu rendered (16-bit DirectDraw → SDL3). Mouse and keyboard work. Cursors are shown. |
+| M7  | Sound, music and video                     | 🔶 | Bink intro plays. Miles samples and streams work. CD music plays from `MUSIC/TrackNN.ogg`. |
+| M8  | In game                                    | 🔶 | First campaign mission played to the end. Save/load round-trips. A one-hour soak runs without crash on Linux and Windows. |
 | M9  | **Cultures 1 release**                     | ⬜ | gog-en, gog-de and gold-de all pass the same checklist (see "Definition of done"), including the add-on campaign on gold-de. Release v0.1. |
 | M10 | **Cultures 2** (C2 engine)                 | ⬜ | `Cultures2.exe` discovered, lifted and booted. The `.cms_*` question is answered. DirectMusic music plays through the lifted `gedx8musicdrv.dll`. Campaign mission 1 is played through. Release v0.2. |
 | M11 | **Northland, 8th Wonder and Saga**         | ⬜ | Both `Game.exe` builds (+ 8th Wonder ES) and the Saga run. DirectSound 8 works. MPEG-1 movies play. A campaign mission each (Saga: Drachenland and one community campaign) is played through. Release v0.3. |
@@ -179,7 +179,7 @@ The runtime, HLE and platform layers are TropicoRecomp's (decision log); Culture
 - [x] `cultures-cultures1` picks the lifted builds by SHA-256, runs the C runtime start-up of all three binaries,
       the DLLs' `DllMain`, and reaches the game's main loop
 
-### M6 – Picture and input 🔶
+### M6 – Picture and input ✅
 
 - [x] `ddraw` (TropicoRecomp's): the game's display mode (640 x 480), surfaces, `Lock`/`Unlock`, `GetDC`,
       palettes, `Flip` → SDL3; the intro movie (lifted Bink) and the main menu render
@@ -187,10 +187,14 @@ The runtime, HLE and platform layers are TropicoRecomp's (decision log); Culture
       the game's `.cur`/`.ani` files (`LoadCursorFromFileA`)
 - [x] `dinput`: keyboard and mouse, immediate (`GetDeviceState`) and buffered (`GetDeviceData`), fed from the same
       input user32 gets; `gdi32`: palettes, `SetPixel`/`GetPixel`, `SetBkColor`
-- [x] A scripted run (`RC_INPUT`) clicks through the main menu into a submenu, with screenshots
-- [ ] Keyboard in the game, window and full-screen modes checked by hand, the in-game screen
+- [x] Scripted runs (`RC_INPUT`) click through the menus, start a scenario ("The Last Bastion"), close the briefing
+      with the keyboard and open a building's panel; screenshots of each step. The game switches to 1024 x 768 in 256
+      colours for the map (DirectDraw palettes)
+- [x] All three builds (GOG EN, GOG DE, Gold DE) reach their menus
+- [ ] By hand on a desktop: window and full-screen modes, scrolling, the minimap (black in the scripted runs so far:
+      **(open)** whether that is the unexplored map or a gap)
 
-### M7 – Sound, music and video
+### M7 – Sound, music and video 🔶
 
 Already in place: Miles' quick API and streams (TropicoRecomp's `mss32`, plus `AIL_quick_copy`) carry Bink's sound;
 CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound reports no device for now.
@@ -202,6 +206,7 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 
 ### M8 – In game
 
+- [x] A scripted soak in a running scenario (30,000 frames with random clicks): no trap, no crash
 - [ ] Play the campaign. Fix traps and HLE gaps as they show up
 - [ ] Save/load and the options menu. Timing (`timeGetTime`, frame limiter) must match the original game speed
 - [ ] One-hour soak test with automated input. Record and replay input for regression tests
