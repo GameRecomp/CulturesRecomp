@@ -51,4 +51,7 @@ extern const uint32_t rc_k32_sync_count;
 extern const rc_import_def rc_k32_profile[];
 extern const uint32_t rc_k32_profile_count;
 
+/* Signal an event object (SetEvent from host code, e.g. DirectPlay's message events). */
+bool rc_k32_set_event(uint32_t handle);
+
 #endif

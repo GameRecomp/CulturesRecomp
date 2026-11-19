@@ -10,6 +10,7 @@ add_library(rc_hle STATIC
     shell32/shell32.c
     wsock/wsock.c
     dshow/dshow.c
+    dplay/dplay.c
     kernel32/process.c
     kernel32/memory.c
     kernel32/locale.c
@@ -33,3 +34,6 @@ add_library(rc_hle STATIC
 )
 target_include_directories(rc_hle PUBLIC include PRIVATE . "${PROJECT_SOURCE_DIR}/third_party/pl_mpeg")
 target_link_libraries(rc_hle PUBLIC rc_runtime rc_platform)
+if(WIN32)
+    target_link_libraries(rc_hle PRIVATE ws2_32) # dplay: sockets
+endif()

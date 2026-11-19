@@ -54,7 +54,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M9  | **Cultures 1 release**                     | ⬜ | gog-en, gog-de and gold-de all pass the same checklist (see "Definition of done"), including the add-on campaign on gold-de. Release v0.1. |
 | M10 | **Cultures 2** (C2 engine)                 | 🔶 | `Cultures2.exe` discovered, lifted and booted. The `.cms_*` question is answered. DirectMusic music plays through the lifted `gedx8musicdrv.dll`. Campaign mission 1 is played through. Release v0.2. |
 | M11 | **Northland, 8th Wonder and Saga**         | 🔶 | Both `Game.exe` builds (+ 8th Wonder ES) and the Saga run. DirectSound 8 works. MPEG-1 movies play. A campaign mission each (Saga: Drachenland and one community campaign) is played through. Release v0.3. |
-| M12 | Multiplayer                                | ⬜ | DirectPlay 4 (C1) and DirectPlay 8 (C2 engine) over UDP/LAN between two recompiled builds. `*MP.exe` builds lifted where they are needed. |
+| M12 | Multiplayer                                | 🔶 | DirectPlay 4 (C1) and DirectPlay 8 (C2 engine) over UDP/LAN between two recompiled builds. `*MP.exe` builds lifted where they are needed. |
 | M13 | Editors                                    | ⬜ | Northland and 8th Wonder `Editor.exe` run: GDI, common controls, file dialogs. |
 | M14 | Converter                                  | 🔶 | `recomp convert <installer|iso>` produces a runnable build in one step. Later the browser page (the toolchain is built for wasm32). |
 | M15 | Polish and more platforms                  | ⬜ | Opt-in high resolutions and widescreen, integer scaling, settings UI, performance work, then Android and WebAssembly. |
@@ -212,7 +212,8 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [x] A scripted soak in a running scenario (30,000 frames with random clicks): no trap, no crash
 - [ ] Play the campaign. Fix traps and HLE gaps as they show up
 - [ ] Save/load and the options menu. Timing (`timeGetTime`, frame limiter) must match the original game speed
-- [ ] One-hour soak test with automated input. Record and replay input for regression tests
+- [x] One-hour soak test with automated input: 216,000 frames of random clicks in a scenario (virtual clock), no trap
+- [ ] Record and replay input for regression tests
 
 ### M9 – Cultures 1 release
 
@@ -272,9 +273,14 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 
 ### M12 – Multiplayer
 
-- [ ] `dplay` (DirectPlay 4, below the lifted `DPlayDLL.dll`) and `dpnet` (DirectPlay 8) over UDP with LAN discovery
+- [x] `dplay` (DirectPlay 4 and its lobby's address functions, below the lifted `DPlayDLL.dll`): TCP/IP provider,
+      sessions found by a UDP query on the LAN, on this machine and at the typed address; players connect to the host
+      over TCP, which numbers them, keeps their names and data and relays messages. Two Cultures 1 programs on one
+      machine: the client finds the host's game, joins its lobby, the map is sent and both play the match
+      (RESEARCH "DirectPlay")
+- [ ] `dpnet` (DirectPlay 8) for the C2 engine
 - [ ] `*MP.exe`: lift them if they are required for multiplayer (research question 7)
-- [ ] Determinism check: two recompiled builds stay in lockstep for one hour
+- [ ] Determinism check: two recompiled builds stay in lockstep for one hour (a few minutes checked so far)
 
 ### M13 – Editors
 

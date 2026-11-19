@@ -14,6 +14,13 @@
  *       FRAME area W H         the window becomes W x H (rc_plat_area_set)
  *       FRAME touch|pen|mouse  what the pointer events from here on come
  *                              from (a finger, a pen; at first the mouse)
+ *       FRAME wait PATH        hold the script (not the game) here until the
+ *                              file PATH exists; the frames of the lines
+ *                              after it count from when it appeared. Runs
+ *                              of several programs (a network game) are
+ *                              lined up that way by their test script
+ *       FRAME shot PATH        a screenshot of the next frame (frames
+ *                              after a wait are not known in advance)
  *   Lines starting with '#' are comments. Keying input to frames rather
  *   than time makes a run replay the same on a fast and a slow machine.
  */
@@ -33,13 +40,26 @@ static char next_line[256];
 static int script_done;
 static rc_event_source source;
 
+static unsigned shift;      /* frames the script waited (added to the frames of later lines) */
+static char wait_path[240]; /* the file a wait line waits for */
+static char shot_path[240]; /* a screenshot a shot line asked for (taken at the next frame) */
+
+static bool file_exists(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+    }
+    return f != NULL;
+}
+
 static bool read_line(void)
 {
     while (fgets(next_line, sizeof next_line, script)) {
         if (next_line[0] == '#' || next_line[0] == '\n') {
             continue;
         }
-        next_frame = (unsigned)strtoul(next_line, NULL, 10);
+        next_frame = (unsigned)strtoul(next_line, NULL, 10) + shift;
         return true;
     }
     return false;
@@ -53,6 +73,18 @@ static void run_script(unsigned frame)
     if (!script) {
         const char *path = getenv("RC_INPUT");
         if (!path || !(script = fopen(path, "r")) || !read_line()) {
+            script_done = 1;
+            return;
+        }
+    }
+    if (wait_path[0]) {
+        if (!file_exists(wait_path)) {
+            return;
+        }
+        rc_log("RC_INPUT: %s is there at frame %u", wait_path, frame);
+        wait_path[0] = 0;
+        shift += frame - next_frame;
+        if (!read_line()) {
             script_done = 1;
             return;
         }
@@ -96,8 +128,14 @@ static void run_script(unsigned frame)
             e.vk = (int)a;
             e.down = !strcmp(what, "key");
         } else if (!strcmp(what, "area") || !strcmp(what, "touch") || !strcmp(what, "pen") ||
-                   !strcmp(what, "mouse")) {
-            if (what[0] == 'a') {
+                   !strcmp(what, "mouse") || !strcmp(what, "wait") || !strcmp(what, "shot")) {
+            if (what[0] == 's' && what[1] == 'h') {
+                sscanf(next_line, "%*u %*s %239[^\r\n]", shot_path);
+            } else if (what[0] == 'w') {
+                if (sscanf(next_line, "%*u %*s %239[^\r\n]", wait_path) == 1) {
+                    return; /* the next frames check for it */
+                }
+            } else if (what[0] == 'a') {
                 rc_plat_area_set((int)a, (int)b);
             } else {
                 source = what[0] == 't' ? RC_SRC_TOUCH : what[0] == 'p' ? RC_SRC_PEN : RC_SRC_MOUSE;
@@ -123,6 +161,9 @@ static void run_script(unsigned frame)
 
 int rc_screenshot_due(unsigned frame)
 {
+    if (shot_path[0]) {
+        return 1;
+    }
     const char *shots = getenv("RC_SCREENSHOT");
     if (!shots) {
         return 0;
@@ -142,6 +183,10 @@ int rc_screenshot_due(unsigned frame)
 
 void rc_present_hook(unsigned frame)
 {
+    if (shot_path[0]) {
+        rc_log("screenshot of frame %u: %s%s", frame, shot_path, rc_plat_screenshot(shot_path) ? "" : " failed");
+        shot_path[0] = 0;
+    }
     run_script(frame);
     const char *shots = getenv("RC_SCREENSHOT");
     if (shots) {

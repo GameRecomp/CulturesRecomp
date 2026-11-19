@@ -131,6 +131,12 @@ Scripted runs (`hle/frames.c`): `RC_INPUT=script.txt` (lines `FRAME move X Y`, `
 so a run repeats exactly. `SDL_VIDEO_DRIVER=dummy` runs them without a display. Screenshots are of the game, so they
 stay local like everything else derived from it.
 
+Network games: start one program, create a session (Multiplayer → TCP/IP → Create), start the other and join with
+the host's address (`127.0.0.1` on the same machine). Sessions on the LAN are found by broadcast as well;
+`RC_DPLAY_HOST=name` adds a host to ask. `RC_TRACE=dplay` logs discovery and message counts. Scripted runs of two
+programs are lined up with `FRAME wait PATH` (the script pauses until the file exists; the game runs on) and
+`FRAME shot PATH` (a screenshot of the next frame), the test script creating the files when both are ready.
+
 ## Inspecting a binary
 
 ```sh

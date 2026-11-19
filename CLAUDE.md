@@ -15,8 +15,10 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M5 Boot to the main loop | done | runtime/hle/platform from TropicoRecomp + rc_shell (`runtime/src/game.c`); new HLE: advapi32, dinput, dsound (no device), dmusic (DX7 check), shell32, MCI CD audio |
 | M6 Picture and input | done | intro, menus and a scenario (1024x768x8) render; mouse and keyboard; all three C1 builds start |
 | M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
-| M8 In game | **in progress** | scenario runs 30,000 frames without trap; save and load work; open: a whole mission played by hand, timing |
+| M8 In game | **in progress** | an hour of scripted play in a scenario (216,000 frames) without trap; save and load work; open: a whole mission played by hand, timing |
 | M11 Northland, 8th Wonder, Saga | **in progress** | all lift, play their movies (dshow + pl_mpeg), sound (DirectSound 8) and music (dmusic player + DLS synth), and start their first missions; open: a mission played through |
+| M12 Multiplayer | **in progress** | C1: two programs find each other, join, transfer the map and play (DirectPlay 4 over TCP/UDP); open: C2 engine (DirectPlay 8), an hour in lockstep |
+| M14 Converter | **in progress** | `recomp convert`: installer, CD, zip or folder → unpacked, lifted, built, `out/<game>/play.sh`; open: no-compiler packages, browser |
 | M10 Cultures 2 | **in progress** | boots to its serial prompt; needs the player's serial once; MMX and music done |
 
 Check `git log` for the latest work.
@@ -59,7 +61,7 @@ recomp/crates/rc-difftest  `difftest`: lifted C against the real CPU in 32-bit m
 recomp/crates/rc-cli       `recomp`: identify, info, list, extract, discover, codediff, lift (+ ignored tests on orig/)
 runtime/                   TropicoRecomp's runtime: memory/vm/heap, CPU, x87, dispatch (+ one table per lifted binary),
                            imports, process (loader + DLL relocation), threads, clock, host files; rc_shell = game.c
-hle/                       TropicoRecomp's kernel32/user32/gdi32/ddraw/mss32/winmm + advapi32, dinput, dsound, dmusic,
+hle/                       TropicoRecomp's kernel32/user32/gdi32/ddraw/mss32/winmm + advapi32, dinput, dsound, dmusic, dplay,
                            shell32, winmm/mci.c; frames.c = scripted input and screenshots
 platform/                  SDL3 (+ttf, mixer) and null backends
 games/<id>/                game.toml + CMakeLists.txt (rc_add_game → cultures-<id>)

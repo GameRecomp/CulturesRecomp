@@ -325,6 +325,30 @@ file (`012.dls`, ...). Measured on all segments of Cultures 2, Northland and the
   need the General MIDI set, which is not shipped (they stay silent).
 - The DLS files are level 1 with simple articulation (volume envelope only); wave attenuation is in 1/655360 dB.
 
+## DirectPlay (M12)
+
+Cultures 1 plays its network games through `DPlayDLL.dll` (Funatics' wrapper, lifted) on DirectPlay 4 (ANSI
+interfaces) and the lobby object (`IDirectPlayLobby3A`), which it uses only to build and read addresses. What the
+wrapper relies on, found while making two recompiled programs play each other:
+
+- It registers itself with the lobby and asks for lobby settings at start; "not lobbied" is the answer.
+- It treats a non-zero result of the lobby's `Release` as an error code: the reference count must be real.
+- Joining: the player types the host's address; the wrapper builds a compound address (service provider, INet
+  string) and calls `InitializeConnection` with it, then `EnumSessions` with `ASYNC | RETURNSTATUS`. The game
+  expects `DPERR_CONNECTING` first and polls every 3 s of game time (`Connecting` → `Sessions` screen); the session
+  only shows if its current player count is non-zero.
+- `CreatePlayer` passes an event that DirectPlay must set when a message arrives: the wrapper's receive thread waits
+  on it. `EnumPlayers` must flag local and remote players (`DPENUMPLAYERS_LOCAL`/`_REMOTE`): the wrapper takes the
+  local one as its own player.
+- Player data (`SetPlayerData`, 16 bytes) is read by every machine, so it travels with the player and its changes
+  (`DPSYS_SETPLAYERORGROUPDATA`).
+- `GetMessageQueue` is asked for the send queue (flag 1); it must be empty, or the game holds its messages back.
+- In the match, every machine sends to every other in lockstep (the counts stay equal).
+
+Our wire protocol is our own (two recompiled programs talk to each other, not to Windows' DirectPlay): a UDP query on
+port 47624 (broadcast, 127.0.0.1, `$RC_DPLAY_HOST`, the typed address) answered with the session, and one TCP
+connection per client to the host, which relays.
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?

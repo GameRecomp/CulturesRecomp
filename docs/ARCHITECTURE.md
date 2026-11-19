@@ -98,7 +98,7 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `winmm`     | runtime clock + audio          | all       | `timeGetTime`, mixer API stubs, **MCI CD audio → `MUSIC/TrackNN.*`** |
 | `dmusic`    | DLS synth + segment player     | c2, northland, eighthwonder, saga | DirectMusic Performance/Loader/Segment as used by `gedx8musicdrv.dll` segments (pattern, sequence, band, tempo tracks) through our own DLS synthesizer |
 | `dshow`    | MPEG-1 decoder (pl_mpeg, MIT)  | northland, eighthwonder, saga | multimedia streams into DirectDraw surfaces (what the games use), and the filter graph |
-| `dplay`     | null at first, later UDP       | c1 (DirectPlay 4 under `DPlayDLL.dll`) | no service providers until M12 |
+| `dplay`     | sockets (TCP + UDP discovery)  | c1 (DirectPlay 4 under `DPlayDLL.dll`) | TCP/IP provider, host-relayed sessions, the lobby's address functions |
 | `dpnet`     | null at first, later UDP       | c2 engine (DirectPlay 8) | same |
 | `wsock32`, `ws2_32` | host sockets           | c2 engine | by ordinal (now: offline, `WSAStartup` works, no sockets) |
 | `comctl32`, `comdlg32`, `winspool` | platform    | editors only | M13 |

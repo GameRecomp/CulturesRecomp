@@ -89,6 +89,16 @@ static void k_SetEvent(rc_cpu *c)
     RC_RETURN(c, o ? 1 : 0, 1);
 }
 
+bool rc_k32_set_event(uint32_t handle)
+{
+    obj *o = get_obj(handle);
+    if (!o || o->kind != O_EVENT) {
+        return false;
+    }
+    o->signalled = true;
+    return true;
+}
+
 static void k_ResetEvent(rc_cpu *c)
 {
     obj *o = get_obj(RC_ARG(c, 0));
