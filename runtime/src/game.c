@@ -71,6 +71,18 @@ static bool hash_file(const char *dir, const char *name, char out[65])
     return true;
 }
 
+static bool same_file_name(const char *a, const char *b)
+{
+    for (; *a && *b; a++, b++) {
+        char x = *a >= 'A' && *a <= 'Z' ? (char)(*a - 'A' + 'a') : *a;
+        char y = *b >= 'A' && *b <= 'Z' ? (char)(*b - 'A' + 'a') : *b;
+        if (x != y) {
+            return false;
+        }
+    }
+    return *a == *b;
+}
+
 static uint32_t rd16(const uint8_t *b, uint32_t at) { return (uint32_t)b[at] | ((uint32_t)b[at + 1] << 8); }
 static uint32_t rd32(const uint8_t *b, uint32_t at) { return rd16(b, at) | (rd16(b, at + 2) << 16); }
 
@@ -218,6 +230,13 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     hash_file(game_dir, exe, exe_hash);
     for (size_t i = 0; i < generated->count && nlifted < 16; i++) {
         const rc_generated_binary *b = generated->binaries[i];
+        /* Of the executables only the one being run (a game may have lifted its
+         * multiplayer or editor build too); every lifted DLL whose hash matches. */
+        size_t len = strlen(b->name);
+        bool is_exe = len > 4 && (strcmp(b->name + len - 4, ".exe") == 0 || strcmp(b->name + len - 4, ".EXE") == 0);
+        if (is_exe && !same_file_name(b->name, exe)) {
+            continue;
+        }
         char h[65];
         if (!hash_file(game_dir, b->name, h) || strcmp(h, b->sha256) != 0) {
             continue;

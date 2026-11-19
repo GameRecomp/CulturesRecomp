@@ -69,10 +69,17 @@ fn branches_and_tables() {
 
 #[test]
 fn traps_name_what_is_missing() {
-    // paddw mm0, mm1: MMX arithmetic is not modelled.
-    let i = rc_x86::lift_insn(&dec(&[0x0f, 0xfd, 0xc1]), Flow::Next, None);
+    // addps xmm0, xmm1: SSE is not modelled.
+    let i = rc_x86::lift_insn(&dec(&[0x0f, 0x58, 0xc1]), Flow::Next, None);
     assert_eq!(i.term, Term::Stop);
-    assert!(trap_text(&i.stmts).is_some_and(|t| t.contains("paddw") && t.contains("0x00401000")));
+    assert!(trap_text(&i.stmts).is_some_and(|t| t.contains("addps") && t.contains("0x00401000")));
+    // paddw mm0, mm1 is: an MMX register write.
+    let i = rc_x86::lift_insn(&dec(&[0x0f, 0xfd, 0xc1]), Flow::Next, None);
+    assert!(
+        matches!(i.stmts.as_slice(), [Stmt::SetMm(0, _)]),
+        "{:?}",
+        i.stmts
+    );
     // emms is: every x87 register tagged empty.
     let i = rc_x86::lift_insn(&dec(&[0x0f, 0x77]), Flow::Next, None);
     assert!(trap_text(&i.stmts).is_none());

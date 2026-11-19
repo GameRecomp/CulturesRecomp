@@ -193,6 +193,63 @@ pub enum Expr {
     Trunc(W, Box<Expr>),
     /// `cond != 0 ? a : b`, all of width `w`.
     Select(W, Box<Expr>, Box<Expr>, Box<Expr>),
+    /// MMX register `mm(n)` (B64).
+    Mm(u8),
+    /// An MMX operation on the destination's value and the source's (or a shift count), B64.
+    Mmx(MmxOp, Box<Expr>, Box<Expr>),
+}
+
+/// The MMX operations that are not plain 64-bit logic: lanes of 8, 16 or 32 bits, with
+/// wrap-around or saturation, packs, unpacks and shifts by a count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MmxOp {
+    Paddb,
+    Paddw,
+    Paddd,
+    Paddsb,
+    Paddsw,
+    Paddusb,
+    Paddusw,
+    Psubb,
+    Psubw,
+    Psubd,
+    Psubsb,
+    Psubsw,
+    Psubusb,
+    Psubusw,
+    Pmullw,
+    Pmulhw,
+    Pmaddwd,
+    Pcmpeqb,
+    Pcmpeqw,
+    Pcmpeqd,
+    Pcmpgtb,
+    Pcmpgtw,
+    Pcmpgtd,
+    Packsswb,
+    Packssdw,
+    Packuswb,
+    Punpcklbw,
+    Punpcklwd,
+    Punpckldq,
+    Punpckhbw,
+    Punpckhwd,
+    Punpckhdq,
+    Psllw,
+    Pslld,
+    Psllq,
+    Psrlw,
+    Psrld,
+    Psrlq,
+    Psraw,
+    Psrad,
+}
+
+impl MmxOp {
+    /// The C helper's name suffix, as in `rc_mmx_paddw`.
+    pub fn name(self) -> String {
+        format!("{self:?}").to_ascii_lowercase()
+    }
 }
 
 impl Expr {
@@ -218,6 +275,7 @@ impl Expr {
                 _ => *w,
             },
             Expr::Zext(w, _) | Expr::Trunc(w, _) | Expr::Select(w, _, _, _) => *w,
+            Expr::Mm(_) | Expr::Mmx(..) => W::B64,
             Expr::Sext(_, to, _) => *to,
         }
     }
@@ -316,6 +374,8 @@ pub enum Stmt {
     Helper(Helper),
     /// An x87 operation.
     Fpu(Fpu),
+    /// Set MMX register `mm(n)`.
+    SetMm(u8, Expr),
     /// Stop with a fatal error naming the reason.
     Trap(String),
     /// A patch of the game project's: the runtime calls the code it
@@ -557,6 +617,7 @@ pub fn load_operand(f: &mut Function, at: u32, value: u32, load: u32) -> usize {
             Expr::Select(_, c, a, b) => {
                 expr(c, value, load) + expr(a, value, load) + expr(b, value, load)
             }
+            Expr::Mmx(_, a, b) => expr(a, value, load) + expr(b, value, load),
             _ => 0,
         }
     }
@@ -564,9 +625,11 @@ pub fn load_operand(f: &mut Function, at: u32, value: u32, load: u32) -> usize {
         let mut n = 0;
         for s in body {
             n += match s {
-                Stmt::Let(_, e) | Stmt::SetReg(_, e) | Stmt::SetFlag(_, e) | Stmt::BreakIf(e) => {
-                    expr(e, value, load)
-                }
+                Stmt::Let(_, e)
+                | Stmt::SetReg(_, e)
+                | Stmt::SetFlag(_, e)
+                | Stmt::BreakIf(e)
+                | Stmt::SetMm(_, e) => expr(e, value, load),
                 Stmt::Store(a, v) => expr(a, value, load) + expr(v, value, load),
                 Stmt::If(c, b) => expr(c, value, load) + stmts(b, value, load),
                 Stmt::Loop(b) => stmts(b, value, load),

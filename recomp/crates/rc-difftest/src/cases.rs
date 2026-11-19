@@ -68,6 +68,9 @@ pub const X87_IN: usize = 0x780;
 pub const X87_OUT: usize = 0x700;
 /// Values on the x87 stack before the instruction under test.
 pub const X87_DEPTH: u8 = 6;
+/// Where MMX tests load mm0 to mm7 from, and store them to afterwards (window offsets).
+pub const MMX_IN: usize = 0x610;
+pub const MMX_OUT: usize = 0x660;
 
 /// How states for an instance are made.
 #[derive(Debug, Clone)]
@@ -209,6 +212,8 @@ fn operand(kind: &str, as_mem: bool, shift: bool, rng: &mut Rng) -> Option<Op> {
         "imm8_const_1" => Op::I(1),
         "st0" => Op::R(Register::ST0),
         "sti_opcode" => Op::R(st(1 + rng.below(u32::from(X87_DEPTH) - 1))),
+        "mm_or_mem" if as_mem => Op::M(mem(rng)),
+        "mm_reg" | "mm_rm" | "mm_or_mem" => Op::R(mmx(rng.below(8))),
         _ => return None,
     })
 }
@@ -306,6 +311,44 @@ fn wrap_x87(body: &[u8], depth_after: u8) -> Vec<u8> {
     v
 }
 
+fn mmx(n: u32) -> Register {
+    [
+        Register::MM0,
+        Register::MM1,
+        Register::MM2,
+        Register::MM3,
+        Register::MM4,
+        Register::MM5,
+        Register::MM6,
+        Register::MM7,
+    ][n as usize]
+}
+
+/// Whether the instruction works on MMX registers.
+fn uses_mmx(ins: &Instruction) -> bool {
+    ins.mnemonic() == Mnemonic::Emms
+        || (0..ins.op_count())
+            .any(|i| ins.op_kind(i) == OpKind::Register && ins.op_register(i).is_mm())
+}
+
+/// `lea esp,[esp-0x40]; movq mmj,[in + 8j]` for all eight, the instruction, `movq
+/// [out + 8j],mmj`, `emms; lea esp,[esp+0x40]; ret`.
+fn wrap_mmx(body: &[u8]) -> Vec<u8> {
+    let w = WINDOW;
+    let mut v = vec![0x8d, 0x64, 0x24, 0xc0];
+    for j in 0..8u32 {
+        v.extend([0x0f, 0x6f, (j << 3 | 5) as u8]);
+        v.extend(disp32(w + MMX_IN as u32 + 8 * j));
+    }
+    v.extend_from_slice(body);
+    for j in 0..8u32 {
+        v.extend([0x0f, 0x7f, (j << 3 | 5) as u8]);
+        v.extend(disp32(w + MMX_OUT as u32 + 8 * j));
+    }
+    v.extend([0x0f, 0x77, 0x8d, 0x64, 0x24, 0x40, 0xc3]);
+    v
+}
+
 fn text(ins: &Instruction) -> String {
     let mut f = IntelFormatter::new();
     let mut s = String::new();
@@ -380,6 +423,8 @@ pub fn instances(rng: &mut Rng) -> Vec<Instance> {
                         continue;
                     }
                     wrap_x87(&bytes, after as u8)
+                } else if uses_mmx(&d) {
+                    wrap_mmx(&bytes)
                 } else {
                     wrap(&bytes, delta)
                 };

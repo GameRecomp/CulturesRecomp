@@ -16,7 +16,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M6 Picture and input | done | intro, menus and a scenario (1024x768x8) render; mouse and keyboard; all three C1 builds start |
 | M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
 | M8 In game | **in progress** | scenario runs 30,000 frames without trap; save and load work; open: a whole mission, timing, the minimap |
-| M10 Cultures 2 | **in progress** | boots to its serial prompt (silent DirectMusic objects); needs the player's serial once; next: MMX, then music |
+| M10 Cultures 2 | **in progress** | boots to its serial prompt (silent DirectMusic objects); needs the player's serial once; MMX lifted; next: music (DLS synth) |
 
 Check `git log` for the latest work.
 
@@ -39,7 +39,7 @@ Facts that matter (details in `docs/RESEARCH.md`, "Code discovery", "Lifting", "
   recompiler and by the loader (C1 `DPlayDLL.dll` → `0x11000000`).
 - Imports bind to the lifted DLLs' exports or to reserved addresses that `rc_dispatch` sends to HLE functions; an
   unimplemented one stops with its name. COM vtables hold reserved addresses named after the methods.
-- Lifted code traps only on MMX (probably dead), `int 6` and `int3`. A trap or an unknown dispatch target is fatal and
+- Lifted code traps only on `int 6` (CRT FDIV stubs) and `int3`; MMX is lifted (`c->mm`, `rc/mmx.h`). A trap or an unknown dispatch target is fatal and
   names the address.
 - Output belongs in `generated/<game>/…` (git-ignored). Function addresses may appear in manifests and docs;
   disassembly, lifted or decompiled code never goes into the repo, issues or commits.

@@ -321,4 +321,4 @@ What `Cultures.exe` (GOG EN) does before its first frame, as `RC_TRACE=imports` 
 9. Where is the Drachenland campaign stored: in `data0001.lib`, and is it selectable from the main menu?
 10. Are the MMX paths of `Cultures.exe` and `binkw32.dll` dead when `cpuid` reports no MMX? (See "Lifting".) Cultures 1 ran
     its menus and a scenario without reaching one. The C2 engine executes MMX without asking (`emms` at `0x45c2e9`), so
-    M10 needs MMX in the lifter.
+    M10 needs MMX in the lifter, which it now has (all forms difftested), so the question no longer blocks anything.

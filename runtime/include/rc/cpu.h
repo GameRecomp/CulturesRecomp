@@ -53,6 +53,10 @@ typedef struct rc_cpu {
      * use them. */
     uint8_t *mem;
     const void *const *helpers;
+    /* MMX registers. A real CPU keeps them in the x87 registers; programs
+     * separate the two uses with emms, so they are kept apart here (and
+     * last, so the fields above keep their offsets). */
+    uint64_t mm[8];
 } rc_cpu;
 
 /* EFLAGS as the guest sees it (pushfd, lahf). */

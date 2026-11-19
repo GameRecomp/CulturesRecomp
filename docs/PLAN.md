@@ -153,7 +153,7 @@ The lifter, its IR, the C emitter and the difftest are TropicoRecomp's (`rc-ir`,
 
 - [x] x87 on host doubles (stack, control word, compare and flags, `fist`/rounding modes, transcendental
       functions): the fast mode from TropicoRecomp, difftested
-- [ ] (moved to M6/M8, checked while playing) MMX: 237 trapping instructions in `Cultures.exe` (MMX, `int 6` of the CRT's FDIV stubs, one `int3`), about
+- [x] MMX (lifted with M10, see there). Before that: 237 trapping instructions in `Cultures.exe` (MMX, `int 6` of the CRT's FDIV stubs, one `int3`), about
       4160 in each `binkw32.dll`, none in `DPlayDLL.dll`. Both detect MMX with `cpuid` and branch on the result,
       and the runtime's CPU reports none, so the MMX paths are probably dead (RESEARCH question 10). Lift MMX
       only if a trap shows one is reached; no SSE, 3DNow! or `cmov` was found
@@ -233,8 +233,11 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [x] Cultures 2 shows its splash screen and then asks for the serial number, as the original does on a fresh install:
       it keeps it in `HKCU\SOFTWARE\Funatics\Cultures2\SerialNumber` (our registry, `registry.txt`), which the player's
       own serial fills once. GOG's CD-check patch (drive `.`) passes unchanged
-- [ ] Next: past the serial prompt (keyboard text entry), then MMX, which the C2 engine uses without a CPUID check;
-      music through a DLS synth
+- [x] MMX in the lifter: eight 64-bit registers in `rc_cpu` (kept apart from the x87 registers, which programs
+      separate with `emms`), the operations as C functions in `rc/mmx.h`; the difftest loads all eight registers from
+      its window, runs the instruction and stores them back, so every MMX form is checked against the real CPU (1766
+      forms, 222 mnemonics, all agree). No MMX trap is left in any lifted binary; only the CRT's `int 6` and `int3`
+- [ ] Next: past the serial prompt with the player's serial, then music through a DLS synth
 - [ ] Research question 1: is `.cms_t` executed? Compare with the untouched `Cultures2MP.exe`
 - [ ] Discovery and lifting reuse M2–M4 (new manifest seeds only)
 - [ ] `ole32` COM class registry. `dmusic`: Loader, Performance, Segment, AudioPath as far as `gedx8musicdrv.dll` uses them.

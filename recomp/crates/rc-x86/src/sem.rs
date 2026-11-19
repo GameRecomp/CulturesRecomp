@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! The semantics of each instruction.
 
+mod mmx;
 mod x87;
 
 use iced_x86::{ConditionCode, Instruction, Mnemonic, OpKind, Register};
@@ -820,6 +821,7 @@ impl Cx {
             }
             M::Cpuid => self.stmts.push(S::Helper(Helper::Cpuid)),
             M::Rdtsc => self.stmts.push(S::Helper(Helper::Rdtsc)),
+            _ if self.mmx(ins, m)? => {}
             _ if self.x87(ins, m)? => {}
             _ => {
                 let name = format!("{m:?}").to_ascii_lowercase();

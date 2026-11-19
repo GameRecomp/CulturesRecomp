@@ -181,6 +181,16 @@ fn ex(e: &E) -> (String, Ty) {
                 (format!("(({}){s})", ctype(*w)), Ty::U(*w))
             }
         }
+        E::Mm(n) => (format!("c->mm[{n}]"), Ty::U(W::B64)),
+        E::Mmx(op, a, b) => (
+            format!(
+                "rc_mmx_{}({}, {})",
+                op.name(),
+                exact(a, W::B64),
+                exact(b, W::B64)
+            ),
+            Ty::U(W::B64),
+        ),
     }
 }
 
@@ -571,6 +581,10 @@ impl Emitter<'_> {
             S::Helper(Helper::Cpuid) => self.line("rc_cpuid(&eax, &ebx, &ecx, &edx);"),
             S::Helper(Helper::Rdtsc) => self.line("rc_rdtsc(&eax, &edx);"),
             S::Fpu(f) => self.line(&fpu(f)),
+            S::SetMm(n, e) => {
+                let l = format!("c->mm[{n}] = {};", exact(e, W::B64));
+                self.line(&l);
+            }
             S::Point(at) => {
                 let l = format!("{}rc_point(c, {at:#010x}u); {}", spill_all(), reload_all());
                 self.line(&l);
