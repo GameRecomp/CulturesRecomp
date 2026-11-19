@@ -11,6 +11,7 @@ add_library(rc_hle STATIC
     wsock/wsock.c
     dshow/dshow.c
     dplay/dplay.c
+    dplay/net.c
     kernel32/process.c
     kernel32/memory.c
     kernel32/locale.c
