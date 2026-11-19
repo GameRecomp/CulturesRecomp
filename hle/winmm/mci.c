@@ -19,6 +19,7 @@
 
 #include "rc/audio.h"
 #include "rc/hostfs.h"
+#include "rc/log.h"
 #include "rc/process.h"
 #include "user32/user32.h"
 
@@ -76,7 +77,8 @@ static struct {
     bool open;
     uint32_t format;
     int tracks;           /* highest track number with a file (0: none) */
-    uint32_t length[TRACKS + 1];  /* ms, 0 for missing tracks */
+    bool present[TRACKS + 1];
+    uint32_t length[TRACKS + 1];  /* ms, 0 until known */
     int current;          /* track playing or paused, 0 for none */
     int to;               /* last track of the current play */
     bool paused;
@@ -86,15 +88,24 @@ static struct {
     float gain;
 } cd = {.gain = 1.0f};
 
-static rc_sound *load_track(int n)
+/* The host path of track n's file; false if there is none. */
+static bool track_path(int n, char *path)
 {
     static const char *const ext[] = {"ogg", "flac", "wav"};
     for (size_t i = 0; i < sizeof ext / sizeof ext[0]; i++) {
-        char rel[64], path[RC_PATH_MAX];
+        char rel[64];
         snprintf(rel, sizeof rel, "MUSIC/Track%02d.%s", n, ext[i]);
-        if (!rc_host_resolve(rc_cfg->game_dir, rel, false, path) || !rc_host_exists(path, NULL, NULL)) {
-            continue;
+        if (rc_host_resolve(rc_cfg->game_dir, rel, false, path) && rc_host_exists(path, NULL, NULL)) {
+            return true;
         }
+    }
+    return false;
+}
+
+static rc_sound *load_track(int n)
+{
+    char path[RC_PATH_MAX];
+    if (track_path(n, path)) {
         uint32_t size = 0;
         uint8_t *data = rc_host_read(path, &size);
         rc_sound *s = data ? rc_sound_load(data, size) : NULL;
@@ -106,23 +117,37 @@ static rc_sound *load_track(int n)
     return NULL;
 }
 
-/* Which tracks exist, and how long they are. */
-static void scan(void)
+/* A track's length in milliseconds (decoded once, when first asked for). */
+static uint32_t length(int n)
 {
-    cd.tracks = 0;
-    for (int n = 2; n <= TRACKS; n++) {
+    if (n < 1 || n > cd.tracks || !cd.present[n]) {
+        return 0;
+    }
+    if (!cd.length[n]) {
         rc_sound *s = load_track(n);
-        if (!s) {
-            cd.length[n] = 0;
-            continue;
-        }
-        uint32_t ms = rc_sound_ms(s);
-        cd.length[n] = ms ? ms : 1;
-        cd.tracks = n;
+        cd.length[n] = s && rc_sound_ms(s) ? rc_sound_ms(s) : 1;
         rc_sound_free(s);
     }
+    return cd.length[n];
+}
+
+/* Which tracks exist. Decoding needs the audio device, which the game may open later
+ * (through Miles): open it now; the platform keeps the first opening. */
+static void scan(void)
+{
+    char path[RC_PATH_MAX];
+    cd.tracks = 0;
+    for (int n = 2; n <= TRACKS; n++) {
+        cd.present[n] = track_path(n, path);
+        cd.length[n] = 0;
+        if (cd.present[n]) {
+            cd.tracks = n;
+        }
+    }
     if (cd.tracks) {
+        cd.present[1] = true;
         cd.length[1] = 1; /* the data track */
+        rc_audio_open(44100, 2);
     }
 }
 
@@ -142,7 +167,7 @@ static void stop(void)
 static bool start(int n)
 {
     stop();
-    if (n < 2 || n > cd.tracks || !cd.length[n]) {
+    if (n < 2 || n > cd.tracks || !cd.present[n]) {
         return false;
     }
     if (!cd.track) {
@@ -223,12 +248,14 @@ static uint32_t status(uint32_t flags, uint32_t item, uint32_t trk, uint32_t *re
             return MCIERR_OUTOFRANGE;
         }
         if (item == MCI_CDA_STATUS_TYPE_TRACK) {
-            *ret = n >= 2 && cd.length[n] ? MCI_CDA_TRACK_AUDIO : MCI_CDA_TRACK_OTHER;
+            *ret = n >= 2 && cd.present[n] ? MCI_CDA_TRACK_AUDIO : MCI_CDA_TRACK_OTHER;
         } else if (item == MCI_STATUS_LENGTH) {
-            uint32_t ms = n ? cd.length[n] : 0;
-            if (!(flags & MCI_TRACK)) {
+            uint32_t ms = 0;
+            if (flags & MCI_TRACK) {
+                ms = length(n);
+            } else {
                 for (int k = 1; k <= cd.tracks; k++) {
-                    ms += cd.length[k];
+                    ms += length(k);
                 }
             }
             /* TMSF lengths are MSF: minutes, seconds, frames (75 a second). */
@@ -305,7 +332,12 @@ static void k_mciSendCommandA(rc_cpu *c)
             r = MCIERR_DEVICE_NOT_READY;
             break;
         }
-        if (!start(from)) {
+        bool ok = start(from);
+        if (rc_trace("sound")) {
+            rc_log("[sound] cd play %#x from %#x to %#x (tracks %d to %d of %d, format %u): %s", flags,
+                   rc_ld32(p + 4), rc_ld32(p + 8), from, to, cd.tracks, cd.format, ok ? "playing" : "failed");
+        }
+        if (!ok) {
             r = MCIERR_OUTOFRANGE;
             break;
         }

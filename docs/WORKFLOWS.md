@@ -105,6 +105,8 @@ build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en   
 The shell hashes `Cultures.exe` and the DLLs beside it and runs the lifted builds that match; a build that was not
 lifted is refused with its hash. Saves, settings and the registry (`registry.txt`) go to the per-user data directory
 (`--user-dir` to choose). Without SDL3 (and SDL3_ttf) the null platform is built, which runs without a window.
+Music needs an SDL3_mixer with Ogg Vorbis (its default `stb_vorbis` decoder): GOG's CD tracks are `MUSIC/TrackNN.ogg`.
+`RC_TRACE=sound` logs what Miles and the CD do.
 
 ```sh
 build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en   # imports per DLL
