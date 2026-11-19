@@ -191,8 +191,8 @@ The runtime, HLE and platform layers are TropicoRecomp's (decision log); Culture
       with the keyboard and open a building's panel; screenshots of each step. The game switches to 1024 x 768 in 256
       colours for the map (DirectDraw palettes)
 - [x] All three builds (GOG EN, GOG DE, Gold DE) reach their menus
-- [ ] By hand on a desktop: window and full-screen modes, scrolling, the minimap (black in the scripted runs so far:
-      **(open)** whether that is the unexplored map or a gap)
+- [x] The minimap: black is the unexplored map; it shows the view frame and the explored land around the ship
+- [ ] By hand on a desktop: window and full-screen modes, scrolling
 
 ### M7 – Sound, music and video 🔶
 
@@ -258,6 +258,9 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
       `IDirectDrawStreamSample::Update`) and draw the frames themselves. `hle/dshow` decodes the MPEG-1 files with
       pl_mpeg (`third_party/`, MIT) into a DirectDraw surface it makes, frame by frame on the clock, with their sound;
       the filter-graph interfaces are there too. Northland's intro plays
+- [x] In game (scripted): Northland's first campaign mission ("The Plague", 8000 frames, a settler's panel),
+      8th Wonder's first mission and the Saga's "Nordland" campaign start and run without a trap. DirectMusic needed
+      a few more silent methods (audio-path configuration and objects, time conversions, latency)
 - [ ] Research question 2: MPEG playback path → `dshow` or MCI-MPEG HLE on top of an MPEG-1 decoder
 - [ ] `DirectSoundCreate8` and the `IDirectSound8` buffers
 - [ ] Northland `Game.exe` (one build for EN/DE/ES), 8th Wonder `Game.exe` EN/DE and ES

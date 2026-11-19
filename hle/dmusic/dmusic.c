@@ -344,6 +344,61 @@ static void st_GetStartTime(rc_cpu *c)
     RC_RETURN(c, S_OK, 2);
 }
 
+/* GetAudioPathConfig(this, config*): segments carry none here; the standard path plays them. */
+static void s_GetAudioPathConfig(rc_cpu *c)
+{
+    put(RC_ARG(c, 1), 0);
+    RC_RETURN(c, 0x88781213u /* DMUS_E_NO_AUDIOPATH_CONFIG */, 2);
+}
+
+/* GetObjectInPath(this, pchannel, stage, buffer, guid, index, iid, object*): nothing inside. */
+static void path_GetObjectInPath(rc_cpu *c)
+{
+    put(RC_ARG(c, 7), 0);
+    RC_RETURN(c, DMUS_E_NOT_FOUND, 8);
+}
+
+/* A value out of a call that has nothing to say: 0 into the pointer at argument 1. */
+static void zero2(rc_cpu *c)
+{
+    put(RC_ARG(c, 1), 0);
+    RC_RETURN(c, S_OK, 2);
+}
+static void zero3(rc_cpu *c)
+{
+    put(RC_ARG(c, 1), 0);
+    put(RC_ARG(c, 2), 0);
+    RC_RETURN(c, S_OK, 3);
+}
+
+/* Time conversions at 120 beats a minute: music ticks <-> 100 ns reference time. */
+static void p_MusicToReferenceTime(rc_cpu *c) /* (this, mt, rt*) */
+{
+    uint64_t rt = (uint64_t)RC_ARG(c, 1) * 10000000u / (DMUS_PPQ * 2);
+    put(RC_ARG(c, 2), (uint32_t)rt);
+    put(RC_ARG(c, 2) ? RC_ARG(c, 2) + 4 : 0, (uint32_t)(rt >> 32));
+    RC_RETURN(c, S_OK, 3);
+}
+static void p_ReferenceToMusicTime(rc_cpu *c) /* (this, rt (64), mt*) */
+{
+    uint64_t rt = (uint64_t)RC_ARG(c, 1) | (uint64_t)RC_ARG(c, 2) << 32;
+    put(RC_ARG(c, 3), (uint32_t)(rt * (DMUS_PPQ * 2) / 10000000u));
+    RC_RETURN(c, S_OK, 4);
+}
+static void p_GetResolvedTime(rc_cpu *c) /* (this, rt (64), resolved*, flags) */
+{
+    put(RC_ARG(c, 3), RC_ARG(c, 1));
+    put(RC_ARG(c, 3) ? RC_ARG(c, 3) + 4 : 0, RC_ARG(c, 2));
+    RC_RETURN(c, S_OK, 5);
+}
+static void p_GetLatencyTime(rc_cpu *c) /* (this, rt*) */
+{
+    uint64_t ref = rc_ticks_ms() * 10000u;
+    put(RC_ARG(c, 1), (uint32_t)ref);
+    put(RC_ARG(c, 1) ? RC_ARG(c, 1) + 4 : 0, (uint32_t)(ref >> 32));
+    RC_RETURN(c, S_OK, 2);
+}
+
 /* ---- the composer ---- */
 
 /* ComposeTransition(this, from, to, measure, command, flags, chordmap, transition*) and
@@ -463,6 +518,24 @@ static const rc_import_def defs[] = {
     {COM, "IDirectMusicSegmentState8::GetSegment", st_GetSegment},
     {COM, "IDirectMusicSegmentState8::GetStartTime", st_GetStartTime},
     {COM, "IDirectMusicAudioPath8::Activate", ok2},
+    {COM, "IDirectMusicAudioPath8::GetObjectInPath", path_GetObjectInPath},
+    {COM, "IDirectMusicSegmentState8::GetObjectInPath", path_GetObjectInPath},
+    {COM, "IDirectMusicSegment8::GetAudioPathConfig", s_GetAudioPathConfig},
+    {COM, "IDirectMusicSegment8::GetStartPoint", zero2},
+    {COM, "IDirectMusicSegment8::GetLoopPoints", zero3},
+    {COM, "IDirectMusicSegment8::SetPChannelsUsed", ok3},
+    {COM, "IDirectMusicSegment8::GetDefaultResolution", zero2},
+    {COM, "IDirectMusicSegment8::SetDefaultResolution", ok2},
+    {COM, "IDirectMusicSegmentState8::GetSeek", zero2},
+    {COM, "IDirectMusicSegmentState8::GetRepeats", zero2},
+    {COM, "IDirectMusicSegmentState8::GetStartPoint", zero2},
+    {COM, "IDirectMusicPerformance8::MusicToReferenceTime", p_MusicToReferenceTime},
+    {COM, "IDirectMusicPerformance8::ReferenceToMusicTime", p_ReferenceToMusicTime},
+    {COM, "IDirectMusicPerformance8::GetResolvedTime", p_GetResolvedTime},
+    {COM, "IDirectMusicPerformance8::GetLatencyTime", p_GetLatencyTime},
+    {COM, "IDirectMusicPerformance8::GetQueueTime", p_GetLatencyTime},
+    {COM, "IDirectMusicPerformance8::GetPrepareTime", zero2},
+    {COM, "IDirectMusicPerformance8::GetBumperLength", zero2},
     {COM, "IDirectMusicAudioPath8::SetVolume", ok3},
     /* composer */
     {COM, "IDirectMusicComposer8::ComposeTransition", c_ComposeTransition},
