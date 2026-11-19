@@ -269,6 +269,29 @@ Facts that the lifter (M3/M4) depends on:
   No path from the discovered `.text` code leaves `.text` (so none enters `.cms_t`), which supports the
   hypothesis that `.cms_t` is dead (research question 1, still **(open)**).
 
+## Lifting (M3)
+
+`recomp lift` results for the Cultures 1 binaries (with the manifest hints):
+
+| Binary | Functions (label entries) | Instructions | Trapping instructions | C |
+|--------|--------------------------:|-------------:|----------------------:|--:|
+| `Cultures.exe` gog-en / gog-de | 3991 (8) | 221 344 | 237 | 42 MB |
+| `Cultures.exe` gold-de | 4006 (13) | 221 424 | 237 | 42 MB |
+| `binkw32.dll` gog-en / gold-de | 774 (2) | 60 038 | 4162 | 11 MB |
+| `binkw32.dll` gog-de | 755 (2) | 61 926 | 4163 | 11 MB |
+| `DPlayDLL.dll` gog-en | 350 (3) | 21 815 | 0 | 4 MB |
+| `DPlayDLL.dll` gog-de / gold-de | 320 (3) | 20 249 | 0 | 4 MB |
+
+- Every integer, string and x87 instruction is modelled. The traps in `Cultures.exe` are MMX (about 220), the 16
+  `int 6` of the CRT's FDIV stubs and one `int3`; in `binkw32.dll` almost all are MMX.
+- **MMX detection:** `Cultures.exe` has one `cpuid` (`0x48fb46`, in the function at `0x48fb20`): it tests EDX bit 23,
+  caches the answer in two bytes at `0x4cf01c`/`0x4cf01d` and returns it, and its callers branch on it.
+  `binkw32.dll` does the same in the function at `0x100167d0` (with the CPUID-support check through EFLAGS bit 21)
+  and stores the answer at `0x10041b98`. The runtime's `cpuid` reports no MMX, so both probably take their
+  non-MMX paths only (**(open)**, question 10: a trap at run time would show otherwise).
+- Labels that need entries of their own are few: SEH filters and handlers and code pointers into function bodies.
+  Most labels in the DLLs are relocated jump-table entries, which the lifted `switch` reaches.
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?
@@ -280,3 +303,4 @@ Facts that the lifter (M3/M4) depends on:
 7. Do the `*MP.exe` builds differ in more than networking? (Single-player builds also contain `CDPNet`.)
 8. Saga: is the extra code in `Game.exe` a disc check, and where does `GameSaga.exe` (2005) come from?
 9. Where is the Drachenland campaign stored: in `data0001.lib`, and is it selectable from the main menu?
+10. Are the MMX paths of `Cultures.exe` and `binkw32.dll` dead when `cpuid` reports no MMX? (See "Lifting".)

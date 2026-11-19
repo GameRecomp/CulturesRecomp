@@ -18,9 +18,9 @@ pub struct DiscoverOpts<'a> {
 }
 
 /// A binary as the manifest knows it.
-struct Known {
-    game: String,
-    binary: Binary,
+pub(crate) struct Known {
+    pub game: String,
+    pub binary: Binary,
 }
 
 fn find(manifests: &[Manifest], sha256: &str) -> Option<Known> {
@@ -51,14 +51,19 @@ fn options(known: Option<&Known>) -> Options {
     o
 }
 
-struct Loaded {
-    image: Image,
-    map: CodeMap,
-    known: Option<Known>,
-    sha256: String,
+pub(crate) struct Loaded {
+    pub image: Image,
+    pub map: CodeMap,
+    pub known: Option<Known>,
+    pub sha256: String,
 }
 
-fn load(file: &Path, games: &Path, base: Option<u32>, use_relocs: bool) -> Result<Loaded, String> {
+pub(crate) fn load(
+    file: &Path,
+    games: &Path,
+    base: Option<u32>,
+    use_relocs: bool,
+) -> Result<Loaded, String> {
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let sha256 = rc_manifest::sha256_hex(&data);
     let manifests = rc_manifest::load_dir(games).map_err(|e| e.to_string())?;
@@ -82,7 +87,7 @@ fn load(file: &Path, games: &Path, base: Option<u32>, use_relocs: bool) -> Resul
 }
 
 /// `generated/<game>/<binary>-<variant>/` next to the `games/` directory.
-fn default_out(games: &Path, l: &Loaded) -> PathBuf {
+pub(crate) fn default_out(games: &Path, l: &Loaded) -> PathBuf {
     let root = games.parent().unwrap_or(Path::new(".")).join("generated");
     match &l.known {
         Some(k) => root.join(&k.game).join(k.binary.output_dir_name()),

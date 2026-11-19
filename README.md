@@ -54,9 +54,11 @@ audit hooks and CI are in place. The `recomp` CLI already identifies every suppo
 without third-party tools (verified byte-identical against innoextract/unshield/unzip), and the runtime's PE loader
 maps every target executable.
 **M2, Find the code: done.** `recomp discover` separates code from data in the executables (which have no
-relocations) and DLLs: 99.99 % of all three Cultures 1 `Cultures.exe` builds are classified, jump tables and vtables
-are resolved, and the code map for the lifter goes to `generated/`. `recomp codediff` compares builds.
-**M3, Lifter (integer core): next.**
+relocations) and DLLs: every byte of every Cultures 1 binary is classified, jump tables and vtables are resolved, and
+the code map for the lifter goes to `generated/`. `recomp codediff` compares builds.
+**M3, Lifter (integer core): done.** `recomp lift` turns every Cultures 1 binary into C (shared lifter with
+TropicoRecomp; every instruction form checked against the real CPU). The C compiles without warnings and links into
+the game shell. **M4 (MMX, DLL rebasing in the loader) and M5 (boot): next.**
 Nothing is playable yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)
@@ -74,12 +76,15 @@ recomp/target/release/recomp identify orig/
 # Unpack one (→ orig/<game>/<variant>/, binaries verified)
 recomp/target/release/recomp extract orig/setup_cultures_2.1.0.12.exe
 
+# Lift it (→ generated/cultures1/…, never committed)
+recomp/target/release/recomp lift orig/cultures1/gog-en/Cultures.exe
+
 # Runtime, HLE and game shells (C)
 cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev
 
-# A game shell (reports "no lifted code" until M3+)
+# A game shell (links the lifted code if present; booting it is M5)
 build/dev/games/cultures1/cultures-cultures1 --help
 build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en
 ```

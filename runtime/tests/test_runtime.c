@@ -57,7 +57,13 @@ static void test_cpu_stack(void) {
     rc_cpu c;
     CHECK(rc_mem_map(0x00100000, 0x10000) == 0);
     rc_cpu_init(&c, 0x00110000);
-    CHECK_EQ_U32(c.fpu.cw, 0x027f);
+    CHECK_EQ_U32(c.fpu_control, 0x027f);
+    CHECK_EQ_U32(c.fpu_tag, 0xffff);
+    c.r[RC_EBX] = 0x1234;
+    CHECK_EQ_U32(c.ebx, 0x1234); /* named and indexed registers are the same */
+    rc_set_eflags(&c, 0xcd5);    /* CF PF AF ZF SF DF OF */
+    CHECK_EQ_U32(rc_eflags(&c), 0xcd7);
+    CHECK(c.cf && c.pf && c.af && c.zf && c.sf && c.df && c.of);
     rc_push32(&c, 0xcafebabe);
     rc_push32(&c, 7);
     CHECK_EQ_U32(c.esp, 0x00110000 - 8);
@@ -100,6 +106,31 @@ static void test_dispatch(void) {
     rc_set_fatal_handler(NULL);
     rc_dispatch_reset();
     CHECK_EQ_U32(rc_dispatch_count(), 0);
+}
+
+static void test_lifted_tables(void) {
+    static const rc_fn_entry exe[] = {{0x401000, fn_a}, {0x401010, fn_b}, {0x402000, fn_a}};
+    static const rc_fn_entry dll[] = {{0x10001000, fn_b}};
+    rc_dispatch_reset();
+    rc_dispatch_clear_tables();
+    CHECK(rc_dispatch_add_table(exe, 3) == 0);
+    CHECK(rc_dispatch_add_table(dll, 1) == 0);
+    CHECK(rc_lookup(0x401000) == fn_a);
+    CHECK(rc_lookup(0x401010) == fn_b);
+    CHECK(rc_lookup(0x402000) == fn_a);
+    CHECK(rc_lookup(0x10001000) == fn_b);
+    CHECK(rc_lookup(0x401008) == NULL);
+    CHECK(rc_lookup(0x500000) == NULL);
+    /* The registry (HLE thunks) comes before the lifted tables. */
+    CHECK(rc_dispatch_register(0x401000, fn_b, "patched") == 0);
+    CHECK(rc_lookup(0x401000) == fn_b);
+    rc_cpu c;
+    rc_cpu_init(&c, 0x00110000);
+    rc_dispatch(&c, 0x402000);
+    CHECK_EQ_U32(c.eax, 0x402000);
+    rc_dispatch_reset();
+    rc_dispatch_clear_tables();
+    CHECK(rc_lookup(0x401000) == NULL);
 }
 
 static void hle_add(rc_cpu *c) { rc_hle_return(c, rc_arg(c, 0) + rc_arg(c, 1), 2); }
@@ -290,6 +321,7 @@ int main(int argc, char **argv) {
     RUN(test_mem);
     RUN(test_cpu_stack);
     RUN(test_dispatch);
+    RUN(test_lifted_tables);
     RUN(test_hle);
     RUN(test_pe);
     RUN(test_vfs);

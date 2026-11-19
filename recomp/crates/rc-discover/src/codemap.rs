@@ -2,12 +2,62 @@
 //! The code map: what discovery found, as the lifter reads it (`codemap.json`), plus the
 //! coverage report. It holds addresses and sizes only, never code bytes.
 
-use crate::engine::{decode_at, Engine, Flow, Partition, Source, BODY, DATA, INSN, PAD, UNK};
+use crate::engine::{
+    decode_at, Engine, Flow as EFlow, Partition, Source, BODY, DATA, INSN, PAD, UNK,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 
 pub const SCHEMA: u32 = 1;
+
+/// How control leaves an instruction: what the lifter needs from discovery. Import slots and
+/// jump tables are already resolved. (The same shape as TropicoRecomp's, so the lifter is
+/// shared.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flow {
+    Next,
+    Jump(u32),
+    Cond(u32),
+    Call(u32),
+    CallIndirect,
+    /// `call [slot]` through the import address table.
+    CallImport(u32),
+    Ret,
+    /// `jmp reg` or `jmp [mem]` that is not a known table or import: dispatched at run time.
+    JumpIndirect,
+    /// `jmp [idx*4 + table]`; the table is the [`JumpTable`] whose `at` is this instruction.
+    JumpTable,
+    /// `jmp [slot]` through the import address table.
+    JumpImport(u32),
+    /// `int3`, `hlt`, `ud2`, `int n`: execution does not continue.
+    Stop,
+}
+
+impl From<EFlow> for Flow {
+    fn from(f: EFlow) -> Flow {
+        match f {
+            EFlow::Next => Flow::Next,
+            EFlow::Jcc(t) => Flow::Cond(t),
+            EFlow::Jmp(t) => Flow::Jump(t),
+            EFlow::Call(t) => Flow::Call(t),
+            EFlow::CallImp { slot, .. } => Flow::CallImport(slot),
+            EFlow::JmpImp(slot) => Flow::JumpImport(slot),
+            EFlow::CallInd => Flow::CallIndirect,
+            EFlow::JmpInd => Flow::JumpIndirect,
+            EFlow::Table(_) => Flow::JumpTable,
+            EFlow::Ret => Flow::Ret,
+            EFlow::Stop => Flow::Stop,
+        }
+    }
+}
+
+/// One decoded instruction (kept in memory for the lifter, not written to JSON).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Insn {
+    pub len: u8,
+    pub flow: Flow,
+}
 
 /// A virtual address, written as `"0x00401000"` in JSON.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,6 +113,24 @@ pub struct CodeMap {
     /// DLLs only: the result checked against the base relocations.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reloc_check: Option<RelocCheck>,
+    /// Every instruction discovery decoded, by address (in memory only).
+    #[serde(skip)]
+    pub insns: BTreeMap<u32, Insn>,
+}
+
+impl CodeMap {
+    /// The function whose entry is `va`.
+    pub fn function(&self, va: u32) -> Option<&Function> {
+        self.functions
+            .binary_search_by_key(&va, |f| f.entry.0)
+            .ok()
+            .map(|i| &self.functions[i])
+    }
+
+    /// The jump table used by the `jmp` at `va`.
+    pub fn jump_table(&self, va: u32) -> Option<&JumpTable> {
+        self.jump_tables.iter().find(|t| t.at.0 == va)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +208,9 @@ pub struct Function {
     pub sources: Vec<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub no_return: bool,
+    /// Addresses of the instructions this function owns, ascending (in memory only).
+    #[serde(skip)]
+    pub body: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,10 +316,10 @@ pub(crate) fn build(
             }
         }
         let kind = match b.insns.iter().next().map(|a| e.ins[a].flow) {
-            Some(Flow::Jmp(t)) if b.insns.len() == 1 && t != entry && e.funcs.contains_key(&t) => {
+            Some(EFlow::Jmp(t)) if b.insns.len() == 1 && t != entry && e.funcs.contains_key(&t) => {
                 "thunk"
             }
-            Some(Flow::JmpImp(_)) if b.insns.len() == 1 => "import_thunk",
+            Some(EFlow::JmpImp(_)) if b.insns.len() == 1 => "import_thunk",
             _ => "normal",
         };
         functions.push(Function {
@@ -261,6 +332,7 @@ pub(crate) fn build(
             tail_calls: b.tails.iter().map(|&v| Va(v)).collect(),
             sources: Source::names(bits).into_iter().map(String::from).collect(),
             no_return: no_return.contains(&entry),
+            body: b.insns.iter().copied().collect(),
         });
     }
 
@@ -291,13 +363,13 @@ pub(crate) fn build(
     addrs.sort_unstable();
     for &va in &addrs {
         match e.ins[&va].flow {
-            Flow::CallImp { slot, .. } | Flow::JmpImp(slot) => {
+            EFlow::CallImp { slot, .. } | EFlow::JmpImp(slot) => {
                 *imports_called
                     .entry(img.imports[&slot].clone())
                     .or_insert(0) += 1;
             }
-            Flow::JmpInd => indirect_jumps.push(Va(va)),
-            Flow::CallInd => indirect_calls += 1,
+            EFlow::JmpInd => indirect_jumps.push(Va(va)),
+            EFlow::CallInd => indirect_calls += 1,
             _ => {}
         }
         if let Some(i) = decode_at(img, va) {
@@ -445,6 +517,19 @@ pub(crate) fn build(
             targets_in_code: c.targets,
             bad_targets: c.bad_targets.iter().map(|&(a, b)| [Va(a), Va(b)]).collect(),
         }),
+        insns: e
+            .ins
+            .iter()
+            .map(|(&va, i)| {
+                (
+                    va,
+                    Insn {
+                        len: i.len,
+                        flow: i.flow.into(),
+                    },
+                )
+            })
+            .collect(),
     }
 }
 

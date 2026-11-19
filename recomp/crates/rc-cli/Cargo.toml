@@ -17,6 +17,9 @@ rc-pe.workspace = true
 rc-manifest.workspace = true
 rc-media.workspace = true
 rc-discover.workspace = true
+rc-ir.workspace = true
+rc-x86.workspace = true
+rc-emit-c.workspace = true
 serde_json.workspace = true
 
 [lints]

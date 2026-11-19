@@ -9,11 +9,15 @@ add_library(rc_runtime STATIC
   src/log.c
   src/mem.c
   src/pe.c
-  src/vfs.c)
+  src/vfs.c
+  src/x87.c)
 target_include_directories(rc_runtime
   PUBLIC include
   PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(rc_runtime PRIVATE rc_warnings)
+if(NOT MSVC)
+  target_link_libraries(rc_runtime PUBLIC m)
+endif()
 
 if(RC_BUILD_TESTS)
   add_executable(test_runtime tests/test_runtime.c)

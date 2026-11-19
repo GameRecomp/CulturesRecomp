@@ -29,11 +29,11 @@ reads its own data files from the user's install. We never convert or redistribu
 | load        | `rc-pe`        | Parse the PE: sections, imports (by name and ordinal), exports, relocations, Rich header. Refuse any binary whose hash is not in a manifest. |
 | extract     | `rc-media`     | Read GOG Inno Setup 5.5 installers (own LZMA1/LZMA2 decoder), ISO 9660 images, InstallShield 5 cabinets and zip archives of installed copies (the Saga) without third-party tools. Every file is checked (SHA-1, CRC-32 or the manifest hash). |
 | discover    | `rc-discover` | Build the code map (`recomp discover`), because **no executable has relocations**. Recursive descent from the entry point, exports and manifest seeds, with `call`/`jmp [IAT]` imports and `switch` jump tables (bounded by `cmp`/`ja` or `and`, with index byte tables). Then candidates, each trial-decoded in a transaction that rolls back on implausible code: immediates and data constants that point into code (for DLLs exactly the relocated values), vtables from constructor stores (C1 has no RTTI), SEH scope tables and C++ EH `FuncInfo`. Then gap filling (padding, strings, unreferenced code). No-return functions are a fixed point over whole runs. Output: functions with byte ranges, labels, jump tables, vtables, data/padding/dead/unknown ranges, imports called, CPU features and the coverage report. DLLs can be rebased first (manifest `base`). `recomp codediff` compares two builds function by function. |
-| lift        | `rc-x86` → `rc-ir` *(M3)* | Decode with `iced-x86` and turn each instruction into IR statements plus one terminator. Unmodelled instructions become named traps, not build failures. |
-| emit        | `rc-emit-c` *(M3)* | Write one C function per guest function (`f_00401000`), grouped as `code_XXXX.c` per 64 KiB of guest address space. Output is deterministic. |
-| verify      | `rc-difftest` *(M3, dev only)* | Run lifted code against a reference CPU model (unicorn or a small interpreter) on random states, per instruction class. |
+| lift        | `rc-x86` → `rc-ir` | Decode with `iced-x86` and turn each instruction into IR statements plus one terminator, using discovery's per-instruction `Flow` (import slots and jump tables already resolved). Integer, string and x87 (fast mode) instructions are modelled with exact flags; unmodelled ones (MMX so far) become named traps, not build failures. Labels that the program takes as values (SEH handlers, code pointers into a function) get an entry of their own: the owner's body lifted again, entered at the label. Shared with TropicoRecomp. |
+| emit        | `rc-emit-c` | Write one C function per guest function (`<binary>_00401000`), grouped as `code_XXXX.c` per 64 KiB of guest address space, with `funcs.h` and the sorted table `table.c`. Registers and flags are C locals. A function entered above its lowest instruction starts with a `goto` to its entry. Output is deterministic. Shared with TropicoRecomp. |
+| verify      | `rc-difftest` (dev only) | Every instruction form the lifter models, plus string-instruction and whole-program fixtures, run from random states on the real CPU in 32-bit mode (`tools/difftest/ref32.c`, freestanding, built with `clang -m32`) and as lifted C on the runtime (`tools/difftest/harness.c`). `--coverage EXE` checks that every form a binary uses is tested. Shared with TropicoRecomp (without its native and WebAssembly back ends). |
 | convert     | `rc-convert` *(M14)* | End to end: installer → extract → lift → build, the user-facing path. |
-| CLI         | `rc-cli` (`recomp`) | `identify`, `info`, `list`, `extract`, `discover`, `codediff`; later `lift`, `convert`. |
+| CLI         | `rc-cli` (`recomp`) | `identify`, `info`, `list`, `extract`, `discover`, `codediff`, `lift`; later `convert`. |
 
 ## Runtime model (runtime/)
 
@@ -41,14 +41,18 @@ reads its own data files from the user's install. We never convert or redistribu
   heap maps them. Guest address `a` is host `rc_mem_base + a`. The header `rc/mem.h` provides `rc_ld8/16/32` and
   `rc_st8/16/32` (little-endian, unaligned-safe). Image base `0x400000` is fixed, since there are no relocations,
   so the game's own addresses are used as they are.
-- **CPU state**: `rc_cpu` holds the eight GPRs, `eflags`, the segment bases (`fs` → TEB) and x87 state. Lifted
-  functions take `rc_cpu *` and keep registers and flags in C locals inside a function. They write them back at
-  calls and returns.
+- **CPU state**: `rc_cpu` (`rc/cpu.h`, TropicoRecomp's layout) holds the eight GPRs (`r[8]`, also named
+  `eax`…`edi` for hand-written code), one byte per arithmetic flag plus `df`, the x87 in the fast mode (`rc/x87.h`:
+  host doubles, top, control/status/tag words) and the `fs` base (TEB). Lifted functions take `rc_cpu *` and keep
+  registers and flags in C locals inside a function. They write them back at calls, returns and indirect transfers.
+  `cpuid` reports a fixed P6-class CPU without MMX or SSE, and `rdtsc` a 1 GHz counter.
 - **Stack**: the guest stack lives in guest memory, so `esp` is a real guest pointer. Calling conventions
   (`stdcall`, `cdecl`, `thiscall`) therefore need no special handling.
-- **Calls**: direct calls are C calls. Indirect calls and jumps (vtables, function pointers, jump tables
-  not resolved statically) go through `rc_dispatch(cpu, target)`, which looks the target up in a hash table of
-  lifted functions and HLE thunks. An unknown target is a fatal error that names the address, and gets fixed in the manifest.
+- **Calls**: direct calls are C calls; transfers to another function's entry are tail calls. Indirect calls and
+  jumps (vtables, function pointers, the indirect jumps discovery leaves to run time) go through
+  `rc_dispatch(cpu, target)`. It looks the target up in the registry (HLE thunks, a hash table) and then in the
+  sorted tables of the lifted binaries (`rc_dispatch_add_table`, one per binary). An unknown target is a fatal error
+  that names the address, and gets fixed in the manifest. A trap (`rc_trap`) names the instruction and its address.
 - **PE loader** (`rc/pe.h`): maps headers and sections of an exe or DLL at its preferred base and writes
   an HLE thunk address into every IAT slot. The executables have no relocations and always load at `0x400000`.
   The lifted DLLs do have relocations, and two of them collide (C1: `binkw32.dll` and `DPlayDLL.dll` both prefer
@@ -112,10 +116,12 @@ scaling), input events, audio device and clock. It also has a `null` backend for
 ## Generated code (generated/, git-ignored)
 
 The layout is `generated/<game>/<binary>-<variant>/` (for example `generated/cultures1/cultures.exe-gog-en/`):
-`codemap.json` from discovery (M2), later `code_XXXX.c`, `functions.h` and `dispatch_table.c`. All binaries of a
-game link into one executable. Each gets its own symbol prefix and an `rc_generated_binary` entry (`rc/game.h`),
-and the shell picks the one whose SHA-256 matches the user's copy. `cmake/lift.cmake` compiles everything below
-`generated/<game>/` and defines `RC_HAVE_GENERATED`. It is
+`codemap.json` from discovery, and from `recomp lift` `code_XXXX.c`, `funcs.h`, `table.c` (`<symbol>_table`) and
+`binary.c` (the `rc_generated_binary` record: name, variant, hash, base, entry, table). `recomp lift` also rewrites
+`generated/<game>/set.c`, the `rc_generated_set` of every binary lifted for the game so far. All binaries of a game
+link into one executable. Each gets its own symbol prefix (from its directory name, e.g. `cultures_exe_gog_en_`),
+and the shell picks the ones whose SHA-256 matches the user's copy. `cmake/lift.cmake` compiles everything below
+`generated/<game>/` with the project's full warning set and defines `RC_HAVE_GENERATED`. It is
 derived from copyrighted code, so it is **never committed**, never uploaded and never put into issues. Builds
 regenerate it locally from the user's own files.
 

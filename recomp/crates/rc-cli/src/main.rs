@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 //! `recomp`: the Cultures recompiler command line.
 //!
-//! Implemented: `identify`, `info`, `list`, `extract`, `discover`, `codediff`. Planned
-//! (see docs/PLAN.md): `lift` (M3/M4), `convert` (M14).
+//! Implemented: `identify`, `info`, `list`, `extract`, `discover`, `codediff`, `lift`.
+//! Planned (see docs/PLAN.md): `convert` (M14).
 
 mod discover;
+mod lift;
 mod media;
 
 use rc_manifest::{Catalog, Hit};
@@ -32,6 +33,11 @@ USAGE:
                                             the heuristics against them
     recomp codediff [--games DIR] [--verbose] FILE_A FILE_B
                                             compare two builds function by function
+    recomp lift [--games DIR] [--out DIR] [--base ADDR] [--comments] [--verbose] FILE...
+                                            discover, lift every function and write C (default:
+                                            generated/<game>/<binary>-<variant>/, plus the
+                                            game's set.c); --comments puts each instruction
+                                            above its C
     recomp help | --help
     recomp version | --version
 
@@ -58,6 +64,7 @@ struct Opts {
     write: bool,
     verbose: bool,
     no_relocs: bool,
+    comments: bool,
     paths: Vec<PathBuf>,
 }
 
@@ -80,6 +87,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         write: true,
         verbose: false,
         no_relocs: false,
+        comments: false,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -94,6 +102,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--no-write" => o.write = false,
             "--no-relocs" => o.no_relocs = true,
             "--verbose" | "-v" => o.verbose = true,
+            "--comments" => o.comments = true,
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             p => o.paths.push(p.into()),
         }
@@ -127,6 +136,19 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                     write: o.write,
                     verbose: o.verbose,
                     no_relocs: o.no_relocs,
+                },
+                &o.paths,
+            )
+        }
+        "lift" => {
+            let o = parse_opts(rest)?;
+            lift::lift(
+                &lift::LiftOpts {
+                    games: &o.games,
+                    out: o.out.as_deref(),
+                    base: o.base,
+                    comments: o.comments,
+                    verbose: o.verbose,
                 },
                 &o.paths,
             )

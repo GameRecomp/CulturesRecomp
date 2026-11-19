@@ -69,6 +69,31 @@ Ranges that analysis cannot classify become `data` or `seeds` hints. The code ma
 counts only; neither the report nor anything derived from the code (disassembly, code bytes) goes into the repository,
 issues or commits.
 
+## Lifting
+
+```sh
+$recomp lift orig/cultures1/gog-en/Cultures.exe          # C in generated/cultures1/cultures.exe-gog-en/, set.c
+$recomp lift orig/cultures1/*/Cultures.exe orig/cultures1/gog-en/*.dll   # several at once
+$recomp lift --comments --out build/look orig/cultures1/gog-en/Cultures.exe   # each instruction above its C
+cmake --preset ci && cmake --build --preset ci            # compiles everything below generated/<game>/
+```
+
+`recomp lift` runs discovery with the manifest hints, lifts every function and writes the C next to the code map.
+It prints the trapping instructions by kind (`--verbose` for all). Every lifted binary of a game is listed in
+`generated/<game>/set.c` and linked into `cultures-<game>`. Delete a binary's directory and lift another one to
+drop it. Like the code map, the C is derived from the game and stays local (`--out` into `build/` for a look).
+
+## Differential tests
+
+```sh
+cargo run --release --manifest-path recomp/Cargo.toml -p rc-difftest                # all forms, 12 states each
+recomp/target/release/difftest --only "shld" --states 200                           # one kind, more states
+recomp/target/release/difftest --states 1 --coverage orig/cultures1/gog-en/Cultures.exe   # every form tested?
+```
+
+The difftest needs clang (`-m32 -nostdlib`, no 32-bit libc) and an x86-64 Linux host, and writes to
+`build/difftest/`. CI runs it on every push.
+
 ## Checking an install against the runtime
 
 ```sh

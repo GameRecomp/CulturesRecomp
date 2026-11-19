@@ -43,9 +43,15 @@ static inline uint32_t rc_ld32(uint32_t a) {
     memcpy(&v, rc_mem_base + a, sizeof v);
     return v;
 }
+static inline uint64_t rc_ld64(uint32_t a) {
+    uint64_t v;
+    memcpy(&v, rc_mem_base + a, sizeof v);
+    return v;
+}
 static inline void rc_st8(uint32_t a, uint8_t v) { rc_mem_base[a] = v; }
 static inline void rc_st16(uint32_t a, uint16_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
 static inline void rc_st32(uint32_t a, uint32_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
+static inline void rc_st64(uint32_t a, uint64_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
 
 #ifdef __cplusplus
 }

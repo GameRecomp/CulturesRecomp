@@ -4,6 +4,7 @@
 #define RC_GAME_H
 
 #include "rc/cpu.h"
+#include "rc/dispatch.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -18,20 +19,23 @@ typedef struct rc_game_info {
     const char *const *exe_names;  /* NULL-terminated; looked up case-insensitively */
 } rc_game_info;
 
-/* One lifted binary. Emitted by `recomp lift` (M3); the shell picks the entry whose hash
- * matches the user's executable. */
+/* One lifted binary, emitted by `recomp lift` (`binary.c` in its directory below
+ * generated/<game>/). The shell picks the binaries whose hashes match the user's files. */
 typedef struct rc_generated_binary {
-    const char *name;               /* e.g. "Cultures.exe" */
-    const char *sha256;             /* pinned hash from game.toml */
-    uint32_t image_base;
-    uint32_t entry;                 /* guest VA of the PE entry point */
-    void (*register_functions)(void); /* registers every lifted function with rc_dispatch */
+    const char *name;            /* e.g. "Cultures.exe" */
+    const char *variant;         /* first variant of the [[binary]], e.g. "gog-en" */
+    const char *sha256;          /* pinned hash from game.toml */
+    uint32_t image_base;         /* after rebasing (the manifest's `base`) */
+    uint32_t entry;              /* guest VA of the PE entry point */
+    const rc_fn_entry *table;    /* lifted functions, sorted by address */
+    uint32_t count;
 } rc_generated_binary;
 
+/* Everything lifted for one game (`set.c` below generated/<game>/). */
 typedef struct rc_generated_set {
     const char *game_id;
     size_t count;
-    const rc_generated_binary *binaries;
+    const rc_generated_binary *const *binaries;
 } rc_generated_set;
 
 /* Exit codes of rc_game_main(). */

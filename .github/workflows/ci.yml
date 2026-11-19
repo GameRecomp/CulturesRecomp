@@ -33,7 +33,10 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - name: cli smoke test
-        run: cargo run --release -- --version
+        run: cargo run --release -p rc-cli -- --version
+      # Lifted C against the real CPU in 32-bit mode (clang -m32, no 32-bit libc needed).
+      - name: difftest
+        run: cargo run --release -p rc-difftest
 
   c:
     strategy:

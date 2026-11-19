@@ -30,7 +30,7 @@ mod diff;
 mod engine;
 mod image;
 
-pub use codemap::{CodeMap, Function, SectionCoverage, Va};
+pub use codemap::{CodeMap, Flow, Function, Insn, JumpTable, Label, SectionCoverage, Va};
 pub use diff::{diff, fingerprints, Diff};
 pub use engine::{Options, Source};
 pub use image::{Image, Section};

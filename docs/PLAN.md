@@ -45,8 +45,8 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M0  | Foundation                                 | ✅ | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
 | M1  | Read the inputs                            | ✅ | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
 | M2  | Find the code (C1)                         | ✅ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. Reached: 100 % for every C1 binary, every leftover settled by analysis or a manifest hint. |
-| M3  | Lifter, integer core                       | ⬜ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
-| M4  | x87 and the whole game                     | ⬜ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
+| M3  | Lifter, integer core                       | ✅ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
+| M4  | x87 and the whole game                     | 🔶 | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
 | M5  | Boot to the main loop                      | ⬜ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
 | M6  | Picture and input                          | ⬜ | Main menu rendered (16-bit DirectDraw → SDL3). Mouse and keyboard work. Cursors are shown. |
 | M7  | Sound, music and video                     | ⬜ | Bink intro plays. Miles samples and streams work. CD music plays from `MUSIC/TrackNN.ogg`. |
@@ -126,23 +126,42 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
       `orig_discover` checks exactly this, with the hints applied and with and without the DLLs' relocations
 - [ ] Later (M10): GOG `Cultures2.exe` (99.68 %, one `switch` with an index table but no bound), `.cms_t`
 
-### M3 – Lifter, integer core
+### M3 – Lifter, integer core ✅
 
-- [ ] Decoder (iced-x86), IR design (registers, lazy flags, memory ops, terminators)
-- [ ] Integer ALU, shifts and rotates, `mul`/`div`, string ops (`rep movs/stos/cmps/scas`), `setcc`/`cmovcc`, `bt*`, `bswap`, `cpuid`/`rdtsc` as HLE
-- [ ] C emitter, deterministic file layout, `functions.h`, dispatch table
-- [ ] `rc-difftest`: random register and memory states, compared with a reference CPU, per instruction class
-- [ ] Traps for unmodelled instructions, each with a name and an address
+The lifter, its IR, the C emitter and the difftest are TropicoRecomp's (`rc-ir`, `rc-x86`, `rc-emit-c`,
+`rc-difftest`, `tools/difftest/`), adapted to this project's code map and runtime (decision log).
 
-### M4 – x87 and the whole game
+- [x] Decoder (iced-x86), IR (registers, flags as values, memory ops, one terminator per instruction) on
+      discovery's per-instruction `Flow` (`CodeMap::insns`, `Function::body`, in memory only)
+- [x] Integer ALU, shifts and rotates, `mul`/`div` with their traps, string ops (`rep movs/stos/cmps/scas`),
+      `setcc`/`cmovcc`, `bt*`, `bswap`; `cpuid` (a fixed P6-class CPU without MMX) and `rdtsc` in the runtime.
+      Segment pushes and pops follow the flat model (`0x23`); values the instruction drops are not loaded
+      (`popad`'s esp slot, `pop es/ds`), and the carry of `cmp x, 0` is the constant 0, so the C has no warnings
+- [x] C emitter: deterministic (lifting twice gives identical bytes), `funcs.h`, `code_XXXX.c` per 64 KiB, the
+      sorted table `table.c`, `binary.c` and the game's `set.c`; one symbol prefix per binary. Labels the program
+      takes as values (SEH handlers, code pointers into a function) get entries of their own; a function entered
+      above its lowest instruction starts with a `goto`
+- [x] `rc-difftest`: all 1560 modelled instruction forms (175 mnemonics) and the fixtures from random states,
+      lifted C against the real CPU in 32-bit mode: 18720/18720 states agree. `--coverage` on every C1 binary: every
+      form they use is tested, except `cpuid`/`rdtsc` (answered by the runtime) and `push`/`pop es/ds` (the
+      selector differs from the real one by design). Runs in CI
+- [x] Traps for unmodelled instructions, each with a name and an address (`rc_trap`); `recomp lift` lists them
+- [x] `recomp lift`: all seven C1 binaries in about 5 s; the generated C (about 42 MB per `Cultures.exe`) compiles
+      with `-Wall -Wextra -Wpedantic -Werror` on gcc and clang and links into `cultures-cultures1`
 
-- [ ] x87 on host doubles (stack, control word, compare and flags, `fist`/rounding modes, transcendental functions)
-- [ ] MMX: present (M2 finding: 220 instructions in `Cultures.exe`, about 4150 in `binkw32.dll`), so it is lifted;
-      no SSE, 3DNow! or `cmov` was found, those trap
+### M4 – x87 and the whole game 🔶
+
+- [x] x87 on host doubles (stack, control word, compare and flags, `fist`/rounding modes, transcendental
+      functions): the fast mode from TropicoRecomp, difftested
+- [ ] MMX: 237 trapping instructions in `Cultures.exe` (MMX, `int 6` of the CRT's FDIV stubs, one `int3`), about
+      4160 in each `binkw32.dll`, none in `DPlayDLL.dll`. Both detect MMX with `cpuid` and branch on the result,
+      and the runtime's CPU reports none, so the MMX paths are probably dead (RESEARCH question 10). Lift MMX
+      only if a trap shows one is reached; no SSE, 3DNow! or `cmov` was found
 - [ ] DLL rebasing in the runtime: the manifest `base` (C1: `DPlayDLL.dll` → `0x11000000`) is in place and the
       recompiler rebases before discovery (M2, `Image::rebase`); the runtime loader (`rc/pe.h`, fixed-base only so
       far) still has to apply the same relocations when mapping the DLL
-- [ ] Lift all of `Cultures.exe` and `binkw32.dll`, compile and link. Per-function hot-reload for debugging is optional
+- [x] Lift all of `Cultures.exe`, `binkw32.dll` and `DPlayDLL.dll` (all builds), compile and link
+- [ ] No trap in reachable code: checked when the game runs (M5 onwards)
 
 ### M5 – Boot to the main loop
 
@@ -256,6 +275,10 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
 | 2026-11-19 | Store extras (GOG Galaxy DLLs, GOG's Ogg/Vorbis wrapper dependencies, uninstallers) are skipped by name in `recomp identify`, not pinned. |
 | 2026-11-19 | Code maps go to `generated/<game>/<binary>-<variant>/codemap.json` (lower-case file name plus the first variant of the `[[binary]]`), because one game has several builds of the same binary. Addresses in the JSON are hex strings. |
 | 2026-11-19 | `DPlayDLL.dll` (both C1 builds) is rebased to `0x11000000` (`base` in the manifest); `binkw32.dll` keeps its preferred base. |
+| 2026-11-19 | The lifter, IR, C emitter and difftest are TropicoRecomp's crates, copied and adapted (code map, image, runtime API) rather than rewritten; changes that are not project-specific are kept small so they can go back. This project keeps the C back end only. |
+| 2026-11-19 | The runtime's `rc_cpu` takes TropicoRecomp's layout (`r[8]`, one byte per flag, x87 fast mode), with the registers also named for hand-written code. `rc_dispatch` looks up the HLE registry, then one sorted table per lifted binary. |
+| 2026-11-19 | `cpuid` reports a P6-class CPU without MMX or SSE, as in TropicoRecomp, so the game and Bink take their plain code paths and MMX may never need lifting. |
+| 2026-11-19 | Generated C is compiled with the project's full warning set (unlike TropicoRecomp's `-w`); warnings are fixed in the lifter, not silenced. |
 | 2026-11-19 | As much code as possible is shared between the games: one toolchain, runtime, HLE and platform layer for all of them. Differences between games and builds go into the manifests or small game modules, not into copies of shared code, and changes to shared rules are checked against every target. |
 | 2026-11-19 | M2 closes at TropicoRecomp's bar, not only at ≥ 99 %: no unknown byte in any lifted C1 binary, and every `no-return?` candidate settled by a hint. A function checked to return gets a `returns` hint, so the report only shows unchecked candidates. |
 | 2026-11-19 | Discovery accepts a heuristic candidate (pointer constant, vtable slot, gap) only after trial decoding in a transaction that rolls back on implausible instructions or overlaps. Calls that fall into another function are reported as `no-return?` candidates and become `no_return` hints only after a manual check, because MSVC's x87 math routines have second entries right after returning calls. |
