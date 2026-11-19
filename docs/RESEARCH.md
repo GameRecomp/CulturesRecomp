@@ -345,6 +345,18 @@ wrapper relies on, found while making two recompiled programs play each other:
 - `GetMessageQueue` is asked for the send queue (flag 1); it must be empty, or the game holds its messages back.
 - In the match, every machine sends to every other in lockstep (the counts stay equal).
 
+The C2 engine (`CDPNet` in `Game.exe`) uses DirectPlay 8's peer interface (`hle/dplay/dpnet.c`):
+
+- It converts the player and session names with `MultiByteToWideChar(..., -1, buffer, length)`: the length
+  excludes the terminator, so the call fails, but Windows has filled the (zeroed) buffer first, and the game uses
+  it. Our kernel32 now fills before failing too.
+- The session name carries the version (`Northland Game - Player - V1.04`); the game lists only its own version.
+- `EnumHosts` runs without end (count and timeout `INFINITE`, retry 0) until the player picks a host; the
+  responses' sender address is duplicated and passed to `Connect`.
+- After `Connect` the game asks each player's `GetConnectionInfo` often (the latency shown in the lobby) and
+  `ReturnBuffer`s every received buffer it kept (`DPNSUCCESS_PENDING` from the handler).
+- In the mission the engine sends far less than Cultures 1 (under 200 messages in a few minutes of two players).
+
 Our wire protocol is our own (two recompiled programs talk to each other, not to Windows' DirectPlay): a UDP query on
 port 47624 (broadcast, 127.0.0.1, `$RC_DPLAY_HOST`, the typed address) answered with the session, and one TCP
 connection per client to the host, which relays.

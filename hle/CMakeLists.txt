@@ -12,6 +12,7 @@ add_library(rc_hle STATIC
     dshow/dshow.c
     dplay/dplay.c
     dplay/net.c
+    dplay/dpnet.c
     kernel32/process.c
     kernel32/memory.c
     kernel32/locale.c

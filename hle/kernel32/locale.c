@@ -333,12 +333,14 @@ static void k_MultiByteToWideChar(rc_cpu *c)
     if (dn == 0) {
         RC_RETURN(c, n, 6);
     }
+    /* A buffer too small fails, but as on Windows only after it was filled: programs that pass
+     * the length without the terminator into a zeroed buffer rely on that (Northland). */
+    for (uint32_t i = 0; i < n && i < dn; i++) {
+        rc_st16(d + 2 * i, to_wide(rc_ld8(s + i)));
+    }
     if (dn < n) {
         rc_last_error = ERROR_INSUFFICIENT_BUFFER;
         RC_RETURN(c, 0, 6);
-    }
-    for (uint32_t i = 0; i < n; i++) {
-        rc_st16(d + 2 * i, to_wide(rc_ld8(s + i)));
     }
     RC_RETURN(c, n, 6);
 }
@@ -350,12 +352,8 @@ static void k_WideCharToMultiByte(rc_cpu *c)
     if (dn == 0) {
         RC_RETURN(c, n, 8);
     }
-    if (dn < n) {
-        rc_last_error = ERROR_INSUFFICIENT_BUFFER;
-        RC_RETURN(c, 0, 8);
-    }
     uint32_t defaulted = 0;
-    for (uint32_t i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < n && i < dn; i++) {
         int b = from_wide(rc_ld16(s + 2 * i));
         if (b < 0) {
             b = '?';
@@ -365,6 +363,10 @@ static void k_WideCharToMultiByte(rc_cpu *c)
     }
     if (used) {
         rc_st32(used, defaulted);
+    }
+    if (dn < n) { /* filled first, as MultiByteToWideChar */
+        rc_last_error = ERROR_INSUFFICIENT_BUFFER;
+        RC_RETURN(c, 0, 8);
     }
     RC_RETURN(c, n, 8);
 }

@@ -278,7 +278,10 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
       over TCP, which numbers them, keeps their names and data and relays messages. Two Cultures 1 programs on one
       machine: the client finds the host's game, joins its lobby, the map is sent and both play the match
       (RESEARCH "DirectPlay")
-- [ ] `dpnet` (DirectPlay 8) for the C2 engine
+- [x] `dpnet` (DirectPlay 8 peer and address objects) on the same network core (`net.c`): Northland's host
+      creates a game, a second program finds it on the LAN, joins the lobby, the host puts it into a slot and starts,
+      and both play the mission
+- [ ] The other C2-engine games (same `CDPNet` code) and `GameMp.exe` (Winsock: what is it for?)
 - [ ] `*MP.exe`: lift them if they are required for multiplayer (research question 7)
 - [ ] Determinism check: two recompiled builds stay in lockstep for one hour (a few minutes checked so far)
 

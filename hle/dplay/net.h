@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 #define NET_NAME 64
-#define NET_APPDATA 64
+#define NET_APPDATA 256
 
 typedef struct net_session {
     uint8_t instance[16], app[16];
@@ -42,6 +42,7 @@ typedef struct net_events {
     void (*player_data)(net_player *p);               /* its names or data changed */
     void (*receive)(uint32_t from, uint32_t to, const uint8_t *data, uint32_t size);
     void (*session_lost)(void);
+    void (*session_changed)(const net_session *s); /* client: the host changed it (may be NULL) */
 } net_events;
 
 void net_set_events(const net_events *ev);
@@ -58,11 +59,13 @@ bool net_enum_running(void);
 uint64_t net_enum_started(void);
 void net_enum_stop(void);
 int net_sessions(const net_session **list);
+/* Where a session found is hosted (address as text, TCP port); false if it is not known. */
+bool net_session_host(const uint8_t instance[16], char *ip, int cap, uint16_t *port);
 
 /* Host a session (instance GUID made here), or join one that was found. */
 bool net_host(const net_session *s);
 bool net_join(const uint8_t instance[16]);
-void net_set_session(const net_session *s); /* host: what queries are answered with */
+void net_set_session(const net_session *s); /* host: answers queries with it, clients are told */
 const net_session *net_current(void);
 bool net_is_open(void);
 bool net_is_host(void);

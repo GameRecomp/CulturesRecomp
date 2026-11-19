@@ -17,7 +17,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
 | M8 In game | **in progress** | an hour of scripted play in a scenario (216,000 frames) without trap; save and load work; open: a whole mission played by hand, timing |
 | M11 Northland, 8th Wonder, Saga | **in progress** | all lift, play their movies (dshow + pl_mpeg), sound (DirectSound 8) and music (dmusic player + DLS synth), and start their first missions; open: a mission played through |
-| M12 Multiplayer | **in progress** | C1: two programs find each other, join, transfer the map and play (DirectPlay 4 over TCP/UDP); open: C2 engine (DirectPlay 8), an hour in lockstep |
+| M12 Multiplayer | **in progress** | own network (`hle/dplay/net.c`: UDP discovery, host relay over TCP) under DirectPlay 4 (C1) and 8 (Northland): two programs find each other, join and play a match; open: the other C2-engine games, an hour in lockstep |
 | M14 Converter | **in progress** | `recomp convert`: installer, CD, zip or folder → unpacked, lifted, built, `out/<game>/play.sh`; open: no-compiler packages, browser |
 | M10 Cultures 2 | **in progress** | boots to its serial prompt; needs the player's serial once; MMX and music done |
 

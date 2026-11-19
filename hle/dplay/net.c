@@ -48,7 +48,7 @@ typedef int SOCKET;
 #define SESS (16 + 16 + 4 + 4 + 4 + 2 + NET_NAME + 4 + NET_APPDATA)
 
 /* Frames on the TCP connection: u32 length (of the type and payload), u8 type. */
-enum { F_WELCOME = 1, F_CREATE_REQ, F_PLAYER_ID, F_PLAYER_NEW, F_PLAYER_GONE, F_DATA, F_DESTROY_REQ, F_PLAYER_SET };
+enum { F_WELCOME = 1, F_CREATE_REQ, F_PLAYER_ID, F_PLAYER_NEW, F_PLAYER_GONE, F_DATA, F_DESTROY_REQ, F_PLAYER_SET, F_SESSION };
 
 typedef struct conn {
     SOCKET s;
@@ -69,6 +69,10 @@ static struct {
 } n;
 
 static net_events ev;
+
+static void get_session(const uint8_t *r, net_session *s, uint16_t *port);
+static void put_session(uint8_t *r, const net_session *s, uint16_t port);
+static uint16_t listen_port(void);
 
 static struct {
     net_session s;
@@ -372,6 +376,15 @@ static void handle_frame(int ci, uint8_t type, const uint8_t *p, uint32_t len)
             }
         }
         break;
+    case F_SESSION: /* client: the host changed the session */
+        if (!n.host && len >= SESS) {
+            uint16_t port;
+            get_session(p, &n.session, &port);
+            if (ev.session_changed) {
+                ev.session_changed(&n.session);
+            }
+        }
+        break;
     case F_DATA:
         if (len >= 8) {
             uint32_t from, to;
@@ -599,7 +612,7 @@ void net_enum_poll(void)
     if (disc == INVALID_SOCKET) {
         return;
     }
-    uint8_t r[512];
+    uint8_t r[1024];
     struct sockaddr_in from;
     socklen_t fl = sizeof from;
     int k;
@@ -645,6 +658,18 @@ int net_sessions(const net_session **list)
     }
     *list = copy;
     return nfound;
+}
+
+bool net_session_host(const uint8_t instance[16], char *ip, int cap, uint16_t *port)
+{
+    for (int i = 0; i < nfound; i++) {
+        if (memcmp(found[i].s.instance, instance, 16) == 0) {
+            inet_ntop(AF_INET, &found[i].addr.sin_addr, ip, (socklen_t)cap);
+            *port = ntohs(found[i].addr.sin_port);
+            return true;
+        }
+    }
+    return false;
 }
 
 /* ---- sessions ---- */
@@ -725,6 +750,12 @@ void net_set_session(const net_session *s)
     memcpy(keep, n.session.instance, 16);
     n.session = *s;
     memcpy(n.session.instance, keep, 16);
+    if (n.host) {
+        uint8_t r[SESS];
+        n.session.cur_players = (uint32_t)net_player_count();
+        put_session(r, &n.session, listen_port());
+        broadcast(F_SESSION, r, sizeof r, -1);
+    }
 }
 
 const net_session *net_current(void)

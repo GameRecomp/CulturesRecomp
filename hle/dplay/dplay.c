@@ -313,7 +313,7 @@ static void m_EnumSessions(rc_cpu *c)
 }
 
 /* Open(this, desc, flags): DPOPEN_CREATE (2) hosts, DPOPEN_JOIN (1) joins a session found. */
-static const net_events events = {ev_player_new, ev_player_gone, ev_player_data, ev_receive, ev_session_lost};
+static const net_events events = {ev_player_new, ev_player_gone, ev_player_data, ev_receive, ev_session_lost, NULL};
 
 static uint32_t open_session(uint32_t desc, uint32_t flags)
 {
@@ -853,6 +853,7 @@ static void pump(rc_cpu *c)
 
 void rc_dplay_init(void)
 {
+    rc_dpnet_init();
     rc_add_pump_hook(pump);
     rc_register_imports(defs, sizeof defs / sizeof defs[0]);
     rc_com_register("{D1EB6D20-8923-11D0-9D97-00A0C90A43CB}", create);       /* CLSID_DirectPlay */
