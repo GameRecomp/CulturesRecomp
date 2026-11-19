@@ -213,11 +213,13 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [ ] Play the campaign. Fix traps and HLE gaps as they show up
 - [ ] Save/load and the options menu. Timing (`timeGetTime`, frame limiter) must match the original game speed
 - [x] One-hour soak test with automated input: 216,000 frames of random clicks in a scenario (virtual clock), no trap
-- [ ] Record and replay input for regression tests
+- [x] Record and replay input: `RC_RECORD=path` writes the player's input as an `RC_INPUT` script (exact with
+      `RC_CLOCK=virtual`); checked only headless so far, where there is no input to record
 
 ### M9 – Cultures 1 release
 
-- [ ] All three variants. Gold: add-on campaign, `Intro2`/`Extro2` movies
+- [ ] All three variants: GOG EN and DE and Gold DE start; Gold offers both campaigns and the add-on's first mission
+      ("Der Aufbruch") starts. Open: when `Intro2`/`Extro2` play (neither the campaign start nor the Intro menu)
 - [ ] Packaging per platform. The user points the build at their install; nothing is bundled
 - [ ] Release notes with the known issues
 
@@ -281,7 +283,8 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [x] `dpnet` (DirectPlay 8 peer and address objects) on the same network core (`net.c`): Northland's host
       creates a game, a second program finds it on the LAN, joins the lobby, the host puts it into a slot and starts,
       and both play the mission
-- [ ] The other C2-engine games (same `CDPNet` code) and `GameMp.exe` (Winsock: what is it for?)
+- [x] 8th Wonder and the Saga host a game the same way (same `CDPNet` code as Northland)
+- [ ] `GameMp.exe` (Winsock: what is it for?)
 - [ ] `*MP.exe`: lift them if they are required for multiplayer (research question 7)
 - [ ] Determinism check: two recompiled builds stay in lockstep for one hour (a few minutes checked so far)
 

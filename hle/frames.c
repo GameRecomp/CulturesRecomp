@@ -21,6 +21,8 @@
  *                              lined up that way by their test script
  *       FRAME shot PATH        a screenshot of the next frame (frames
  *                              after a wait are not known in advance)
+ *   RC_RECORD=path             write the input of this run as such a script
+ *                              (with RC_CLOCK=virtual it replays exactly)
  *   Lines starting with '#' are comments. Keying input to frames rather
  *   than time makes a run replay the same on a fast and a slow machine.
  */
@@ -34,7 +36,8 @@
 #include "rc/process.h"
 #include "user32/user32.h"
 
-static FILE *script;
+static FILE *script, *record;
+static unsigned current_frame;
 static unsigned next_frame;
 static char next_line[256];
 static int script_done;
@@ -181,8 +184,45 @@ int rc_screenshot_due(unsigned frame)
     return 0;
 }
 
+/* RC_RECORD: the user's input as script lines, keyed to the frame it arrived after. */
+void rc_record_event(const rc_event *e)
+{
+    static int tried;
+    if (!record && !tried) {
+        tried = 1;
+        const char *path = getenv("RC_RECORD");
+        if (path && *path && !(record = fopen(path, "w"))) {
+            rc_log("RC_RECORD: cannot write %s", path);
+        }
+    }
+    if (!record) {
+        return;
+    }
+    unsigned f = current_frame + 1;
+    switch (e->type) {
+    case RC_EV_MOUSE_MOVE:
+        fprintf(record, "%u move %d %d\n", f, e->x, e->y);
+        break;
+    case RC_EV_MOUSE_BUTTON:
+        fprintf(record, "%u move %d %d\n%u %s %d\n", f, e->x, e->y, f, e->down ? "down" : "up", e->button);
+        break;
+    case RC_EV_WHEEL:
+        fprintf(record, "%u move %d %d\n%u wheel %d\n", f, e->x, e->y, f, e->delta / 120);
+        break;
+    case RC_EV_KEY:
+        if (!e->repeat) {
+            fprintf(record, "%u %s %d\n", f, e->down ? "key" : "keyup", e->vk);
+        }
+        break;
+    default:
+        return;
+    }
+    fflush(record);
+}
+
 void rc_present_hook(unsigned frame)
 {
+    current_frame = frame;
     if (shot_path[0]) {
         rc_log("screenshot of frame %u: %s%s", frame, shot_path, rc_plat_screenshot(shot_path) ? "" : " failed");
         shot_path[0] = 0;

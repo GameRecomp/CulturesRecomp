@@ -137,6 +137,10 @@ the host's address (`127.0.0.1` on the same machine). Sessions on the LAN are fo
 programs are lined up with `FRAME wait PATH` (the script pauses until the file exists; the game runs on) and
 `FRAME shot PATH` (a screenshot of the next frame), the test script creating the files when both are ready.
 
+`RC_RECORD=input.txt` writes what the player does as such a script; replayed with `RC_INPUT` and `RC_CLOCK=virtual`
+(set both times) it repeats the run. `--exe NAME` runs another program of the install, e.g.
+`cultures-northland --exe Editor.exe` (lift it first; `--check --exe Editor.exe` lists what it imports).
+
 ## Inspecting a binary
 
 ```sh

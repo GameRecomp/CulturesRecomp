@@ -572,7 +572,11 @@ static bool next_event(rc_event *e)
         *e = injected[ihead++ % INJECTED];
         return true;
     }
-    return rc_plat_poll(e);
+    if (!rc_plat_poll(e)) {
+        return false;
+    }
+    rc_record_event(e);
+    return true;
 }
 
 static bool (*input_filter)(const rc_event *e);

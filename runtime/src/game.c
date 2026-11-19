@@ -2,7 +2,7 @@
 /*
  * The entry point shared by every game shell (cmake/game_main.c.in):
  *
- *   cultures-<id> [--game-dir DIR] [--user-dir DIR] [--check] [-- GAME_ARGS...]
+ *   cultures-<id> [--game-dir DIR] [--user-dir DIR] [--exe NAME] [--check] [-- GAME_ARGS...]
  *
  * It finds the installed game, hashes its executable and the DLLs next to it, picks the
  * lifted binaries whose hashes match (a shell links every build lifted for its game), and
@@ -28,12 +28,13 @@ static void usage(const rc_game_info *g, FILE *f)
     fprintf(f,
             "%s - static recompilation of %s\n"
             "\n"
-            "usage: cultures-%s [--game-dir DIR] [--user-dir DIR] [--check] [-- GAME_ARGS...]\n"
+            "usage: cultures-%s [--game-dir DIR] [--user-dir DIR] [--exe NAME] [--check] [-- GAME_ARGS...]\n"
             "\n"
             "  --game-dir DIR   your installed copy (default: $RC_GAME_DIR, else the current\n"
             "                   directory)\n"
             "  --user-dir DIR   where the game writes saves and settings (default: the\n"
             "                   platform's per-user data directory)\n"
+            "  --exe NAME       run another program of the install (Editor.exe, GameMp.exe)\n"
             "  --check          report which of the executable's imports the HLE layer still\n"
             "                   lacks (works without lifted code)\n"
             "  --version        print the version\n"
@@ -102,12 +103,17 @@ static uint32_t rva_offset(const uint8_t *f, uint32_t size, uint32_t rva)
 }
 
 /* --check: every import of the executable, per DLL, implemented or not. */
-static int check(const rc_game_info *game, const char *game_dir)
+static int check(const rc_game_info *game, const char *game_dir, const char *exe_name)
 {
     char path[RC_PATH_MAX];
-    const char *name = find_exe(game, game_dir, path);
+    const char *name = exe_name;
+    if (name && !(rc_host_resolve(game_dir, name, false, path) && rc_host_exists(path, NULL, NULL))) {
+        name = NULL;
+    } else if (!name) {
+        name = find_exe(game, game_dir, path);
+    }
     if (!name) {
-        fprintf(stderr, "%s not found in '%s' (use --game-dir)\n", game->exe_names[0], game_dir);
+        fprintf(stderr, "%s not found in '%s' (use --game-dir)\n", exe_name ? exe_name : game->exe_names[0], game_dir);
         return RC_EXIT_ERROR;
     }
     uint32_t size = 0;
@@ -175,6 +181,7 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     the_game = game;
     const char *game_dir = getenv("RC_GAME_DIR");
     const char *user_dir = NULL;
+    const char *exe_name = NULL;
     bool do_check = false;
     static char args[1024];
     for (int i = 1; i < argc; i++) {
@@ -191,6 +198,8 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
             game_dir = argv[++i];
         } else if (strcmp(a, "--user-dir") == 0 && i + 1 < argc) {
             user_dir = argv[++i];
+        } else if (strcmp(a, "--exe") == 0 && i + 1 < argc) {
+            exe_name = argv[++i];
         } else if (strcmp(a, "--") == 0) {
             for (int j = i + 1; j < argc; j++) {
                 size_t used = strlen(args);
@@ -207,7 +216,7 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
         game_dir = ".";
     }
     if (do_check) {
-        return check(game, game_dir);
+        return check(game, game_dir, exe_name);
     }
     if (!generated || generated->count == 0) {
         printf("%s: no lifted code in this build.\n"
@@ -217,9 +226,14 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     }
 
     char path[RC_PATH_MAX];
-    const char *exe = find_exe(game, game_dir, path);
+    const char *exe = exe_name;
+    if (exe && !(rc_host_resolve(game_dir, exe, false, path) && rc_host_exists(path, NULL, NULL))) {
+        exe = NULL;
+    } else if (!exe) {
+        exe = find_exe(game, game_dir, path);
+    }
     if (!exe) {
-        fprintf(stderr, "%s not found in '%s' (use --game-dir)\n", game->exe_names[0], game_dir);
+        fprintf(stderr, "%s not found in '%s' (use --game-dir)\n", exe_name ? exe_name : game->exe_names[0], game_dir);
         return RC_EXIT_ERROR;
     }
     /* The lifted binaries whose hashes match the files of this install. */

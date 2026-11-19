@@ -21,6 +21,8 @@ void rc_post_message(uint32_t hwnd, uint32_t message, uint32_t wparam, uint32_t 
 struct rc_event;
 /* Deliver an input event as if the host had sent it (scripted input). */
 void rc_inject_event(const struct rc_event *e);
+/* RC_RECORD (frames.c): the user's input written as an RC_INPUT script. */
+void rc_record_event(const struct rc_event *e);
 /* A filter for the host's input, before the program gets it: true when it
  * takes the event (holds it back, or acts on it itself). One filter. */
 void rc_set_input_filter(bool (*fn)(const struct rc_event *e));
