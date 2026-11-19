@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! `recomp`: the Cultures recompiler command line.
 //!
-//! Implemented: `identify`, `info`, `list`, `extract`. Planned (see docs/PLAN.md):
-//! `discover` (M2), `lift` (M3/M4), `convert` (M14).
+//! Implemented: `identify`, `info`, `list`, `extract`, `discover`, `codediff`. Planned
+//! (see docs/PLAN.md): `lift` (M3/M4), `convert` (M14).
 
+mod discover;
 mod media;
 
 use rc_manifest::{Catalog, Hit};
@@ -23,6 +24,14 @@ USAGE:
     recomp extract [--games DIR] [--dest DIR] [--force] MEDIA
                                             unpack MEDIA (default: orig/<game>/<variant>/) and
                                             verify the binaries against the manifest
+    recomp discover [--games DIR] [--out DIR] [--base ADDR] [--no-write] [--no-relocs]
+                    [--verbose] FILE...     find the code of an executable or DLL, print the
+                                            coverage report and write the code map (default:
+                                            generated/<game>/<binary>-<variant>/codemap.json).
+                                            --no-relocs ignores a DLL's relocations, to check
+                                            the heuristics against them
+    recomp codediff [--games DIR] [--verbose] FILE_A FILE_B
+                                            compare two builds function by function
     recomp help | --help
     recomp version | --version
 
@@ -44,7 +53,20 @@ struct Opts {
     imports: bool,
     dest: Option<PathBuf>,
     force: bool,
+    out: Option<PathBuf>,
+    base: Option<u32>,
+    write: bool,
+    verbose: bool,
+    no_relocs: bool,
     paths: Vec<PathBuf>,
+}
+
+fn parse_u32(s: &str) -> Result<u32, String> {
+    let r = match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        Some(h) => u32::from_str_radix(h, 16),
+        None => s.parse(),
+    };
+    r.map_err(|_| format!("bad address {s:?}"))
 }
 
 fn parse_opts(args: &[String]) -> Result<Opts, String> {
@@ -53,6 +75,11 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         imports: false,
         dest: None,
         force: false,
+        out: None,
+        base: None,
+        write: true,
+        verbose: false,
+        no_relocs: false,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -62,6 +89,11 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--imports" => o.imports = true,
             "--dest" => o.dest = Some(it.next().ok_or("--dest needs a directory")?.into()),
             "--force" => o.force = true,
+            "--out" => o.out = Some(it.next().ok_or("--out needs a directory")?.into()),
+            "--base" => o.base = Some(parse_u32(it.next().ok_or("--base needs an address")?)?),
+            "--no-write" => o.write = false,
+            "--no-relocs" => o.no_relocs = true,
+            "--verbose" | "-v" => o.verbose = true,
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             p => o.paths.push(p.into()),
         }
@@ -84,6 +116,24 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         "extract" => {
             let o = parse_opts(rest)?;
             media::extract(&o.games, o.dest.as_deref(), o.force, &o.paths)
+        }
+        "discover" => {
+            let o = parse_opts(rest)?;
+            discover::discover(
+                &discover::DiscoverOpts {
+                    games: &o.games,
+                    out: o.out.as_deref(),
+                    base: o.base,
+                    write: o.write,
+                    verbose: o.verbose,
+                    no_relocs: o.no_relocs,
+                },
+                &o.paths,
+            )
+        }
+        "codediff" => {
+            let o = parse_opts(rest)?;
+            discover::codediff(&o.games, o.verbose, &o.paths)
         }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");
@@ -346,6 +396,13 @@ mod tests {
         assert!(is_ignored_extra(Path::new("libvorbisfile-3.dll")));
         assert!(!is_ignored_extra(Path::new("Cultures.exe")));
         assert!(!is_ignored_extra(Path::new("winmm.dll")));
+    }
+
+    #[test]
+    fn addresses() {
+        assert_eq!(parse_u32("0x11000000"), Ok(0x1100_0000));
+        assert_eq!(parse_u32("4096"), Ok(4096));
+        assert!(parse_u32("0xzz").is_err());
     }
 
     #[test]

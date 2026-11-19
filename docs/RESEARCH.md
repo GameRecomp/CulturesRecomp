@@ -128,14 +128,16 @@ All middleware DLLs carry relocations (checked with `recomp info`); the executab
 | DLL | Game | Preferred base | Entry |
 |-----|------|----------------|-------|
 | `binkw32.dll` | cultures1 (GOG EN, Gold) | `0x10000000` | `0x1002c37c` |
+| `binkw32.dll` | cultures1 (GOG DE, a different Bink build with sections `BINK`, `BINK32`, …) | `0x30000000` | `0x3002dac5` |
 | `DPlayDLL.dll` | cultures1 | `0x10000000` | `0x1000b00e` |
 | `Mss32.dll` | cultures1, cultures2 | `0x21100000` | `0x21134697` (C1) / `0x2112f6b5` (C2) |
 | `Mp3dec.asi` | cultures1 | `0x26f00000` | `0x26f0a995` |
 | `binkw32.dll` | cultures2 | `0x30000000` | `0x3002dac5` |
 | `gedx8musicdrv.dll` | cultures2, northland, eighthwonder, saga | `0x10000000` | `0x100051c4` |
 
-In Cultures 1, `binkw32.dll` and `DPlayDLL.dll` collide, so one of them has to be rebased (PLAN.md, M4). On Windows
-the loader would relocate the second one. `Mss32.dll` and `Mp3dec.asi` are HLE / not loaded, so they do not matter.
+In Cultures 1 (GOG EN and Gold), `binkw32.dll` and `DPlayDLL.dll` collide, so one of them has to be rebased. On
+Windows the loader would relocate the second one. Both `DPlayDLL.dll` builds now carry `base = 0x11000000` in the
+manifest, and `recomp discover` works on the rebased image (the result agrees with the relocations, see below). `Mss32.dll` and `Mp3dec.asi` are HLE / not loaded, so they do not matter.
 
 ## Cultures 2 GOG executable
 
@@ -183,8 +185,9 @@ Findings from M1, verified by extracting every medium byte-identically against i
 
 - C2 engine: the executable is language-neutral (`set_language N` in the ini, and per-language subfolders
   such as `FMV/Eng`). The single exception is the Spanish 8th Wonder `Game.exe`, which is an older build (2003-06-19).
-- C1: the EN and DE GOG executables differ (2001-06 vs 2003-02 build), and the Gold one is a third build.
-  Whether this is only strings or also code changes is **(open)**. A diff of discovered functions in M2 answers it.
+- C1: the EN and DE GOG executables have different PE timestamps (2001-06 vs 2003-02) but identical Rich headers,
+  and the Gold one is a third build. `recomp codediff` (M2) shows that EN and DE differ in **two functions** only
+  (65 bytes of the whole file, plus strings); Gold differs in about 80 functions (see "Code discovery").
 
 ## File system behaviour to emulate
 
@@ -193,13 +196,61 @@ Findings from M1, verified by extracting every medium byte-identically against i
 - Saves: `Save/` (C1), `Saves/` (C2 engine). The VFS redirects writes to a per-user directory, so the
   install directory can stay read-only.
 
+## Code discovery (M2)
+
+`recomp discover` results for the Cultures 1 binaries (addresses as in the manifest, `DPlayDLL.dll` rebased to
+`0x11000000`). "Classified" is code + data + padding as a share of all code sections. The DLL rows also hold when
+discovery ignores their relocations (`--no-relocs`): then every relocated pointer into code still hits an instruction
+start or data, and at most one fixup site (inside dead x87 CRT code of `binkw32.dll`) is missed.
+
+| Binary | Code bytes | Functions | No-return | Jump tables | Vtables | SEH scope tables | Classified |
+|--------|-----------:|----------:|----------:|------------:|--------:|-----------------:|-----------:|
+| `Cultures.exe` gog-en / gog-de | 669 844 | 4003 | 25 | 78 | 119 | 10 | 99.99 % |
+| `Cultures.exe` gold-de | 673 780 | 4013 | 25 | 78 | 119 | 10 | 99.99 % |
+| `binkw32.dll` gog-en / gold-de | 202 314 | 743 | 16 | 45 | 0 | 3 | 99.93 % |
+| `binkw32.dll` gog-de | 211 590 (7 sections) | 725 | 16 | 46 | 0 | 3 | 99.94 % |
+| `DPlayDLL.dll` gog-en | 66 290 | 326 | 6 | 48 | 0 | 14 | 99.99 % |
+| `DPlayDLL.dll` gog-de / gold-de | 61 922 | 295 | 6 | 48 | 0 | 9 | 99.91 % |
+
+Facts that the lifter (M3/M4) depends on:
+
+- **No RTTI** in any C1 binary (no `.?AV` type descriptors; built without `/GR`). Vtables are found through the
+  constructors' `mov [obj], offset vtable` stores into `.rdata` instead (119 in `Cultures.exe`, 1937 slots).
+- **C++ EH is almost unused**: one `FuncInfo` (magic `0x19930520`) in `Cultures.exe`, one in `binkw32.dll`, three
+  in `DPlayDLL.dll`. SEH (`__except_handler3` frames) appears in the CRT only.
+- **Functions are packed** without alignment padding; padding (`int3`, `nop`, MSVC's multi-byte `lea` nops) only
+  occurs inside the CRT's assembly routines and in RAD's code.
+- **Data inside `.text`** is limited to `switch` jump tables (MSVC puts them after the function), their index byte
+  tables, the CRT's hand-written `memcpy`/`memmove` tables, and a few bytes of CRT signature data. The tables of
+  `memcpy`/`memmove` are indexed with negative or 1-based indices (`jmp [ecx*4 + table]` after `neg ecx`, or
+  `[eax*4 + table - 4]`), so the address in the instruction is not where the table starts.
+- **MMX is used**: 220 MMX instructions in `Cultures.exe` and about 4150 in `binkw32.dll` (Bink's decoder). There is no SSE,
+  3DNow! or `cmov`. x87 is everywhere (about 1900 instructions in `Cultures.exe`). M4 therefore needs MMX, not only x87.
+- **No-return functions:** the CRT's `_exit` (`doexit(code, 1, 0)`) cannot be proven no-return without
+  constant propagation, so it is a manifest hint (`0x49cd22` GOG, `0x49dc82` Gold). The game's own fatal-error
+  routine follows from it. Calls that fall straight into another function are reported as `no-return?`
+  candidates, but they are not applied automatically: the CRT's x87 math routines (`sin` → `_CIsin` …) have a
+  second entry right after a returning call.
+- **Indirect control flow:** about 720 indirect calls (vtables, `mov esi, [IAT]; call esi`) and 3 unresolved
+  indirect jumps in `Cultures.exe`. 214 of its 230 imports are called directly through the IAT.
+- **Build differences (research question 5):** GOG EN vs DE: 4001 of 4003 functions identical. GOG vs Gold: 98.1 % of
+  the functions (91.4 % of the code bytes) are identical up to addresses. About 77 functions changed and 10 more
+  were added in Gold (the add-on). Function addresses differ between GOG and Gold, so the manifests keep per-build
+  hints. The German GOG release also ships other library builds than EN/Gold: its `binkw32.dll` shares only 54 %
+  of its functions with the EN one, and its `DPlayDLL.dll` (identical to Gold's) 82 %.
+- **C2 engine (first look, not yet a target):** the same discovery classifies 99.99 % of `Cultures2MP.exe` and
+  99.91 % of Northland's `Game.exe` with no hints. GOG's rewritten `Cultures2.exe` marks every section as
+  plain data (no execute or code flag); discovery then treats the entry point's section as code and reaches 99.68 %.
+  No path from the discovered `.text` code leaves `.text` (so none enters `.cms_t`), which supports the
+  hypothesis that `.cms_t` is dead (research question 1, still **(open)**).
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?
 2. How do Northland and 8th Wonder play MPEG-1: DirectShow, MCI or their own decoder?
 3. Which DirectDraw interfaces and pixel formats does each engine use exactly?
 4. Does `gedx8musicdrv.dll` use the DirectMusic *synth* (DLS) or only segment playback, and which interfaces?
-5. How much code differs between the three C1 executables?
+5. ~~How much code differs between the three C1 executables?~~ Answered in M2: EN/DE differ in 2 functions, Gold in about 80 (see "Code discovery").
 6. What do the `D3D8.DLL` references do?
 7. Do the `*MP.exe` builds differ in more than networking? (Single-player builds also contain `CDPNet`.)
 8. Saga: is the extra code in `Game.exe` a disc check, and where does `GameSaga.exe` (2005) come from?

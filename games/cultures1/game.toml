@@ -46,6 +46,8 @@ treatment = "lift"
 size = 782336
 sha256 = "65417291a96241d650d5664b6b40ee7a1485f963f5cc959760a951130a1cbfc1"
 variants = ["gog-en"]
+[binary.discover]
+no_return = [0x49cd22]   # CRT _exit: returns only for other callers of the shared doexit
 
 [[binary]]
 name = "Cultures.exe"
@@ -54,6 +56,8 @@ treatment = "lift"
 size = 782336
 sha256 = "3fc2f057f169013568816ba1fb48e5926536eb9da82bc71a913adeece322099c"
 variants = ["gog-de"]
+[binary.discover]
+no_return = [0x49cd22]   # CRT _exit: returns only for other callers of the shared doexit
 
 [[binary]]
 name = "Cultures.exe"
@@ -62,6 +66,8 @@ treatment = "lift"
 size = 786432
 sha256 = "ff5b8acd577fa77e81e2f1a89c4da3555a007d7ded783c4f1bf4008d9e6cecf6"
 variants = ["gold-de"]
+[binary.discover]
+no_return = [0x49dc82]   # CRT _exit: returns only for other callers of the shared doexit
 
 # --- libraries ---------------------------------------------------------------
 
@@ -87,6 +93,7 @@ role = "library"
 treatment = "lift"
 size = 114688
 sha256 = "628db393586430dd3d867777669b3db6800b68c78a1eedf53299f85f37f1afd2"
+base = 0x11000000      # preferred 0x10000000 collides with binkw32.dll (gog-en, gold-de)
 variants = ["gog-en"]
 
 [[binary]]
@@ -95,6 +102,7 @@ role = "library"
 treatment = "lift"
 size = 102400
 sha256 = "3b0169c7e0ecb61e10fdc8c1f48e0e3eddddd2c1e31af7381a4d26c837fefb64"
+base = 0x11000000      # preferred 0x10000000 collides with binkw32.dll (gog-en, gold-de)
 variants = ["gog-de", "gold-de"]
 
 [[binary]]
@@ -166,8 +174,14 @@ size = 49152
 sha256 = "1e63fdf7a7978447c92763d8a963df20cbe7087cb9d4b8fe49dd050b605299de"
 variants = ["gold-de"]
 
-# --- discovery / patches (filled in from M2 on) ------------------------------
-# [discover]
-# seeds = []            # extra function entry points
-# no_return = []        # functions that never return
-# jump_tables = []      # { at = 0x..., table = 0x..., count = n }
+# --- discovery hints ---------------------------------------------------------
+# Hints go into a [binary.discover] table right after the [[binary]] they belong to
+# (addresses are virtual addresses after rebasing). `recomp discover` classifies more than
+# 99.9 % of every C1 code section on its own (docs/RESEARCH.md); `--verbose` lists the
+# `no-return?` candidates, which are checked by hand before they become hints.
+#
+# [binary.discover]
+# seeds = [0x401000]                                # extra function entry points
+# no_return = [0x401000]                            # functions that never return
+# data = [{ start = 0x401000, end = 0x401010 }]     # data inside a code section
+# jump_tables = [{ at = 0x401000, table = 0x401010, count = 4 }]

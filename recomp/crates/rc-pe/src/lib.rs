@@ -138,6 +138,10 @@ pub struct Pe {
     pub exports: Vec<Export>,
     /// A base relocation directory is present and non-empty.
     pub has_reloc_dir: bool,
+    /// RVAs of the `IMAGE_REL_BASED_HIGHLOW` fixups (32-bit absolute addresses), sorted.
+    /// Other fixup types do not occur in PE32 i386 images and are ignored, except
+    /// `ABSOLUTE` padding entries, which are skipped.
+    pub relocs: Vec<u32>,
     pub rich: Option<Vec<RichEntry>>,
 }
 
@@ -255,6 +259,12 @@ pub fn parse(data: &[u8]) -> Result<Pe> {
         Vec::new()
     };
 
+    let relocs = if dirs[DIR_BASERELOC].1 != 0 {
+        img.relocs(dirs[DIR_BASERELOC].0, dirs[DIR_BASERELOC].1)?
+    } else {
+        Vec::new()
+    };
+
     Ok(Pe {
         machine,
         timestamp,
@@ -268,6 +278,7 @@ pub fn parse(data: &[u8]) -> Result<Pe> {
         imports,
         exports,
         has_reloc_dir: dirs[DIR_BASERELOC].0 != 0 && dirs[DIR_BASERELOC].1 != 0,
+        relocs,
         rich: parse_rich(data, pe_off),
     })
 }
@@ -338,6 +349,29 @@ impl Image<'_, '_> {
             }
             out.push(ImportDll { dll, functions });
         }
+        Ok(out)
+    }
+
+    /// Walk the base relocation blocks (page RVA, block size, 16-bit entries).
+    fn relocs(&self, dir_rva: u32, dir_size: u32) -> Result<Vec<u32>> {
+        let mut out = Vec::new();
+        let mut o = 0u32;
+        while o + 8 <= dir_size {
+            let page = self.u32(dir_rva + o)?;
+            let size = self.u32(dir_rva + o + 4)?;
+            if size < 8 {
+                break;
+            }
+            for i in 0..(size - 8) / 2 {
+                let e = self.u16(dir_rva + o + 8 + 2 * i)?;
+                if e >> 12 == 3 {
+                    out.push(page.wrapping_add(u32::from(e & 0x0fff)));
+                }
+            }
+            o = o.saturating_add(size);
+        }
+        out.sort_unstable();
+        out.dedup();
         Ok(out)
     }
 
@@ -481,6 +515,25 @@ mod tests {
         w16(&mut f, e(0x3030), 0);
         f[e(0x3034)..e(0x3034) + 7].copy_from_slice(b"DoWork\0");
         f
+    }
+
+    #[test]
+    fn parses_base_relocations() {
+        let mut f = build_pe(false);
+        let opt = 0x80 + 4 + 20;
+        // Data directory 5 (base relocations) → rva 0x3080 (inside .edata, file 0x580).
+        f[opt + 136..opt + 140].copy_from_slice(&0x3080u32.to_le_bytes());
+        f[opt + 140..opt + 144].copy_from_slice(&16u32.to_le_bytes());
+        let o = 0x580;
+        f[o..o + 4].copy_from_slice(&0x1000u32.to_le_bytes());
+        f[o + 4..o + 8].copy_from_slice(&16u32.to_le_bytes());
+        for (i, e) in [0x3010u16, 0x0000, 0x3004, 0xa008].iter().enumerate() {
+            f[o + 8 + 2 * i..o + 10 + 2 * i].copy_from_slice(&e.to_le_bytes());
+        }
+        let pe = parse(&f).expect("valid image");
+        assert!(pe.has_reloc_dir);
+        assert_eq!(pe.relocs, vec![0x1004, 0x1010]);
+        assert!(parse(&build_pe(false)).unwrap().relocs.is_empty());
     }
 
     #[test]

@@ -44,7 +44,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 |-----|--------------------------------------------|--------|----------------|
 | M0  | Foundation                                 | ✅ | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
 | M1  | Read the inputs                            | ✅ | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
-| M2  | Find the code (C1)                         | 🔶 | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
+| M2  | Find the code (C1)                         | ✅ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
 | M3  | Lifter, integer core                       | ⬜ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
 | M4  | x87 and the whole game                     | ⬜ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
 | M5  | Boot to the main loop                      | ⬜ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
@@ -92,24 +92,34 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 - [ ] Later (M14 or when needed): faster LZMA (currently ~25 MB/s, about 10–20 s per installer), InstallShield
       v6+ and spanned cabinets, Inno versions other than 5.5.0 (u)
 
-### M2 – Find the code (C1) 🔶
+### M2 – Find the code (C1) ✅
 
 Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.dll`, obtained with
 `recomp extract` from the C1 GOG installers (EN, DE) and the Gold ISO (see WORKFLOWS.md).
 
 - [x] `rc-discover` crate with the image model (`Image`: sections mapped at their VAs and zero-filled beyond the raw
-      data, IAT slot → `dll!name`, exports, entry point) and `iced-x86` (decoder + `instr_info`) as the decoder
-- [ ] `recomp discover <exe>`: run discovery, print the coverage report, write the code map to
-      `generated/<game>/<binary>/codemap.json` (git-ignored, input for the lifter)
-- [ ] Manifest hints per `[[binary]]`: `seeds`, `no_return`, `data` ranges (hex integers), for what analysis cannot find
-- [ ] Seeds: entry point, import thunks, exports (DLLs), manifest seeds
-- [ ] Recursive descent with call and branch following. Handle no-return functions (`exit`, `_CxxThrowException`, …)
-- [ ] MSVC 6 specifics: SEH frames (`__except_handler3`), C++ EH funcinfo, RTTI → vtables → methods,
-      `switch` jump tables (`jmp [reg*4+table]`) together with their index byte tables
-- [ ] Constant scanning: aligned 32-bit values in `.data` and `.rdata` that point into `.text`. This is the substitute
-      for the missing relocations, and its results are cross-checked against function prologues
-- [ ] Coverage report (code, data, padding, unknown) per executable. Diff of the three C1 builds (research question 5)
-- [ ] Do the same for `binkw32.dll` and `DPlayDLL.dll` (both prefer base `0x10000000`, see M4: discover the rebased image)
+      data, IAT slot → `dll!name`, exports, entry point, relocations, rebasing) and `iced-x86` as the decoder
+- [x] `recomp discover <exe>`: run discovery, print the coverage report, write the code map to
+      `generated/<game>/<binary>-<variant>/codemap.json` (git-ignored, input for the lifter)
+- [x] Manifest hints per `[[binary]]`: `base` (rebasing) and `[binary.discover]` with `seeds`, `no_return`, `data`
+      ranges and `jump_tables` (hex integers), for what analysis cannot find
+- [x] Seeds: entry point, exports (DLLs), manifest seeds; imports through `call/jmp [IAT]`
+- [x] Recursive descent with call and branch following. No-return functions as a least fixed point over whole
+      discovery runs (`ExitProcess` & co., `_CxxThrowException`-style `RaiseException` calls, manifest hints).
+      Calls that fall into another function are reported as `no-return?` candidates; the dead stack clean-up after
+      no-return calls is classified as dead code
+- [x] MSVC 6 specifics: SEH frames (`__except_handler3` scope tables: filters and handlers), C++ EH `FuncInfo`
+      (unwind actions, catch blocks), vtables (no RTTI in C1: found through constructor stores), `switch` jump tables
+      (`jmp [reg*4+table]`, bounded by `cmp`/`ja` or `and`) with their index byte tables, and the negative-index
+      tables of the CRT's `memcpy`/`memmove`. Unbounded tables are resolved last, when the code around them is known
+- [x] Constant scanning: aligned 32-bit values in `.data` and `.rdata` and 32-bit immediates in code that point into
+      `.text` (for DLLs: exactly the relocated values). Every candidate is trial-decoded in a transaction and rolled
+      back on implausible instructions or overlaps; gaps are then filled with padding, strings and unreferenced code
+- [x] Coverage report (code, data, padding, unknown) per executable: **99.99 %** for all three `Cultures.exe`.
+      `recomp codediff` compares two builds function by function (research question 5 answered, see RESEARCH.md)
+- [x] Same for `binkw32.dll` and `DPlayDLL.dll` (99.91–99.99 %). `DPlayDLL.dll` is rebased to `0x11000000`, and
+      discovery is checked against the relocations (`--no-relocs`: the heuristics alone agree with them)
+- [ ] Later (M10): GOG `Cultures2.exe` (99.68 %, one `switch` with an index table but no bound), `.cms_t`
 
 ### M3 – Lifter, integer core
 
@@ -122,10 +132,11 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
 ### M4 – x87 and the whole game
 
 - [ ] x87 on host doubles (stack, control word, compare and flags, `fist`/rounding modes, transcendental functions)
-- [ ] MMX/SSE: not expected in these binaries; verify, and trap if any is present
-- [ ] DLL rebasing: `binkw32.dll` and `DPlayDLL.dll` (C1) both prefer `0x10000000`. Each lifted DLL gets a fixed,
-      conflict-free base in the manifest; the recompiler applies its relocations before discovery and lifting, and the
-      runtime loader (`rc/pe.h`, currently fixed-base only) applies the same relocations when mapping it
+- [ ] MMX: present (M2 finding: 220 instructions in `Cultures.exe`, about 4150 in `binkw32.dll`), so it is lifted;
+      no SSE, 3DNow! or `cmov` was found, those trap
+- [ ] DLL rebasing in the runtime: the manifest `base` (C1: `DPlayDLL.dll` → `0x11000000`) is in place and the
+      recompiler rebases before discovery (M2, `Image::rebase`); the runtime loader (`rc/pe.h`, fixed-base only so
+      far) still has to apply the same relocations when mapping the DLL
 - [ ] Lift all of `Cultures.exe` and `binkw32.dll`, compile and link. Per-function hot-reload for debugging is optional
 
 ### M5 – Boot to the main loop
@@ -238,4 +249,7 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
 | 2026-11-19 | All lifted binaries of a game link into one executable `cultures-<id>`. Each binary gets its own symbol prefix, and the shell picks the binary whose hash matches the user's copy. |
 | 2026-11-19 | HLE thunks live at `0xF0000000+` (kernel space for a Win32 guest, never touched by the games). Unknown imports resolve to trap thunks, so a game loads with gaps and fails only when it calls one. |
 | 2026-11-19 | Store extras (GOG Galaxy DLLs, GOG's Ogg/Vorbis wrapper dependencies, uninstallers) are skipped by name in `recomp identify`, not pinned. |
+| 2026-11-19 | Code maps go to `generated/<game>/<binary>-<variant>/codemap.json` (lower-case file name plus the first variant of the `[[binary]]`), because one game has several builds of the same binary. Addresses in the JSON are hex strings. |
+| 2026-11-19 | `DPlayDLL.dll` (both C1 builds) is rebased to `0x11000000` (`base` in the manifest); `binkw32.dll` keeps its preferred base. |
+| 2026-11-19 | Discovery accepts a heuristic candidate (pointer constant, vtable slot, gap) only after trial decoding in a transaction that rolls back on implausible instructions or overlaps. Calls that fall into another function are reported as `no-return?` candidates and become `no_return` hints only after a manual check, because MSVC's x87 math routines have second entries right after returning calls. |
 | 2026-11-18 | *Cultures – Die Saga* (German retail, supplied as a zip of an installed copy) is a separate game `saga` on the C2 engine, because its executables, data archive and content differ from Northland and 8th Wonder. Both single-player builds (`Game.exe` 2003, `GameSaga.exe` 2005) are pinned. |

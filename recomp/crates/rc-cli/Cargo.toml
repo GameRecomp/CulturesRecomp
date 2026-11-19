@@ -16,6 +16,8 @@ path = "src/main.rs"
 rc-pe.workspace = true
 rc-manifest.workspace = true
 rc-media.workspace = true
+rc-discover.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

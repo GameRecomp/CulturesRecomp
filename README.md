@@ -53,8 +53,10 @@ audit hooks and CI are in place. The `recomp` CLI already identifies every suppo
 **M1, Read the inputs: done.** `recomp extract` unpacks every supported installer, the Gold ISO and the Saga zip
 without third-party tools (verified byte-identical against innoextract/unshield/unzip), and the runtime's PE loader
 maps every target executable.
-**M2, Find the code: in progress.** The `rc-discover` crate exists with the image model (sections at their
-virtual addresses, import table, exports) and the `iced-x86` decoder; the discovery passes are next.
+**M2, Find the code: done.** `recomp discover` separates code from data in the executables (which have no
+relocations) and DLLs: 99.99 % of all three Cultures 1 `Cultures.exe` builds are classified, jump tables and vtables
+are resolved, and the code map for the lifter goes to `generated/`. `recomp codediff` compares builds.
+**M3, Lifter (integer core): next.**
 Nothing is playable yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)

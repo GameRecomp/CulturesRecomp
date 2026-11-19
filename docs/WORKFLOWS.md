@@ -49,6 +49,25 @@ $recomp info --imports orig/cultures1/gog-en/Cultures.exe
 
 Temporary inspection files belong in `build/` (git-ignored), never next to the sources.
 
+## Finding the code
+
+```sh
+$recomp discover orig/cultures1/gog-en/Cultures.exe     # report + generated/cultures1/cultures.exe-gog-en/codemap.json
+$recomp discover orig/cultures1/*/Cultures.exe          # several at once
+$recomp discover -v --no-write orig/cultures1/gog-en/DPlayDLL.dll   # list unknown ranges, warnings, rejects
+$recomp discover --no-relocs orig/cultures1/gog-en/binkw32.dll      # check the heuristics against the relocations
+$recomp codediff orig/cultures1/gog-en/Cultures.exe orig/cultures1/gold-de/Cultures.exe
+cargo test --release -p rc-cli -- --ignored                         # exit criterion: >= 99 % per code section
+```
+
+The manifest supplies the per-build hints and, for `DPlayDLL.dll`, the rebased load address (`--base` overrides it).
+`--out DIR` writes the code map elsewhere. `--verbose` adds what needs attention: `unknown` ranges, `warning`s
+(conflicts on trusted paths), `rejected` candidates with the reason, unresolved indirect jumps, and `no-return?`
+candidates. A candidate becomes a `no_return` hint in `[binary.discover]` only after checking the callee by hand.
+Ranges that analysis cannot classify become `data` or `seeds` hints. The code map and the report contain addresses and
+counts only; neither the report nor anything derived from the code (disassembly, code bytes) goes into the repository,
+issues or commits.
+
 ## Checking an install against the runtime
 
 ```sh

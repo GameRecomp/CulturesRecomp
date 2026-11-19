@@ -23,9 +23,6 @@ pub struct Manifest {
     pub variants: Vec<Variant>,
     #[serde(rename = "binary", default)]
     pub binaries: Vec<Binary>,
-    /// Discovery hints (seeds, jump tables, no-return functions), filled in from M2 on.
-    #[serde(default)]
-    pub discover: Option<toml::Table>,
     /// Patch definitions, filled in later.
     #[serde(default)]
     pub patch: Option<toml::Table>,
@@ -91,6 +88,57 @@ pub struct Binary {
     pub variants: Vec<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    /// Load address for a lifted DLL whose preferred base collides with another lifted
+    /// binary. The recompiler applies the relocations before discovery and lifting, and the
+    /// runtime loader maps the DLL here.
+    #[serde(default)]
+    pub base: Option<u32>,
+    /// Hints for code discovery: what analysis cannot find by itself (from M2 on).
+    #[serde(default)]
+    pub discover: Option<DiscoverHints>,
+}
+
+impl Binary {
+    /// Directory name below `generated/<game>/` for this binary: the lower-case file name
+    /// and the first variant, e.g. `cultures.exe-gog-en`. Unique within a game because a
+    /// variant has at most one binary of each name.
+    pub fn output_dir_name(&self) -> String {
+        let v = self.variants.first().map_or("any", String::as_str);
+        format!("{}-{v}", self.name.to_ascii_lowercase())
+    }
+}
+
+/// Per-binary discovery hints. All addresses are virtual addresses after rebasing.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscoverHints {
+    /// Extra function entry points.
+    #[serde(default)]
+    pub seeds: Vec<u32>,
+    /// Functions that never return to their caller.
+    #[serde(default)]
+    pub no_return: Vec<u32>,
+    /// Ranges inside code sections that hold data (`end` exclusive).
+    #[serde(default)]
+    pub data: Vec<Range>,
+    /// Switch tables that analysis cannot bound: `jmp` at `at`, `count` dword entries at `table`.
+    #[serde(default)]
+    pub jump_tables: Vec<JumpTableHint>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Range {
+    pub start: u32,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JumpTableHint {
+    pub at: u32,
+    pub table: u32,
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -220,6 +268,35 @@ pub fn validate(manifests: &[Manifest]) -> Result<(), Error> {
             }
             if b.variants.is_empty() {
                 errs.push(format!("{g}: {} has no variants", b.name));
+            }
+            if b.base.is_some() && b.treatment != Treatment::Lift {
+                errs.push(format!("{g}: {} has a base but is not lifted", b.name));
+            }
+            if let Some(base) = b.base {
+                if base & 0xffff != 0 {
+                    errs.push(format!(
+                        "{g}: {} base {base:#x} is not 64 KiB aligned",
+                        b.name
+                    ));
+                }
+            }
+            if let Some(h) = &b.discover {
+                for r in &h.data {
+                    if r.start >= r.end {
+                        errs.push(format!(
+                            "{g}: {} data range {:#x}..{:#x} is empty",
+                            b.name, r.start, r.end
+                        ));
+                    }
+                }
+                for t in &h.jump_tables {
+                    if t.count == 0 || t.count > 4096 {
+                        errs.push(format!(
+                            "{g}: {} jump table at {:#x} has count {}",
+                            b.name, t.at, t.count
+                        ));
+                    }
+                }
             }
             for v in &b.variants {
                 if !variant_ids.contains(v.as_str()) {
@@ -469,6 +546,65 @@ mod tests {
         assert!(errs.iter().any(|e| e.contains("bad sha256")));
         assert!(errs.iter().any(|e| e.contains("unknown variant b")));
         assert!(errs.iter().any(|e| e.contains("0 main executables")));
+    }
+
+    #[test]
+    fn binary_hints_parse_and_validate() {
+        let text = r#"
+            schema = 1
+            [game]
+            id = "x"
+            title = "X"
+            title_de = "X"
+            engine = "c1"
+            [[variant]]
+            id = "a"
+            store = "gog"
+            language = "en"
+            content = ["base"]
+            media = [{ file = "f", kind = "inno", size = 1, sha256 = "1111111111111111111111111111111111111111111111111111111111111111" }]
+            [[binary]]
+            name = "X.exe"
+            role = "main"
+            treatment = "lift"
+            size = 1
+            sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+            variants = ["a"]
+            [binary.discover]
+            seeds = [0x401000, 0x402000]
+            no_return = [0x403000]
+            data = [{ start = 0x404000, end = 0x404010 }, { start = 0x405000, end = 0x405000 }]
+            jump_tables = [{ at = 0x406000, table = 0x406010, count = 0 }]
+            [[binary]]
+            name = "Y.dll"
+            role = "library"
+            treatment = "hle"
+            size = 2
+            base = 0x11000800
+            sha256 = "2222222222222222222222222222222222222222222222222222222222222222"
+            variants = ["a"]
+        "#;
+        let m = parse_str(text, Path::new("test")).unwrap();
+        let h = m.binaries[0].discover.as_ref().unwrap();
+        assert_eq!(h.seeds, [0x40_1000, 0x40_2000]);
+        assert_eq!(h.no_return, [0x40_3000]);
+        assert_eq!(
+            h.data[0],
+            Range {
+                start: 0x40_4000,
+                end: 0x40_4010
+            }
+        );
+        assert_eq!(m.binaries[0].output_dir_name(), "x.exe-a");
+        assert_eq!(m.binaries[1].base, Some(0x1100_0800));
+        let Err(Error::Invalid(errs)) = validate(&[m]) else {
+            panic!("expected validation errors")
+        };
+        assert!(errs.iter().any(|e| e.contains("is empty")));
+        assert!(errs.iter().any(|e| e.contains("has count 0")));
+        assert!(errs.iter().any(|e| e.contains("not lifted")));
+        assert!(errs.iter().any(|e| e.contains("not 64 KiB aligned")));
+        assert_eq!(errs.len(), 4, "{errs:?}");
     }
 
     #[test]

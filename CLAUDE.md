@@ -9,22 +9,28 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 |-----------|-------|-------------|
 | M0 Foundation | done | CMake + presets, C runtime core, SDL3/null platform, HLE module table, game shells, audit + hooks, CI |
 | M1 Read the inputs | done | `rc-media` (Inno 5.5.0u, own LZMA1/LZMA2, ISO 9660, InstallShield 5, zip), `recomp list/extract`, runtime PE loader, `--check` |
-| M2 Find the code (C1) | **in progress** | `rc-discover` crate with `Image` (sections at VAs, IAT map, exports) and `iced-x86`; the discovery passes are the next step |
+| M2 Find the code (C1) | done | `rc-discover` (descent, jump tables, SEH/EH, vtables, pointer scans with trial decoding, gaps, no-return fixed point, rebasing, reloc check), `recomp discover/codediff`, per-binary manifest hints; 99.99 % of all three `Cultures.exe` |
+| M3 Lifter, integer core | **next** | — |
 
-Last commits: `e15564c` (M2 start), `003c031` (M1), `50881ba` (M0).
+Last commits: `987cd40` (docs), `e15564c` (M2 start), `003c031` (M1), `50881ba` (M0). Check `git status`/`git log`
+for M2 itself.
 
-## Next step: M2
+## Next step: M3
 
-See `docs/PLAN.md`, section "M2 – Find the code (C1)" for the checklist and exit criterion (≥ 99 % of `.text` of
-the three `Cultures.exe` builds classified as code, data or padding; jump tables and vtables resolved).
-Facts that matter:
+See `docs/PLAN.md`, section "M3 – Lifter, integer core". The lifter's input is the code map:
+`recomp discover <binary>` writes `generated/<game>/<binary>-<variant>/codemap.json` (`rc_discover::CodeMap`,
+serde; addresses as `"0x…"` strings): functions with their byte ranges (`chunks`) and `no_return`, `labels`
+(address-taken points inside functions → dispatch entries), `jump_tables` with targets, `vtables`, data/padding/dead
+ranges and `imports_called`. Facts that matter (details in `docs/RESEARCH.md`, "Code discovery"):
 
-- No executable has relocations; all are MSVC 6.0 builds with image base `0x400000` (`docs/RESEARCH.md`).
-- Imports are called as `call [IAT]`; `Image::imports` maps IAT slot VAs to `dll!name`.
-- The DLLs to lift (`binkw32.dll`, `DPlayDLL.dll`, later `gedx8musicdrv.dll`) have relocations, and C1's
-  `binkw32.dll` and `DPlayDLL.dll` both prefer `0x10000000` → rebasing is planned for M4 (decision log).
-- Output belongs in `generated/<game>/<binary>/` (git-ignored). Function addresses may appear in manifests and
-  docs; disassembly or decompiled code never goes into the repo, issues or commits.
+- No executable has relocations; all are MSVC 6.0 builds with image base `0x400000`.
+- Imports are called as `call [IAT]` (also `mov esi, [IAT]; call esi`); `Image::imports` maps IAT slots to `dll!name`.
+- Lifted DLLs are rebased by the recompiler to the manifest `base` (C1 `DPlayDLL.dll` → `0x11000000`); the runtime
+  loader still has to do the same (M4).
+- C1 has no RTTI, almost no C++ EH, some SEH in the CRT, and **MMX** (game and Bink) besides x87; no SSE.
+- Tail calls and jumps into other functions exist; function bodies may overlap (a body stops at other entries).
+- Output belongs in `generated/<game>/…` (git-ignored). Function addresses may appear in manifests and docs;
+  disassembly or decompiled code never goes into the repo, issues or commits.
 - Test material: `recomp extract` the C1 media into `orig/<game>/<variant>/` (`docs/WORKFLOWS.md`).
 
 ## Layout
@@ -33,8 +39,8 @@ Facts that matter:
 recomp/crates/rc-pe        PE32 parser (sections, imports, exports, relocs, Rich header)
 recomp/crates/rc-manifest  games/*/game.toml loader, validation, hash catalogue
 recomp/crates/rc-media     installers / ISO / InstallShield / zip readers, LZMA decoder
-recomp/crates/rc-discover  code discovery (M2) – image model so far
-recomp/crates/rc-cli       `recomp`: identify, info, list, extract (+ tests/orig_media.rs, ignored)
+recomp/crates/rc-discover  code discovery (M2): image/rebase, engine, code map + report, build diff, tests
+recomp/crates/rc-cli       `recomp`: identify, info, list, extract, discover, codediff (+ ignored tests on orig/)
 runtime/                   guest memory, CPU, dispatcher, HLE registry, VFS, PE loader, rc_game_main, tests
 hle/                       module table, kernel32 (GetTickCount), winmm (timeGetTime), tests
 platform/                  SDL3 and null backends, tests
@@ -49,7 +55,8 @@ orig/                      the user's game media (git-ignored): 10 GOG installer
 
 ```sh
 cd recomp && cargo fmt --all && cargo clippy --all-targets -- -D warnings && cargo test
-cargo test -p rc-cli -- --ignored          # against the media in orig/
+cargo test --release -p rc-cli -- --ignored   # against the media and extracted binaries in orig/
+recomp/target/release/recomp discover -v orig/cultures1/gog-en/Cultures.exe
 cmake --preset dev && cmake --build --preset dev && ctest --preset dev
 cmake --preset ci  && cmake --build --preset ci  && ctest --preset ci     # warnings as errors, no SDL3
 tools/audit.sh

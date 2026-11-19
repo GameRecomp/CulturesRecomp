@@ -80,7 +80,7 @@ Most executables are identical across languages, so the language lives in the da
 | `binkw32.dll`        | cultures1, cultures2    | lift      | `70f28f6e469eceaecd5e5795d58b017f096a536227584c2684bc74cd279bcce8` (c1 gog-en, gold-de) · `ee68dcf51e8e3b482f9fb5ef617f44a2d9e970d03f3ed21fe26d40cd63c57a48` (c1 gog-de, c2) |
 | `Mss32.dll` (Miles)  | cultures1, cultures2    | HLE       | `fe62f1eb6ba407df77619d16927abbefad3c726014f6bd1f8c37a7c3d6b781cc` (c1 gog-en, gold-de) · `2a515199cc7a2e1ccd8d756efdaab07cedd5c3052309ef1c7499c2560e2097bd` (c1 gog-de, c2) |
 | `Mp3dec.asi`         | cultures1, cultures2    | ignore (Miles HLE decodes MP3 itself) | `51765b5a…` (c1) · `0a6db88a…` (c2) |
-| `DPlayDLL.dll`       | cultures1               | lift (DirectPlay 4 below it is HLE) | `628db393586430dd3d867777669b3db6800b68c78a1eedf53299f85f37f1afd2` (gog-en) · `3b0169c7e0ecb61e10fdc8c1f48e0e3eddddd2c1e31af7381a4d26c837fefb64` (gog-de, gold-de) |
+| `DPlayDLL.dll`       | cultures1               | lift (DirectPlay 4 below it is HLE), rebased to `0x11000000` | `628db393586430dd3d867777669b3db6800b68c78a1eedf53299f85f37f1afd2` (gog-en) · `3b0169c7e0ecb61e10fdc8c1f48e0e3eddddd2c1e31af7381a4d26c837fefb64` (gog-de, gold-de) |
 | `gedx8musicdrv.dll`  | cultures2, northland, eighthwonder, saga | lift (DirectMusic below it is HLE) | `547c5571c39dbcb921a2b8fff2d1568f11ceab9b79a7a2d5a2a82fb5601395bf` (all) |
 | `winmm.dll` (GOG)    | cultures1 GOG           | ignore (GOG's CD-audio-to-OGG wrapper; our `winmm` HLE does the same) | `3dfadd86…` (en) · `f2006e09…` (de) |
 | `libogg-0.dll`, `libvorbis*.dll` | cultures1 GOG | ignore (dependencies of the wrapper above) | — |

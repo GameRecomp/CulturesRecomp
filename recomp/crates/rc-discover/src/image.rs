@@ -3,7 +3,9 @@
 //! (zero-filled beyond the raw data) plus the import address table.
 
 use rc_pe::{ImportName, Pe};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+const IMAGE_SCN_CNT_CODE: u32 = 0x20;
 
 pub struct Section {
     pub name: String,
@@ -22,12 +24,16 @@ pub struct Image {
     /// Exported functions (VA, name).
     pub exports: Vec<(u32, String)>,
     pub is_dll: bool,
+    /// VAs of the 32-bit fixup sites (empty for the executables, which have no relocations).
+    pub relocs: BTreeSet<u32>,
+    /// The base the image was linked for (differs from `base` after [`Image::load`] rebased it).
+    pub preferred_base: u32,
 }
 
 impl Image {
     pub fn new(file: &[u8], pe: &Pe) -> Self {
         let base = pe.image_base;
-        let sections = pe
+        let mut sections: Vec<Section> = pe
             .sections
             .iter()
             .map(|s| {
@@ -42,11 +48,22 @@ impl Image {
                     name: s.name.clone(),
                     va: base.wrapping_add(s.virtual_address),
                     size,
-                    exec: s.is_executable(),
+                    exec: s.is_executable() || s.characteristics & IMAGE_SCN_CNT_CODE != 0,
                     data,
                 }
             })
             .collect();
+        // GOG's rewritten `Cultures2.exe` marks every section as plain data; Windows runs it
+        // anyway. Without any code section, the one holding the entry point is code.
+        if !sections.iter().any(|s| s.exec) {
+            let entry = pe.entry_va();
+            if let Some(s) = sections
+                .iter_mut()
+                .find(|s| entry >= s.va && entry - s.va < s.size)
+            {
+                s.exec = true;
+            }
+        }
         let mut imports = BTreeMap::new();
         for d in &pe.imports {
             let dll = d.dll.to_ascii_lowercase();
@@ -75,7 +92,72 @@ impl Image {
             imports,
             exports,
             is_dll: pe.is_dll(),
+            relocs: pe.relocs.iter().map(|&r| base.wrapping_add(r)).collect(),
+            preferred_base: base,
         }
+    }
+
+    /// Map the image and, if `base` differs from the preferred base, rebase it: every fixup
+    /// site gets the delta added, and all addresses (sections, IAT, exports, entry) move.
+    pub fn load(file: &[u8], pe: &Pe, base: Option<u32>) -> Result<Self, String> {
+        let mut img = Image::new(file, pe);
+        if let Some(new) = base {
+            img.rebase(new)?;
+        }
+        Ok(img)
+    }
+
+    /// Move the image to `new`: add the delta at every fixup site and shift all addresses.
+    pub fn rebase(&mut self, new: u32) -> Result<(), String> {
+        if new == self.base {
+            return Ok(());
+        }
+        if self.relocs.is_empty() {
+            return Err(format!(
+                "cannot rebase to {new:#x}: the image has no relocations"
+            ));
+        }
+        let delta = new.wrapping_sub(self.base);
+        let sites: Vec<u32> = self.relocs.iter().copied().collect();
+        for site in sites {
+            let v = self
+                .dword(site)
+                .ok_or_else(|| format!("fixup at {site:#x} outside the sections"))?;
+            self.write_dword(site, v.wrapping_add(delta));
+        }
+        let mv = |va: u32| va.wrapping_add(delta);
+        self.base = new;
+        self.entry = mv(self.entry);
+        for s in &mut self.sections {
+            s.va = mv(s.va);
+        }
+        self.imports = std::mem::take(&mut self.imports)
+            .into_iter()
+            .map(|(k, v)| (mv(k), v))
+            .collect();
+        for e in &mut self.exports {
+            e.0 = mv(e.0);
+        }
+        self.relocs = self.relocs.iter().map(|&r| mv(r)).collect();
+        Ok(())
+    }
+
+    fn write_dword(&mut self, va: u32, v: u32) {
+        if let Some(s) = self
+            .sections
+            .iter_mut()
+            .find(|s| va >= s.va && va - s.va < s.size)
+        {
+            let o = (va - s.va) as usize;
+            if let Some(d) = s.data.get_mut(o..o + 4) {
+                d.copy_from_slice(&v.to_le_bytes());
+            }
+        }
+    }
+
+    /// Whether `va` lies inside the mapped image (any section).
+    pub fn contains(&self, va: u32) -> bool {
+        self.section_of(va).is_some()
     }
 
     pub fn section_of(&self, va: u32) -> Option<&Section> {
