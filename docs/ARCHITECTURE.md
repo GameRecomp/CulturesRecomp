@@ -89,18 +89,18 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `user32`    | platform (SDL3)                | all       | window, message queue from host input, cursors (`.cur`), `MessageBox` |
 | `gdi32`     | platform + SDL3_ttf            | all       | palette functions, `TextOut`/`SetPixel`, enough for the editors later |
 | `advapi32`  | per-user registry file         | all       | `Reg*` on the program's own registry (`registry.txt` in the user directory) |
-| `ole32`     | runtime                        | all       | `CoInitialize`/`CoCreateInstance` → our COM classes (DirectMusic, DirectPlay 8, DirectShow) |
-| `version`, `shell32` | runtime               | all       | version info of our own modules, `ShellExecute` → host browser or no-op |
+| `ole32`     | runtime                        | all       | `CoInitialize`/`CoCreateInstance` → the COM classes HLE modules register (`rc_com_register`), `CoCreateGuid` |
+| `version`, `shell32` | runtime               | all       | version info of our own modules, `ShellExecute` → host browser or no-op (now: no-op, reports success) |
 | `ddraw`     | platform framebuffer           | all       | DirectDraw 1/2/4/7 COM, 16-bit surfaces, software blits, page flipping → SDL texture |
 | `dinput`    | platform input                 | all       | DirectInput (keyboard, mouse), state and buffered data |
-| `dsound`    | SDL3 audio                     | c1, northland, eighthwonder, saga | DirectSound / DirectSound8 buffers, our own mixer |
+| `dsound`    | SDL3 audio                     | c1, northland, eighthwonder, saga | DirectSound / DirectSound8 buffers, our own mixer (now: no device; C1 plays through Miles) |
 | `mss32`     | dsound HLE / SDL3 audio        | c1, c2    | Miles reimplementation: samples, streams, MP3 (`Mp3dec.asi` is not loaded) |
 | `winmm`     | runtime clock + audio          | all       | `timeGetTime`, mixer API stubs, **MCI CD audio → `MUSIC/TrackNN.*`** |
-| `dmusic`    | DLS synth + segment player     | c2, northland, eighthwonder, saga | DirectMusic Performance/Loader/Segment as used by `gedx8musicdrv.dll` |
+| `dmusic`    | DLS synth + segment player     | c2, northland, eighthwonder, saga | DirectMusic Performance/Loader/Segment as used by `gedx8musicdrv.dll` (now: only the object C1's DirectX check creates; C2 needs the rest, M10) |
 | `dshow` or `mci-mpeg` | MPEG-1 decoder (pl_mpeg, MIT) | northland, eighthwonder, saga | depends on research question 2 |
 | `dplay`     | null at first, later UDP       | c1 (DirectPlay 4 under `DPlayDLL.dll`) | no service providers until M12 |
 | `dpnet`     | null at first, later UDP       | c2 engine (DirectPlay 8) | same |
-| `wsock32`, `ws2_32` | host sockets           | c2 engine | by ordinal |
+| `wsock32`, `ws2_32` | host sockets           | c2 engine | by ordinal (now: offline, `WSAStartup` works, no sockets) |
 | `comctl32`, `comdlg32`, `winspool` | platform    | editors only | M13 |
 
 Lifted instead of reimplemented: `binkw32.dll` (Bink 1 video), `DPlayDLL.dll` and `gedx8musicdrv.dll`.

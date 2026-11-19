@@ -20,7 +20,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 
 Check `git log` for the latest work.
 
-## Next steps: M7, M8 (then M9 release, M10 Cultures 2)
+## Next steps: M7/M8 (Cultures 1: save/load, a whole mission, then M9 release) and M10 (Cultures 2: DirectMusic, MMX)
 
 See `docs/PLAN.md`. Run the game (after `recomp lift` of the C1 binaries and a dev build with SDL3):
 
