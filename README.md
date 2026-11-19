@@ -52,7 +52,9 @@ C runtime core (guest memory, dispatcher, HLE registry, VFS lookup), the SDL3/nu
 audit hooks and CI are in place. The `recomp` CLI already identifies every supported installer, ISO, zip and executable.
 **M1, Read the inputs: done.** `recomp extract` unpacks every supported installer, the Gold ISO and the Saga zip
 without third-party tools (verified byte-identical against innoextract/unshield/unzip), and the runtime's PE loader
-maps every target executable. Next up is M2: finding the code in the Cultures 1 executables.
+maps every target executable.
+**M2, Find the code: in progress.** The `rc-discover` crate exists with the image model (sections at their
+virtual addresses, import table, exports) and the `iced-x86` decoder; the discovery passes are next.
 Nothing is playable yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)
@@ -92,6 +94,7 @@ Put your own game files in `orig/` (git-ignored). Read [`docs/WORKFLOWS.md`](doc
 | [`docs/RESEARCH.md`](docs/RESEARCH.md)         | Series history and findings from analysing the binaries |
 | [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)       | Day-to-day commands: extract, identify, lift, build, debug |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Rules, especially regarding copyrighted material        |
+| [`CLAUDE.md`](CLAUDE.md)                       | Short orientation for a new working session: state, conventions, next steps |
 
 ## License
 

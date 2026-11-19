@@ -86,3 +86,6 @@ Most executables are identical across languages, so the language lives in the da
 | `libogg-0.dll`, `libvorbis*.dll` | cultures1 GOG | ignore (dependencies of the wrapper above) | — |
 | `goggame-*.dll`, `GameuxInstallHelper.dll`, `Lobby/Lobby.exe` | GOG extras | ignore | — |
 | `Autorun.exe`, `Register.exe`, `Unregister.exe`, `Uninstall.dll` | Saga retail extras | ignore | see `games/saga/game.toml` |
+
+Unlike the executables, every DLL above has relocations. Their preferred bases (and the `binkw32.dll` /
+`DPlayDLL.dll` collision in Cultures 1) are listed in [RESEARCH.md](RESEARCH.md#dll-base-addresses).

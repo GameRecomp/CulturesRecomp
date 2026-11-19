@@ -121,6 +121,22 @@ bit bitmaps in window mode when desktop bitdepth is 16 bit"). The `ddraw` HLE th
 primary surface. The pixel format (565 vs 555) is chosen by the game from `DDPIXELFORMAT` **(open: which
 formats each engine accepts)**.
 
+## DLL base addresses
+
+All middleware DLLs carry relocations (checked with `recomp info`); the executables do not.
+
+| DLL | Game | Preferred base | Entry |
+|-----|------|----------------|-------|
+| `binkw32.dll` | cultures1 (GOG EN, Gold) | `0x10000000` | `0x1002c37c` |
+| `DPlayDLL.dll` | cultures1 | `0x10000000` | `0x1000b00e` |
+| `Mss32.dll` | cultures1, cultures2 | `0x21100000` | `0x21134697` (C1) / `0x2112f6b5` (C2) |
+| `Mp3dec.asi` | cultures1 | `0x26f00000` | `0x26f0a995` |
+| `binkw32.dll` | cultures2 | `0x30000000` | `0x3002dac5` |
+| `gedx8musicdrv.dll` | cultures2, northland, eighthwonder, saga | `0x10000000` | `0x100051c4` |
+
+In Cultures 1, `binkw32.dll` and `DPlayDLL.dll` collide, so one of them has to be rebased (PLAN.md, M4). On Windows
+the loader would relocate the second one. `Mss32.dll` and `Mp3dec.asi` are HLE / not loaded, so they do not matter.
+
 ## Cultures 2 GOG executable
 
 `Cultures2.exe` (GOG, identical in EN and DE) differs from every other binary:

@@ -44,7 +44,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 |-----|--------------------------------------------|--------|----------------|
 | M0  | Foundation                                 | ✅ | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
 | M1  | Read the inputs                            | ✅ | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
-| M2  | Find the code (C1)                         | ⬜ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
+| M2  | Find the code (C1)                         | 🔶 | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
 | M3  | Lifter, integer core                       | ⬜ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
 | M4  | x87 and the whole game                     | ⬜ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
 | M5  | Boot to the main loop                      | ⬜ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
@@ -92,8 +92,16 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 - [ ] Later (M14 or when needed): faster LZMA (currently ~25 MB/s, about 10–20 s per installer), InstallShield
       v6+ and spanned cabinets, Inno versions other than 5.5.0 (u)
 
-### M2 – Find the code (C1)
+### M2 – Find the code (C1) 🔶
 
+Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.dll`, obtained with
+`recomp extract` from the C1 GOG installers (EN, DE) and the Gold ISO (see WORKFLOWS.md).
+
+- [x] `rc-discover` crate with the image model (`Image`: sections mapped at their VAs and zero-filled beyond the raw
+      data, IAT slot → `dll!name`, exports, entry point) and `iced-x86` (decoder + `instr_info`) as the decoder
+- [ ] `recomp discover <exe>`: run discovery, print the coverage report, write the code map to
+      `generated/<game>/<binary>/codemap.json` (git-ignored, input for the lifter)
+- [ ] Manifest hints per `[[binary]]`: `seeds`, `no_return`, `data` ranges (hex integers), for what analysis cannot find
 - [ ] Seeds: entry point, import thunks, exports (DLLs), manifest seeds
 - [ ] Recursive descent with call and branch following. Handle no-return functions (`exit`, `_CxxThrowException`, …)
 - [ ] MSVC 6 specifics: SEH frames (`__except_handler3`), C++ EH funcinfo, RTTI → vtables → methods,
@@ -101,7 +109,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 - [ ] Constant scanning: aligned 32-bit values in `.data` and `.rdata` that point into `.text`. This is the substitute
       for the missing relocations, and its results are cross-checked against function prologues
 - [ ] Coverage report (code, data, padding, unknown) per executable. Diff of the three C1 builds (research question 5)
-- [ ] Do the same for `binkw32.dll` and `DPlayDLL.dll`
+- [ ] Do the same for `binkw32.dll` and `DPlayDLL.dll` (both prefer base `0x10000000`, see M4: discover the rebased image)
 
 ### M3 – Lifter, integer core
 
@@ -115,6 +123,9 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 
 - [ ] x87 on host doubles (stack, control word, compare and flags, `fist`/rounding modes, transcendental functions)
 - [ ] MMX/SSE: not expected in these binaries; verify, and trap if any is present
+- [ ] DLL rebasing: `binkw32.dll` and `DPlayDLL.dll` (C1) both prefer `0x10000000`. Each lifted DLL gets a fixed,
+      conflict-free base in the manifest; the recompiler applies its relocations before discovery and lifting, and the
+      runtime loader (`rc/pe.h`, currently fixed-base only) applies the same relocations when mapping it
 - [ ] Lift all of `Cultures.exe` and `binkw32.dll`, compile and link. Per-function hot-reload for debugging is optional
 
 ### M5 – Boot to the main loop
@@ -222,6 +233,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | 2026-11-18 | `binkw32.dll`, `DPlayDLL.dll` and `gedx8musicdrv.dll` are lifted. Miles (`mss32`) and all system DLLs are HLE. GOG's `winmm.dll` wrapper is not used. |
 | 2026-11-18 | SDL3 is the only platform dependency. The project uses host fonts only and bundles no assets. |
 | 2026-11-18 | Docs, code and comments are in English. |
+| 2026-11-19 | Lifted DLLs are rebased at lift time to a fixed base from the manifest (C1's `binkw32.dll` and `DPlayDLL.dll` collide at `0x10000000`). The executables keep their own base `0x400000`. |
 | 2026-11-19 | One crate `rc-media` for all media formats instead of `rc-inno`/`rc-iso`/`rc-iscab`/`rc-zip`. The LZMA1/LZMA2 decoder is our own: `lzma-rs` buffers whole LZMA2 streams in memory (250+ MB here), and a pure-Rust decoder keeps the browser converter possible. |
 | 2026-11-19 | All lifted binaries of a game link into one executable `cultures-<id>`. Each binary gets its own symbol prefix, and the shell picks the binary whose hash matches the user's copy. |
 | 2026-11-19 | HLE thunks live at `0xF0000000+` (kernel space for a Win32 guest, never touched by the games). Unknown imports resolve to trap thunks, so a game loads with gaps and fails only when it calls one. |

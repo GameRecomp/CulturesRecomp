@@ -36,6 +36,19 @@ An unknown medium needs `--dest`, and a non-empty destination needs `--force`. A
 
 `tools/dev-extract.sh` (innoextract, unshield, unzip) stays as an independent reference for comparisons.
 
+## Test material for code discovery (M2)
+
+Discovery and lifting work on the extracted binaries. For Cultures 1:
+
+```sh
+$recomp extract orig/setup_cultures_2.1.0.12.exe           # gog-en: Cultures.exe, binkw32.dll, DPlayDLL.dll
+$recomp extract orig/setup_cultures_german_2.1.0.12.exe    # gog-de
+$recomp extract "orig/Cultures (Gold Edition).iso"         # gold-de (add-on build)
+$recomp info --imports orig/cultures1/gog-en/Cultures.exe
+```
+
+Temporary inspection files belong in `build/` (git-ignored), never next to the sources.
+
 ## Checking an install against the runtime
 
 ```sh
