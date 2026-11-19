@@ -1,11 +1,21 @@
 /* SPDX-License-Identifier: MIT */
-/* Guest memory: one flat 32-bit address space, reserved up front on 64-bit hosts.
- * Guest address `a` lives at host address `rc_mem_base + a`. Pages are committed on
- * demand by rc_mem_map(). Everything outside a mapping faults on the host, so a stray
- * guest pointer crashes at the right place instead of corrupting memory. */
+/*
+ * Guest memory: the 32-bit address space of the recompiled program.
+ *
+ * A guest address is an offset from rc_mem_base. Generated code and the HLE
+ * layer reach guest memory only through the accessors here, so the memory
+ * model (one reserved region on a 64-bit host, a window inside WebAssembly
+ * linear memory, bounds checks in debug builds) changes in this file alone.
+ *
+ * Both the guest and every supported host are little-endian, so values are
+ * stored in place. memcpy keeps unaligned accesses defined; compilers turn
+ * it into a single load or store.
+ */
 #ifndef RC_MEM_H
 #define RC_MEM_H
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -13,47 +23,65 @@
 extern "C" {
 #endif
 
-#define RC_PAGE_SIZE 0x1000u
+typedef uint32_t rc_addr;
 
+/* Start of the guest address space in host memory. */
 extern uint8_t *rc_mem_base;
+/* Bytes reserved: guest addresses below this are valid offsets. */
+extern uint64_t rc_mem_size;
 
-/* Reserve the 4 GiB guest space. Returns 0 on success. Idempotent. */
-int rc_mem_init(void);
-void rc_mem_shutdown(void);
+/* Reserve `size` bytes of guest address space, not yet usable. On a 64-bit
+ * POSIX or Windows host this is address space only; elsewhere it may be
+ * real memory. Returns false if it cannot be reserved. */
+bool rc_mem_reserve(uint64_t size);
 
-/* Commit [addr, addr+size) read/write and zero-filled. The range is widened to host pages.
- * Returns 0 on success. Mapping an already mapped page keeps its contents. */
-int rc_mem_map(uint32_t addr, uint32_t size);
-/* Decommit a range (contents are lost). */
-int rc_mem_unmap(uint32_t addr, uint32_t size);
-/* Non-zero if the 4 KiB guest page containing addr is mapped. */
-int rc_mem_is_mapped(uint32_t addr);
+/* Make [addr, addr + len) readable and writable, zero-filled. */
+bool rc_mem_commit(rc_addr addr, uint32_t len);
 
-static inline uint8_t *rc_ptr(uint32_t a) { return rc_mem_base + a; }
+/* Release everything. */
+void rc_mem_release(void);
 
-/* Little-endian, unaligned-safe accessors (the supported hosts are little-endian). */
-static inline uint8_t rc_ld8(uint32_t a) { return rc_mem_base[a]; }
-static inline uint16_t rc_ld16(uint32_t a) {
+static inline void *rc_ptr(rc_addr a) { return rc_mem_base + a; }
+
+/* A host pointer into guest memory back to a guest address. */
+static inline rc_addr rc_guest(const void *p)
+{
+    return (rc_addr)((const uint8_t *)p - rc_mem_base);
+}
+
+static inline uint8_t rc_ld8(rc_addr a) { return rc_mem_base[a]; }
+
+static inline uint16_t rc_ld16(rc_addr a)
+{
     uint16_t v;
     memcpy(&v, rc_mem_base + a, sizeof v);
     return v;
 }
-static inline uint32_t rc_ld32(uint32_t a) {
+
+static inline uint32_t rc_ld32(rc_addr a)
+{
     uint32_t v;
     memcpy(&v, rc_mem_base + a, sizeof v);
     return v;
 }
-static inline uint64_t rc_ld64(uint32_t a) {
+
+static inline uint64_t rc_ld64(rc_addr a)
+{
     uint64_t v;
     memcpy(&v, rc_mem_base + a, sizeof v);
     return v;
 }
-static inline void rc_st8(uint32_t a, uint8_t v) { rc_mem_base[a] = v; }
-static inline void rc_st16(uint32_t a, uint16_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
-static inline void rc_st32(uint32_t a, uint32_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
-static inline void rc_st64(uint32_t a, uint64_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
+
+static inline void rc_st8(rc_addr a, uint8_t v) { rc_mem_base[a] = v; }
+
+static inline void rc_st16(rc_addr a, uint16_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
+
+static inline void rc_st32(rc_addr a, uint32_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
+
+static inline void rc_st64(rc_addr a, uint64_t v) { memcpy(rc_mem_base + a, &v, sizeof v); }
 
 #ifdef __cplusplus
 }
 #endif
+
 #endif

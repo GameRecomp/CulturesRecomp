@@ -1,167 +1,94 @@
 /* SPDX-License-Identifier: MIT */
+#if !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "rc/dispatch.h"
-#include "rc/lifted.h"
-#include "rc/log.h"
+#include "rc/process.h"
 
-#include <stdlib.h>
 #include <time.h>
 
-typedef struct entry {
-    uint32_t addr; /* 0 = empty slot */
-    rc_fn fn;
-    const char *name;
-} entry;
-
-static entry *table;
-static size_t capacity; /* power of two */
-static size_t used;
-
-static size_t slot_of(uint32_t addr) { return (size_t)(addr * 2654435761u) & (capacity - 1); }
-
-static entry *find(uint32_t addr) {
-    if (!capacity || !addr) return NULL;
-    for (size_t i = slot_of(addr);; i = (i + 1) & (capacity - 1)) {
-        if (table[i].addr == addr) return &table[i];
-        if (table[i].addr == 0) return NULL;
-    }
-}
-
-static int grow(void) {
-    size_t new_cap = capacity ? capacity * 2 : 4096;
-    entry *old = table;
-    size_t old_cap = capacity;
-    table = calloc(new_cap, sizeof *table);
-    if (!table) {
-        table = old;
-        return -1;
-    }
-    capacity = new_cap;
-    for (size_t i = 0; i < old_cap; i++) {
-        if (!old[i].addr) continue;
-        size_t j = slot_of(old[i].addr);
-        while (table[j].addr) j = (j + 1) & (capacity - 1);
-        table[j] = old[i];
-    }
-    free(old);
-    return 0;
-}
-
-int rc_dispatch_register(uint32_t addr, rc_fn fn, const char *name) {
-    if (!addr || !fn) return -1;
-    entry *e = find(addr);
-    if (e) {
-        e->fn = fn;
-        e->name = name;
-        return 0;
-    }
-    if ((used + 1) * 2 > capacity && grow() != 0) return -1;
-    size_t i = slot_of(addr);
-    while (table[i].addr) i = (i + 1) & (capacity - 1);
-    table[i].addr = addr;
-    table[i].fn = fn;
-    table[i].name = name;
-    used++;
-    return 0;
-}
-
-rc_fn rc_dispatch_lookup(uint32_t addr) {
-    entry *e = find(addr);
-    return e ? e->fn : NULL;
-}
-
-const char *rc_dispatch_name(uint32_t addr) {
-    entry *e = find(addr);
-    return e ? e->name : NULL;
-}
-
-size_t rc_dispatch_count(void) { return used; }
-
-void rc_dispatch_reset(void) {
-    free(table);
-    table = NULL;
-    capacity = 0;
-    used = 0;
-}
-
-/* Lifted code: one sorted table per binary. */
-#define MAX_TABLES 16
+/* The lifted code: one sorted table per binary (a game links several, each
+ * with its own; rc_set_lifted installs one). */
+#define TABLES 16
 static struct {
     const rc_fn_entry *entries;
     uint32_t count;
-} tables[MAX_TABLES];
+} tables[TABLES];
 static uint32_t ntables;
+static rc_import_resolver import_resolver;
+static void (*call_hook)(rc_cpu *c, uint32_t target);
 
-int rc_dispatch_add_table(const rc_fn_entry *t, uint32_t count) {
-    if (ntables == MAX_TABLES) return -1;
+void rc_set_call_hook(void (*hook)(rc_cpu *c, uint32_t target)) { call_hook = hook; }
+
+void rc_set_lifted(const rc_fn_entry *t, uint32_t count)
+{
+    ntables = 0;
+    rc_add_lifted(t, count);
+}
+
+bool rc_add_lifted(const rc_fn_entry *t, uint32_t count)
+{
+    if (ntables == TABLES) {
+        return false;
+    }
     tables[ntables].entries = t;
     tables[ntables].count = count;
     ntables++;
-    return 0;
+    return true;
 }
 
-void rc_dispatch_clear_tables(void) { ntables = 0; }
+void rc_set_import_resolver(rc_import_resolver r) { import_resolver = r; }
 
-static rc_fn lookup_lifted(uint32_t addr) {
-    for (uint32_t k = 0; k < ntables; k++) {
-        const rc_fn_entry *t = tables[k].entries;
-        uint32_t lo = 0, hi = tables[k].count;
-        while (lo < hi) {
-            uint32_t mid = lo + (hi - lo) / 2;
-            if (t[mid].addr < addr) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        if (lo < tables[k].count && t[lo].addr == addr) return t[lo].fn;
-    }
-    return NULL;
-}
-
-rc_fn rc_lookup(uint32_t addr) {
-    entry *e = find(addr);
-    return e ? e->fn : lookup_lifted(addr);
-}
-
-void rc_dispatch(rc_cpu *c, uint32_t target) {
-    rc_fn f = rc_lookup(target);
-    if (!f) {
-        uint32_t ret = rc_mem_is_mapped(c->esp) && rc_mem_is_mapped(c->esp + 3) ? rc_ld32(c->esp) : 0;
-        rc_fatal("dispatch: no function at guest address 0x%08x (esp 0x%08x, return address "
-                 "0x%08x, from eip 0x%08x)",
-                 target, c->esp, ret, c->eip);
-    }
-    c->eip = target;
-    f(c);
-}
-
-void rc_trap(rc_cpu *c, uint32_t addr, const char *why) {
-    c->eip = addr;
-    rc_fatal("%s (at 0x%08x; eax %#x ecx %#x edx %#x ebx %#x esp %#x ebp %#x esi %#x edi %#x)",
-             why, addr, c->eax, c->ecx, c->edx, c->ebx, c->esp, c->ebp, c->esi, c->edi);
-}
-
-#define MAX_POINTS 64
+/* Patches: few, so a short list searched in order. */
+#define HOOKS 32
 static struct {
     uint32_t addr;
     rc_fn fn;
-} points[MAX_POINTS];
+} hooks[HOOKS];
+static uint32_t nhooks;
+
+rc_fn rc_hook(uint32_t addr, rc_fn wrapper)
+{
+    for (uint32_t i = 0; i < nhooks; i++) {
+        if (hooks[i].addr == addr) {
+            rc_fn before = hooks[i].fn;
+            hooks[i].fn = wrapper;
+            return before;
+        }
+    }
+    if (nhooks == HOOKS) {
+        rc_fatal("too many patches");
+    }
+    hooks[nhooks].addr = addr;
+    hooks[nhooks].fn = wrapper;
+    nhooks++;
+    return NULL;
+}
+
+static struct {
+    uint32_t addr;
+    rc_fn fn;
+} points[HOOKS];
 static uint32_t npoints;
 
-void rc_on_point(uint32_t addr, rc_fn fn) {
+void rc_on_point(uint32_t addr, rc_fn fn)
+{
     for (uint32_t i = 0; i < npoints; i++) {
         if (points[i].addr == addr) {
             points[i].fn = fn;
             return;
         }
     }
-    if (npoints == MAX_POINTS) rc_fatal("too many patch points");
+    if (npoints == HOOKS) {
+        rc_fatal("too many patch points");
+    }
     points[npoints].addr = addr;
     points[npoints].fn = fn;
     npoints++;
 }
 
-void rc_point(rc_cpu *c, uint32_t addr) {
+void rc_point(rc_cpu *c, uint32_t addr)
+{
     for (uint32_t i = 0; i < npoints; i++) {
         if (points[i].addr == addr) {
             points[i].fn(c);
@@ -170,9 +97,66 @@ void rc_point(rc_cpu *c, uint32_t addr) {
     }
 }
 
-/* A fixed CPU, as in TropicoRecomp: a P6-class Intel processor with FPU, TSC, CX8 and CMOV,
- * and no MMX or SSE, so libraries of the time (Bink) take their plain code paths. */
-void rc_cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) {
+rc_fn rc_lookup(uint32_t addr)
+{
+    for (uint32_t i = 0; i < nhooks; i++) {
+        if (hooks[i].addr == addr) {
+            return hooks[i].fn;
+        }
+    }
+    return rc_lookup_lifted(addr);
+}
+
+rc_fn rc_lookup_lifted(uint32_t addr)
+{
+    for (uint32_t k = 0; k < ntables; k++) {
+        const rc_fn_entry *table = tables[k].entries;
+        uint32_t lo = 0, hi = tables[k].count;
+        while (lo < hi) {
+            uint32_t mid = lo + (hi - lo) / 2;
+            if (table[mid].addr < addr) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        if (lo < tables[k].count && table[lo].addr == addr) {
+            return table[lo].fn;
+        }
+    }
+    return NULL;
+}
+
+void rc_dispatch(rc_cpu *c, uint32_t target)
+{
+    if (call_hook) {
+        call_hook(c, target);
+    }
+    rc_fn f = rc_lookup(target);
+    if (f == NULL && import_resolver != NULL) {
+        f = import_resolver(target);
+    }
+    if (f == NULL) {
+        c->eip = target;
+        rc_fatal("indirect transfer to %#010x, which is not a lifted function "
+                 "(esp %#010x, return address %#010x)",
+                 target, c->r[RC_ESP], rc_ld32(c->r[RC_ESP]));
+    }
+    f(c);
+}
+
+void rc_trap(rc_cpu *c, uint32_t addr, const char *why)
+{
+    c->eip = addr;
+    rc_fatal("%s (at %#010x; eax %#x ecx %#x edx %#x ebx %#x esp %#x ebp %#x esi %#x edi %#x)", why,
+             addr, c->r[0], c->r[1], c->r[2], c->r[3], c->r[4], c->r[5], c->r[6], c->r[7]);
+}
+
+/* A fixed CPU: a P6-class Intel processor with FPU, TSC, CX8 and CMOV, and
+ * no MMX or SSE: libraries of the time (Bink) then take their plain code
+ * paths, which the lifter models. */
+void rc_cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
+{
     switch (*eax) {
     case 0:
         *eax = 1;
@@ -193,10 +177,26 @@ void rc_cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) {
 }
 
 /* Nanoseconds since an arbitrary start: a 1 GHz time-stamp counter. */
-void rc_rdtsc(uint32_t *eax, uint32_t *edx) {
+void rc_rdtsc(uint32_t *eax, uint32_t *edx)
+{
     struct timespec ts;
     uint64_t t = 0;
+    if (rc_clock_virtual()) {
+        /* On the virtual clock its time, and a step per reading so that it
+         * always moves on: a run repeats. */
+        static uint64_t reads;
+        t = rc_ticks_peek_ms() * 1000000u + (++reads % 1000000u);
+        *eax = (uint32_t)t;
+        *edx = (uint32_t)(t >> 32);
+        return;
+    }
+#if defined(_WIN32)
     if (timespec_get(&ts, TIME_UTC) == TIME_UTC) {
+#else
+    /* Monotonic, as a TSC is; timespec_get is missing from older C
+     * libraries (Android's before API 29). */
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+#endif
         t = (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
     }
     *eax = (uint32_t)t;

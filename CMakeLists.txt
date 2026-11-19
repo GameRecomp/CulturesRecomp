@@ -28,19 +28,19 @@ if(GIT_FOUND)
   endif()
 endif()
 
-# Warning flags shared by every target of this project.
+# Warning flags for every target of this project, the runtime, HLE and platform code shared
+# with TropicoRecomp and the generated C included (rc_warnings is kept for targets that name it).
 add_library(rc_warnings INTERFACE)
 if(MSVC)
-  target_compile_options(rc_warnings INTERFACE /W4)
-  target_compile_definitions(rc_warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
+  add_compile_options(/W4)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
   if(RC_WARNINGS_AS_ERRORS)
-    target_compile_options(rc_warnings INTERFACE /WX)
+    add_compile_options(/WX)
   endif()
 else()
-  target_compile_options(rc_warnings INTERFACE
-    -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes -Wmissing-prototypes)
+  add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes -Wmissing-prototypes)
   if(RC_WARNINGS_AS_ERRORS)
-    target_compile_options(rc_warnings INTERFACE -Werror)
+    add_compile_options(-Werror)
   endif()
 endif()
 

@@ -17,6 +17,7 @@ typedef struct rc_game_info {
     const char *id;                /* manifest id, e.g. "cultures1" */
     const char *title;
     const char *const *exe_names;  /* NULL-terminated; looked up case-insensitively */
+    const char *guest_dir;         /* where the game believes it is installed, e.g. "C:\\Cultures" */
 } rc_game_info;
 
 /* One lifted binary, emitted by `recomp lift` (`binary.c` in its directory below

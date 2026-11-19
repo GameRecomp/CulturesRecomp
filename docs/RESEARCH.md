@@ -292,6 +292,22 @@ Facts that the lifter (M3/M4) depends on:
 - Labels that need entries of their own are few: SEH filters and handlers and code pointers into function bodies.
   Most labels in the DLLs are relocated jump-table entries, which the lifted `switch` reaches.
 
+## Start-up (M5)
+
+What `Cultures.exe` (GOG EN) does before its first frame, as `RC_TRACE=imports` shows it:
+
+- The C runtime starts three times (the executable and the two lifted DLLs, whose `DllMain` runs first).
+- **DirectX check**: `DirectDrawCreate` + `QueryInterface`, then `CoCreateInstance(CLSID_DirectMusic,
+  IID_IDirectMusic2)` and `LoadLibraryA("DINPUT.DLL")`. If either fails, it shows "DirectX 7.0 required!" and quits.
+  DirectMusic is not used otherwise: the object is released at once.
+- It probes `D3D8.DLL` with `LoadLibraryA` (research question 6: only a probe so far) and the DirectPlay lobby class
+  (`CoCreateInstance`, for lobby-started network games); both may be missing.
+- It scans the drive letters with `GetDriveTypeA` (looking for the CD), opens the CD with MCI (`cdaudio`) and asks for
+  its tracks, and reads `HKLM` keys (none exist in a fresh registry; it goes on with defaults).
+- Display: DirectDraw 4 (`DirectDrawCreateEx`, `EnumDisplayModes`), exclusive mode at 640 x 480; mouse and keyboard
+  through DirectInput, cursors from `.cur`/`.ani` files (`LoadCursorFromFileA`), sound through Miles' quick API,
+  Bink's sound through Miles streams (`BinkOpenMiles`).
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?

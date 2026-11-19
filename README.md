@@ -58,8 +58,11 @@ relocations) and DLLs: every byte of every Cultures 1 binary is classified, jump
 the code map for the lifter goes to `generated/`. `recomp codediff` compares builds.
 **M3, Lifter (integer core): done.** `recomp lift` turns every Cultures 1 binary into C (shared lifter with
 TropicoRecomp; every instruction form checked against the real CPU). The C compiles without warnings and links into
-the game shell. **M4 (MMX, DLL rebasing in the loader) and M5 (boot): next.**
-Nothing is playable yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
+the game shell.
+**M4/M5: done.** The runtime, HLE and platform layers come from TropicoRecomp; with the modules Cultures adds
+(registry, DirectInput, CD audio, …) the recompiled `Cultures.exe` boots, plays its intro movie and shows the main
+menu, which responds to the mouse. **M6 (picture and input) is in progress.**
+Nothing is playable to the end yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
 
 ## Quick start (developers)
 
@@ -84,8 +87,8 @@ cmake --preset dev
 cmake --build --preset dev
 ctest --preset dev
 
-# A game shell (links the lifted code if present; booting it is M5)
-build/dev/games/cultures1/cultures-cultures1 --help
+# The game (needs SDL3, SDL3_ttf and SDL3_mixer for a window and sound)
+build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en
 build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en
 ```
 

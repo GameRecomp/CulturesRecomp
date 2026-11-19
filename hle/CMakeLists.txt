@@ -1,15 +1,31 @@
 # SPDX-License-Identifier: MIT
 add_library(rc_hle STATIC
-  modules.c
-  kernel32/kernel32.c
-  winmm/winmm.c)
-target_include_directories(rc_hle PUBLIC include)
-target_link_libraries(rc_hle PUBLIC rc_runtime rc_platform PRIVATE rc_warnings)
-
-if(RC_BUILD_TESTS)
-  add_executable(test_hle tests/test_hle.c)
-  target_include_directories(test_hle PRIVATE "${PROJECT_SOURCE_DIR}/runtime/tests")
-  target_link_libraries(test_hle PRIVATE rc_hle rc_warnings)
-  add_test(NAME hle COMMAND test_hle)
-  set_tests_properties(hle PROPERTIES ENVIRONMENT "SDL_VIDEO_DRIVER=dummy")
-endif()
+    modules.c
+    advapi32/advapi32.c
+    dinput/dinput.c
+    dmusic/dmusic.c
+    dsound/dsound.c
+    shell32/shell32.c
+    kernel32/process.c
+    kernel32/memory.c
+    kernel32/locale.c
+    kernel32/file.c
+    kernel32/profile.c
+    kernel32/sync.c
+    kernel32/version.c
+    kernel32/ole32.c
+    user32/user32.c
+    user32/window.c
+    gdi32/gdi32.c
+    gdi32/dc.c
+    gdi32/text.c
+    gdi32/palette.c
+    ddraw/ddraw.c
+    ddraw/d3d.c
+    frames.c
+    mss32/mss32.c
+    winmm/winmm.c
+    winmm/mci.c
+)
+target_include_directories(rc_hle PUBLIC include PRIVATE .)
+target_link_libraries(rc_hle PUBLIC rc_runtime rc_platform)

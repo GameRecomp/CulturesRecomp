@@ -37,10 +37,18 @@ reads its own data files from the user's install. We never convert or redistribu
 
 ## Runtime model (runtime/)
 
-- **Guest memory**: a 4 GiB reservation (on 64-bit hosts), with pages committed when the PE loader or the
-  heap maps them. Guest address `a` is host `rc_mem_base + a`. The header `rc/mem.h` provides `rc_ld8/16/32` and
-  `rc_st8/16/32` (little-endian, unaligned-safe). Image base `0x400000` is fixed, since there are no relocations,
-  so the game's own addresses are used as they are.
+`runtime/`, `hle/` and `platform/` are TropicoRecomp's, shared with it (decision log). This project adds: one
+dispatch table per lifted binary (`rc_add_lifted`), relocation of a lifted DLL loaded at another base, the lifted
+binaries in `rc_config.lifted`, SHA-256, and the game shell (`rc_shell`: `runtime/src/game.c`). Changes to the shared
+files are kept general, so they can go back.
+
+- **Start-up** (`rc_game_main` → `rc_run`): the shell finds the install (`--game-dir`, `$RC_GAME_DIR`), hashes the
+  executable and the DLLs beside it and picks the lifted binaries whose SHA-256 match (a shell links every build lifted
+  for its game). `rc_run` maps the lifted DLLs (relocated to their manifest `base`), then the executable, binds imports
+  to the DLLs' exports or to HLE, sets up stack, TIB and PEB, runs each DLL's `DllMain` and calls the entry point.
+- **Guest memory**: a 4 GiB reservation (on 64-bit hosts) with a virtual-memory and heap layer (`rc/vm.h`). Guest
+  address `a` is host `rc_mem_base + a`; `rc/mem.h` has the accessors. Image base `0x400000` is fixed, since there are
+  no relocations, so the game's own addresses are used as they are.
 - **CPU state**: `rc_cpu` (`rc/cpu.h`, TropicoRecomp's layout) holds the eight GPRs (`r[8]`, also named
   `eax`…`edi` for hand-written code), one byte per arithmetic flag plus `df`, the x87 in the fast mode (`rc/x87.h`:
   host doubles, top, control/status/tag words) and the `fs` base (TEB). Lifted functions take `rc_cpu *` and keep
@@ -50,22 +58,22 @@ reads its own data files from the user's install. We never convert or redistribu
   (`stdcall`, `cdecl`, `thiscall`) therefore need no special handling.
 - **Calls**: direct calls are C calls; transfers to another function's entry are tail calls. Indirect calls and
   jumps (vtables, function pointers, the indirect jumps discovery leaves to run time) go through
-  `rc_dispatch(cpu, target)`. It looks the target up in the registry (HLE thunks, a hash table) and then in the
-  sorted tables of the lifted binaries (`rc_dispatch_add_table`, one per binary). An unknown target is a fatal error
-  that names the address, and gets fixed in the manifest. A trap (`rc_trap`) names the instruction and its address.
-- **PE loader** (`rc/pe.h`): maps headers and sections of an exe or DLL at its preferred base and writes
-  an HLE thunk address into every IAT slot. The executables have no relocations and always load at `0x400000`.
-  The lifted DLLs do have relocations, and two of them collide (C1: `binkw32.dll` and `DPlayDLL.dll` both prefer
-  `0x10000000`). Each lifted DLL that collides gets a fixed base in the manifest (`DPlayDLL.dll`: `0x11000000`), and the
-  recompiler applies its relocations before discovery and lifting. The loader has to apply the same relocations (M4);
-  until then it is fixed-base only.
+  `rc_dispatch(cpu, target)`: patches first, then the sorted tables of the lifted binaries, then the reserved import
+  addresses. An unknown target is a fatal error that names the address, and gets fixed in the manifest. A trap
+  (`rc_trap`) names the instruction and its address.
+- **PE loader** (`runtime/src/process.c`): maps headers and sections of an exe or DLL and binds every import slot.
+  The executables have no relocations and always load at `0x400000`. The lifted DLLs do have relocations, and two of
+  them collide (C1: `binkw32.dll` and `DPlayDLL.dll` both prefer `0x10000000`). Each lifted DLL that collides gets a
+  fixed base in the manifest (`DPlayDLL.dll`: `0x11000000`); the recompiler applies its relocations before discovery
+  and lifting, and the loader applies the same ones when it maps the DLL there.
 - **HLE**: every imported function has the same signature as lifted code (`void f(rc_cpu *)`). It reads its
-  arguments from the guest stack and pops them (`stdcall`). Imports get reserved guest addresses in a
-  thunk region (`0xF0000000+`, 16 bytes apart), so `call [IAT]` lands in `rc_dispatch`, which calls the HLE
-  function. An import without an implementation gets a *trap* thunk. The game loads anyway and fails with
-  `unimplemented import dll!Name` only when it calls one. A later registration upgrades the trap in place.
-- **COM**: DirectX interfaces are COM objects that live in guest memory. Their vtables point at thunk
-  addresses, so the game's own vtable calls work unchanged.
+  arguments from the guest stack and pops them (`stdcall`). Every import gets a reserved guest address, so
+  `call [IAT]` lands in `rc_dispatch`, which calls the registered HLE function, or stops with
+  `unimplemented import dll!Name` if there is none. `--check` lists what is missing without running the game, and
+  `RC_TRACE=imports` logs every call.
+- **COM**: DirectX interfaces are COM objects that live in guest memory. Their vtables hold reserved import
+  addresses named after the methods (`IDirectDraw::Blt`), so the game's own vtable calls work unchanged and a missing
+  method stops with its name. `CoCreateInstance` makes the classes HLE modules register (`rc_com_register`).
 - **x87**: a fast mode on host doubles first. An exact 80-bit mode is added only if a game depends on it (both engines
   are MSVC 6 builds that set 53-bit precision in places **(to verify)**).
 - **Threads**: the games use few threads (audio, network). They are modelled as cooperative fibers first,
@@ -80,11 +88,11 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `kernel32`  | libc / POSIX / Win32           | all       | VFS (case-insensitive, `\` → `/`, save redirection), heap, time, threads, TLS, `GetPrivateProfile*` |
 | `user32`    | platform (SDL3)                | all       | window, message queue from host input, cursors (`.cur`), `MessageBox` |
 | `gdi32`     | platform + SDL3_ttf            | all       | palette functions, `TextOut`/`SetPixel`, enough for the editors later |
-| `advapi32`  | per-user registry file         | all       | `Reg*` on a small INI/JSON-backed registry hive |
+| `advapi32`  | per-user registry file         | all       | `Reg*` on the program's own registry (`registry.txt` in the user directory) |
 | `ole32`     | runtime                        | all       | `CoInitialize`/`CoCreateInstance` → our COM classes (DirectMusic, DirectPlay 8, DirectShow) |
 | `version`, `shell32` | runtime               | all       | version info of our own modules, `ShellExecute` → host browser or no-op |
 | `ddraw`     | platform framebuffer           | all       | DirectDraw 1/2/4/7 COM, 16-bit surfaces, software blits, page flipping → SDL texture |
-| `dinput`    | platform input                 | all       | DirectInput (keyboard, mouse) |
+| `dinput`    | platform input                 | all       | DirectInput (keyboard, mouse), state and buffered data |
 | `dsound`    | SDL3 audio                     | c1, northland, eighthwonder, saga | DirectSound / DirectSound8 buffers, our own mixer |
 | `mss32`     | dsound HLE / SDL3 audio        | c1, c2    | Miles reimplementation: samples, streams, MP3 (`Mp3dec.asi` is not loaded) |
 | `winmm`     | runtime clock + audio          | all       | `timeGetTime`, mixer API stubs, **MCI CD audio → `MUSIC/TrackNN.*`** |
@@ -101,9 +109,10 @@ reimplementing them.
 
 ## Platform layer (platform/)
 
-This is a thin C API over SDL3: window, framebuffer upload (16-bit → texture, with integer or aspect
-scaling), input events, audio device and clock. It also has a `null` backend for tests and CI. Nothing above
-`platform/` includes SDL headers.
+This is a thin C API over SDL3, SDL3_ttf and SDL3_mixer (TropicoRecomp's): window, frame upload with integer or
+aspect scaling, input events, text, audio (samples, tracks, PCM streams) and settings. It also has a `null` backend
+for tests and CI (`RC_WITH_SDL3=OFF`). Nothing above `platform/` includes SDL headers. Scripted runs
+(`RC_INPUT`, `RC_SCREENSHOT`, `RC_FRAMES`, `RC_CLOCK=virtual`) are in `hle/frames.c`.
 
 ## Games (games/<id>/)
 

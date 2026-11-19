@@ -94,15 +94,27 @@ recomp/target/release/difftest --states 1 --coverage orig/cultures1/gog-en/Cultu
 The difftest needs clang (`-m32 -nostdlib`, no 32-bit libc) and an x86-64 Linux host, and writes to
 `build/difftest/`. CI runs it on every push.
 
-## Checking an install against the runtime
+## Running a game
 
 ```sh
-build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en
-RC_LOG=debug build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en   # + list
+recomp/target/release/recomp lift orig/cultures1/gog-en/*.exe orig/cultures1/gog-en/binkw32.dll orig/cultures1/gog-en/DPlayDLL.dll
+CMAKE_PREFIX_PATH=<your SDL3 prefix> cmake --preset dev && cmake --build --preset dev
+build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en      # or set RC_GAME_DIR
 ```
 
-`--check` maps the exe with the runtime's PE loader, resolves every import and prints, per DLL, how many imports the
-HLE layer implements. It needs no lifted code.
+The shell hashes `Cultures.exe` and the DLLs beside it and runs the lifted builds that match; a build that was not
+lifted is refused with its hash. Saves, settings and the registry (`registry.txt`) go to the per-user data directory
+(`--user-dir` to choose). Without SDL3 (and SDL3_ttf) the null platform is built, which runs without a window.
+
+```sh
+build/dev/games/cultures1/cultures-cultures1 --check --game-dir orig/cultures1/gog-en   # imports per DLL
+RC_TRACE=check …   # … and the missing ones by name;   RC_TRACE=imports: every API call while running
+```
+
+Scripted runs (`hle/frames.c`): `RC_INPUT=script.txt` (lines `FRAME move X Y`, `FRAME down|up BUTTON`,
+`FRAME key|keyup VK`, …), `RC_SCREENSHOT=N:path.bmp,…`, `RC_FRAMES=N` to end after frame N, and `RC_CLOCK=virtual`
+so a run repeats exactly. `SDL_VIDEO_DRIVER=dummy` runs them without a display. Screenshots are of the game, so they
+stay local like everything else derived from it.
 
 ## Inspecting a binary
 

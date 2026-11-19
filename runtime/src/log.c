@@ -6,53 +6,53 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int level_initialised;
-static rc_log_level current_level = RC_LOG_INFO;
-static rc_fatal_handler fatal_handler;
-
-static const char *const level_names[] = {"error", "warn", "info", "debug", "trace"};
-
-static void init_level(void) {
-    if (level_initialised) return;
-    level_initialised = 1;
-    const char *env = getenv("RC_LOG");
-    if (!env) return;
-    for (int i = 0; i <= RC_LOG_TRACE; i++) {
-        if (strcmp(env, level_names[i]) == 0) current_level = (rc_log_level)i;
-    }
-}
-
-void rc_log_set_level(rc_log_level level) {
-    level_initialised = 1;
-    current_level = level;
-}
-
-rc_log_level rc_log_get_level(void) {
-    init_level();
-    return current_level;
-}
-
-void rc_log(rc_log_level level, const char *fmt, ...) {
-    init_level();
-    if (level > current_level) return;
+void rc_log(const char *fmt, ...)
+{
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "[rc] %s: ", level_names[level]);
     vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
     va_end(ap);
+    fputc('\n', stderr);
 }
 
-void rc_set_fatal_handler(rc_fatal_handler handler) { fatal_handler = handler; }
+static void (*fatal_hook)(const char *message);
 
-void rc_fatal(const char *fmt, ...) {
+void rc_set_fatal_hook(void (*hook)(const char *message)) { fatal_hook = hook; }
+
+void rc_fatal(const char *fmt, ...)
+{
     char msg[1024];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(msg, sizeof msg, fmt, ap);
     va_end(ap);
-    fprintf(stderr, "[rc] fatal: %s\n", msg);
+    fprintf(stderr, "fatal: %s\n", msg);
     fflush(stderr);
-    if (fatal_handler) fatal_handler(msg);
+    /* Once only: the hook itself might fail fatally. */
+    void (*hook)(const char *) = fatal_hook;
+    fatal_hook = NULL;
+    if (hook) {
+        hook(msg);
+    }
     abort();
+}
+
+int rc_trace(const char *what)
+{
+    static const char *list;
+    static int read;
+    if (!read) {
+        list = getenv("RC_TRACE");
+        read = 1;
+    }
+    if (!list) {
+        return 0;
+    }
+    size_t n = strlen(what);
+    for (const char *p = list; (p = strstr(p, what)) != NULL; p += n) {
+        if ((p == list || p[-1] == ',') && (p[n] == 0 || p[n] == ',')) {
+            return 1;
+        }
+    }
+    return 0;
 }

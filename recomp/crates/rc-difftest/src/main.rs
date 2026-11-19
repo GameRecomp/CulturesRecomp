@@ -123,7 +123,7 @@ fn real_main() -> Result<bool, String> {
     // Lift every instance into its own program.
     let mut c_files = Vec::new();
     let mut table = String::from(
-        "#include \"rc/lifted.h\"\n\ntypedef struct rc_program { rc_fn entry; const rc_fn_entry *table; uint32_t count; } rc_program;\n",
+        "#include \"rc/dispatch.h\"\n\ntypedef struct rc_program { rc_fn entry; const rc_fn_entry *table; uint32_t count; } rc_program;\n",
     );
     let mut src = String::new();
     let mut decls = String::new();
@@ -136,7 +136,7 @@ fn real_main() -> Result<bool, String> {
         counts.push(n);
         if src.len() > 4_000_000 || k + 1 == instances.len() {
             let name = format!("cases_{}.c", c_files.len());
-            let body = format!("#include \"rc/lifted.h\"\n{decls}\n{src}");
+            let body = format!("#include \"rc/dispatch.h\"\n{decls}\n{src}");
             fs::write(gen_dir.join(&name), body).map_err(|e| e.to_string())?;
             c_files.push(gen_dir.join(name));
             src.clear();
@@ -329,7 +329,14 @@ fn coverage(exe: &Path, instances: &[Instance]) -> Result<bool, String> {
 }
 
 /// The runtime sources the harness links.
-const RUNTIME: [&str; 5] = ["mem.c", "log.c", "cpu.c", "dispatch.c", "x87.c"];
+const RUNTIME: [&str; 6] = [
+    "mem.c",
+    "log.c",
+    "dispatch.c",
+    "x87.c",
+    "native.c",
+    "clock.c",
+];
 
 fn build(root: &Path, work: &Path, c_files: &[PathBuf]) -> Result<(), String> {
     let td = root.join("tools/difftest");

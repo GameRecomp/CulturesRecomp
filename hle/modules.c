@@ -1,57 +1,81 @@
 /* SPDX-License-Identifier: MIT */
+#include "advapi32/advapi32.h"
+#include "ddraw/ddraw.h"
+#include "dinput/dinput.h"
+#include "dmusic/dmusic.h"
+#include "dsound/dsound.h"
+#include "shell32/shell32.h"
+#include "mss32/mss32.h"
+#include "gdi32/gdi32.h"
+#include "kernel32/k32.h"
 #include "rc/hle_modules.h"
+#include "user32/user32.h"
+#include "winmm/winmm.h"
 
-#include <string.h>
-
-/* Every DLL imported by a pinned binary (docs/TARGETS.md) or loaded with LoadLibrary
- * (ddraw, d3d8, dplayx). The test in hle/tests checks this list against the targets. */
-const rc_hle_module rc_hle_modules[] = {
-    {"kernel32.dll", RC_HLE_SYSTEM, rc_hle_register_kernel32},
-    {"user32.dll", RC_HLE_SYSTEM, NULL},
-    {"gdi32.dll", RC_HLE_SYSTEM, NULL},
-    {"advapi32.dll", RC_HLE_SYSTEM, NULL},
-    {"shell32.dll", RC_HLE_SYSTEM, NULL},
-    {"shlwapi.dll", RC_HLE_SYSTEM, NULL},
-    {"ole32.dll", RC_HLE_SYSTEM, NULL},
-    {"version.dll", RC_HLE_SYSTEM, NULL},
-    {"winmm.dll", RC_HLE_SYSTEM, rc_hle_register_winmm},
-    {"ddraw.dll", RC_HLE_SYSTEM, NULL},
-    {"d3d8.dll", RC_HLE_SYSTEM, NULL},
-    {"dinput.dll", RC_HLE_SYSTEM, NULL},
-    {"dsound.dll", RC_HLE_SYSTEM, NULL},
-    {"dplayx.dll", RC_HLE_SYSTEM, NULL},
-    {"wsock32.dll", RC_HLE_SYSTEM, NULL},
-    {"ws2_32.dll", RC_HLE_SYSTEM, NULL},
-    {"comctl32.dll", RC_HLE_SYSTEM, NULL},
-    {"comdlg32.dll", RC_HLE_SYSTEM, NULL},
-    {"winspool.drv", RC_HLE_SYSTEM, NULL},
-    {"mss32.dll", RC_HLE_MIDDLEWARE, NULL},
-    {"binkw32.dll", RC_HLE_LIFTED, NULL},
-    {"dplaydll.dll", RC_HLE_LIFTED, NULL},
-    {"gedx8musicdrv.dll", RC_HLE_LIFTED, NULL},
-};
-const size_t rc_hle_module_count = sizeof rc_hle_modules / sizeof rc_hle_modules[0];
-
-static char lower(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c; }
-
-const rc_hle_module *rc_hle_find_module(const char *dll) {
-    char n[64];
-    size_t i = 0;
-    int dot = 0;
-    for (; dll[i] && i + 5 < sizeof n; i++) {
-        n[i] = lower(dll[i]);
-        if (dll[i] == '.') dot = 1;
-    }
-    n[i] = '\0';
-    if (!dot) strcat(n, ".dll");
-    for (size_t k = 0; k < rc_hle_module_count; k++) {
-        if (strcmp(rc_hle_modules[k].dll, n) == 0) return &rc_hle_modules[k];
-    }
-    return NULL;
+void rc_hle_kernel32(void)
+{
+    rc_register_imports(rc_k32_process, rc_k32_process_count);
+    rc_register_imports(rc_k32_memory, rc_k32_memory_count);
+    rc_register_imports(rc_k32_locale, rc_k32_locale_count);
+    rc_register_imports(rc_k32_file, rc_k32_file_count);
+    rc_register_imports(rc_k32_profile, rc_k32_profile_count);
+    rc_register_imports(rc_k32_sync, rc_k32_sync_count);
+    rc_register_imports(rc_version_defs, rc_version_count); /* VERSION.dll, on the same files */
+    rc_register_imports(rc_ole32_defs, rc_ole32_count);
 }
 
-void rc_hle_register_all(void) {
-    for (size_t k = 0; k < rc_hle_module_count; k++) {
-        if (rc_hle_modules[k].register_fn) rc_hle_modules[k].register_fn();
-    }
+void rc_hle_user32(void)
+{
+    rc_register_imports(rc_user32_setup, rc_user32_setup_count);
+    rc_register_imports(rc_user32_windows, rc_user32_windows_count);
+}
+
+void rc_hle_gdi32(void)
+{
+    rc_register_imports(rc_gdi32_setup, rc_gdi32_setup_count);
+    rc_register_imports(rc_gdi32_text, rc_gdi32_text_count);
+    rc_register_imports(rc_gdi32_palette, rc_gdi32_palette_count);
+}
+
+void rc_hle_ddraw(void)
+{
+    rc_register_imports(rc_ddraw_defs, rc_ddraw_count);
+    rc_register_imports(rc_d3d_defs, rc_d3d_count);
+}
+
+void rc_hle_mss32(void)
+{
+    rc_register_imports(rc_mss32_defs, rc_mss32_count);
+    rc_mss32_init();
+}
+
+void rc_hle_winmm(void)
+{
+    rc_register_imports(rc_winmm_defs, rc_winmm_count);
+    rc_register_imports(rc_winmm_mci_defs, rc_winmm_mci_count);
+}
+
+void rc_hle_advapi32(void) { rc_register_imports(rc_advapi32_defs, rc_advapi32_count); }
+
+void rc_hle_dinput(void) { rc_register_imports(rc_dinput_defs, rc_dinput_count); }
+
+void rc_hle_dmusic(void) { rc_dmusic_init(); }
+
+void rc_hle_dsound(void) { rc_register_imports(rc_dsound_defs, rc_dsound_count); }
+
+void rc_hle_shell32(void) { rc_register_imports(rc_shell32_defs, rc_shell32_count); }
+
+void rc_hle_all(void)
+{
+    rc_hle_advapi32();
+    rc_hle_dinput();
+    rc_hle_dmusic();
+    rc_hle_dsound();
+    rc_hle_shell32();
+    rc_hle_winmm();
+    rc_hle_mss32();
+    rc_hle_ddraw();
+    rc_hle_kernel32();
+    rc_hle_user32();
+    rc_hle_gdi32();
 }

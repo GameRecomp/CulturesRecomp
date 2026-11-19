@@ -10,13 +10,17 @@
 set(RC_GENERATED_DIR "${PROJECT_SOURCE_DIR}/generated" CACHE PATH "Where `recomp lift` writes C")
 
 function(rc_add_game id)
-  cmake_parse_arguments(G "" "TITLE" "EXES" ${ARGN})
+  cmake_parse_arguments(G "" "TITLE;GUEST_DIR" "EXES" ${ARGN})
   if(NOT G_TITLE OR NOT G_EXES)
     message(FATAL_ERROR "rc_add_game(${id}): TITLE and EXES are required")
   endif()
 
   set(RC_GAME_ID "${id}")
   set(RC_GAME_TITLE "${G_TITLE}")
+  if(NOT G_GUEST_DIR)
+    set(G_GUEST_DIR "C:\\\\Cultures")
+  endif()
+  set(RC_GAME_GUEST_DIR "${G_GUEST_DIR}")
   set(RC_GAME_EXES "")
   foreach(exe IN LISTS G_EXES)
     string(APPEND RC_GAME_EXES "\"${exe}\", ")
@@ -26,7 +30,7 @@ function(rc_add_game id)
 
   set(target "cultures-${id}")
   add_executable(${target} "${main_c}")
-  target_link_libraries(${target} PRIVATE rc_runtime rc_hle rc_platform rc_warnings)
+  target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
 
   set(gen_dir "${RC_GENERATED_DIR}/${id}")
   file(GLOB_RECURSE gen_sources CONFIGURE_DEPENDS "${gen_dir}/*.c")

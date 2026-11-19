@@ -46,9 +46,9 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M1  | Read the inputs                            | ✅ | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
 | M2  | Find the code (C1)                         | ✅ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. Reached: 100 % for every C1 binary, every leftover settled by analysis or a manifest hint. |
 | M3  | Lifter, integer core                       | ✅ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
-| M4  | x87 and the whole game                     | 🔶 | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
-| M5  | Boot to the main loop                      | ⬜ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
-| M6  | Picture and input                          | ⬜ | Main menu rendered (16-bit DirectDraw → SDL3). Mouse and keyboard work. Cursors are shown. |
+| M4  | x87 and the whole game                     | ✅ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
+| M5  | Boot to the main loop                      | ✅ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
+| M6  | Picture and input                          | 🔶 | Main menu rendered (16-bit DirectDraw → SDL3). Mouse and keyboard work. Cursors are shown. |
 | M7  | Sound, music and video                     | ⬜ | Bink intro plays. Miles samples and streams work. CD music plays from `MUSIC/TrackNN.ogg`. |
 | M8  | In game                                    | ⬜ | First campaign mission played to the end. Save/load round-trips. A one-hour soak runs without crash on Linux and Windows. |
 | M9  | **Cultures 1 release**                     | ⬜ | gog-en, gog-de and gold-de all pass the same checklist (see "Definition of done"), including the add-on campaign on gold-de. Release v0.1. |
@@ -149,36 +149,51 @@ The lifter, its IR, the C emitter and the difftest are TropicoRecomp's (`rc-ir`,
 - [x] `recomp lift`: all seven C1 binaries in about 5 s; the generated C (about 42 MB per `Cultures.exe`) compiles
       with `-Wall -Wextra -Wpedantic -Werror` on gcc and clang and links into `cultures-cultures1`
 
-### M4 – x87 and the whole game 🔶
+### M4 – x87 and the whole game ✅
 
 - [x] x87 on host doubles (stack, control word, compare and flags, `fist`/rounding modes, transcendental
       functions): the fast mode from TropicoRecomp, difftested
-- [ ] MMX: 237 trapping instructions in `Cultures.exe` (MMX, `int 6` of the CRT's FDIV stubs, one `int3`), about
+- [ ] (moved to M6/M8, checked while playing) MMX: 237 trapping instructions in `Cultures.exe` (MMX, `int 6` of the CRT's FDIV stubs, one `int3`), about
       4160 in each `binkw32.dll`, none in `DPlayDLL.dll`. Both detect MMX with `cpuid` and branch on the result,
       and the runtime's CPU reports none, so the MMX paths are probably dead (RESEARCH question 10). Lift MMX
       only if a trap shows one is reached; no SSE, 3DNow! or `cmov` was found
-- [ ] DLL rebasing in the runtime: the manifest `base` (C1: `DPlayDLL.dll` → `0x11000000`) is in place and the
-      recompiler rebases before discovery (M2, `Image::rebase`); the runtime loader (`rc/pe.h`, fixed-base only so
-      far) still has to apply the same relocations when mapping the DLL
+- [x] DLL rebasing in the runtime: the loader applies a lifted DLL's relocations when it maps it at its manifest
+      `base` (C1: `DPlayDLL.dll` at `0x11000000`, whose `DllMain` then runs as lifted code)
 - [x] Lift all of `Cultures.exe`, `binkw32.dll` and `DPlayDLL.dll` (all builds), compile and link
-- [ ] No trap in reachable code: checked when the game runs (M5 onwards)
+- [x] No trap in reachable code so far: start-up, the intro movie and the menus run without one (checked further
+      while playing, M8)
 
-### M5 – Boot to the main loop
+### M5 – Boot to the main loop ✅
 
-- [ ] TEB/PEB, the `fs` segment, the process heap, `GetModuleHandle`/`GetProcAddress` (needed for `DDRAW.DLL`/`DINPUT`)
-- [ ] VFS: case-insensitive lookup, a read-only install directory, a writable per-user overlay (`Save/`, ini, registry)
-- [ ] Registry emulation (`HKLM\Software\...` paths the games read, seeded from the manifest)
-- [ ] Log every unimplemented import, with the address of the caller
+The runtime, HLE and platform layers are TropicoRecomp's (decision log); Cultures 1 needed the rest.
 
-### M6 – Picture and input
+- [x] TEB/PEB, the `fs` segment, the process heap, `GetModuleHandle`/`GetProcAddress`/`LoadLibrary` (the DirectX
+      DLLs the game loads at run time: `DDRAW`, `DINPUT`, `DSOUND`; `D3D8.DLL` is probed and not provided)
+- [x] File access through the install (case-insensitive, read-only) and a writable per-user directory
+- [x] Registry (`advapi32`): the program's own, kept in `registry.txt` in the user directory; a fresh one has no
+      keys, as a clean install, and the game falls back to its defaults
+- [x] Every unimplemented import is fatal with its name and caller; `--check` lists them without running the game
+      (all 230 imports of `Cultures.exe` are covered: HLE or the lifted DLLs)
+- [x] The game's DirectX 7 check passes: it creates the DirectMusic object (a minimal `IDirectMusic`, registered
+      with the new COM class registry) and loads `DINPUT.DLL`
+- [x] `cultures-cultures1` picks the lifted builds by SHA-256, runs the C runtime start-up of all three binaries,
+      the DLLs' `DllMain`, and reaches the game's main loop
 
-- [ ] `ddraw`: `DirectDrawCreate(Ex)`, `IDirectDraw2/4/7`, cooperative level, display modes, primary and back buffer,
-      offscreen surfaces, `Blt`/`BltFast` with colour keys, `Lock`/`Unlock`, `Flip`, palettes (8-bit paths)
-- [ ] `user32` message pump, `WM_*` from SDL events, `ShowCursor`/`SetCursor` with `.cur` files
-- [ ] `dinput`: keyboard and mouse, buffered and immediate
-- [ ] Present: 16-bit (565/555) → texture, aspect-correct scaling, window and fullscreen
+### M6 – Picture and input 🔶
+
+- [x] `ddraw` (TropicoRecomp's): the game's display mode (640 x 480), surfaces, `Lock`/`Unlock`, `GetDC`,
+      palettes, `Flip` → SDL3; the intro movie (lifted Bink) and the main menu render
+- [x] `user32` message pump; `GetKeyState`, `GetMessageA`, `wsprintfA`, `SetCursorPos`, `ClipCursor`; cursors from
+      the game's `.cur`/`.ani` files (`LoadCursorFromFileA`)
+- [x] `dinput`: keyboard and mouse, immediate (`GetDeviceState`) and buffered (`GetDeviceData`), fed from the same
+      input user32 gets; `gdi32`: palettes, `SetPixel`/`GetPixel`, `SetBkColor`
+- [x] A scripted run (`RC_INPUT`) clicks through the main menu into a submenu, with screenshots
+- [ ] Keyboard in the game, window and full-screen modes checked by hand, the in-game screen
 
 ### M7 – Sound, music and video
+
+Already in place: Miles' quick API and streams (TropicoRecomp's `mss32`, plus `AIL_quick_copy`) carry Bink's sound;
+CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound reports no device for now.
 
 - [ ] `mss32`: `AIL_startup`, the digital driver, samples, streams (WAV/ADPCM/MP3), volume and pan, timers
 - [ ] `dsound` (also used by C1 directly) on our own SDL3-based mixer
@@ -275,6 +290,7 @@ The lifter, its IR, the C emitter and the difftest are TropicoRecomp's (`rc-ir`,
 | 2026-11-19 | Store extras (GOG Galaxy DLLs, GOG's Ogg/Vorbis wrapper dependencies, uninstallers) are skipped by name in `recomp identify`, not pinned. |
 | 2026-11-19 | Code maps go to `generated/<game>/<binary>-<variant>/codemap.json` (lower-case file name plus the first variant of the `[[binary]]`), because one game has several builds of the same binary. Addresses in the JSON are hex strings. |
 | 2026-11-19 | `DPlayDLL.dll` (both C1 builds) is rebased to `0x11000000` (`base` in the manifest); `binkw32.dll` keeps its preferred base. |
+| 2026-11-19 | `runtime/`, `hle/` and `platform/` are TropicoRecomp's, replacing this project's smaller first versions: its kernel32, user32, gdi32, ddraw, Miles and platform layer already run a game of the same era. This project adds what is general (several lifted tables, DLL relocation, a COM class registry, input observers) and the modules Cultures needs (advapi32, dinput, dsound, dmusic, shell32, MCI CD audio). |
 | 2026-11-19 | The lifter, IR, C emitter and difftest are TropicoRecomp's crates, copied and adapted (code map, image, runtime API) rather than rewritten; changes that are not project-specific are kept small so they can go back. This project keeps the C back end only. |
 | 2026-11-19 | The runtime's `rc_cpu` takes TropicoRecomp's layout (`r[8]`, one byte per flag, x87 fast mode), with the registers also named for hand-written code. `rc_dispatch` looks up the HLE registry, then one sorted table per lifted binary. |
 | 2026-11-19 | `cpuid` reports a P6-class CPU without MMX or SSE, as in TropicoRecomp, so the game and Bink take their plain code paths and MMX may never need lifting. |

@@ -1,51 +1,73 @@
 /* SPDX-License-Identifier: MIT */
-/* Guest address -> host function. Indirect calls and jumps of lifted code, vtable calls and
- * all imports go through rc_dispatch(). Two sources: the registry (HLE thunks and anything
- * registered at run time) and the tables of lifted functions that `recomp lift` generates,
- * one per lifted binary. An unknown target is fatal and names the address, which then gets
- * added to the manifest as a discovery seed. */
+/* The table from guest addresses to lifted functions. */
 #ifndef RC_DISPATCH_H
 #define RC_DISPATCH_H
 
-#include "rc/cpu.h"
-
-#include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
+
+#include "rc/lifted.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Register fn for guest address addr (non-zero). `name` may be NULL; it must stay valid.
- * Re-registering an address replaces the entry. Returns 0 on success. */
-int rc_dispatch_register(uint32_t addr, rc_fn fn, const char *name);
-rc_fn rc_dispatch_lookup(uint32_t addr);
-const char *rc_dispatch_name(uint32_t addr);
-size_t rc_dispatch_count(void);
-void rc_dispatch_reset(void);
-
-/* One lifted function. A generated table is sorted by address. */
 typedef struct rc_fn_entry {
     uint32_t addr;
     rc_fn fn;
 } rc_fn_entry;
 
-/* Add the generated table of one lifted binary (at most 16). Returns 0 on success. */
-int rc_dispatch_add_table(const rc_fn_entry *table, uint32_t count);
-/* Forget all lifted tables. */
-void rc_dispatch_clear_tables(void);
+/* The table generated with the lifted code, sorted by address. */
+extern const rc_fn_entry rc_lifted_table[];
+extern const uint32_t rc_lifted_count;
+/* The DLLs (file names) whose code is part of the program, NULL-ended. */
+extern const char *const rc_lifted_modules[];
 
-/* The function for `addr`: the registry first, then the lifted tables. NULL if none. */
+/* Use `table` for rc_dispatch. Called once at start-up with the generated
+ * table; tests swap tables between programs. */
+void rc_set_lifted(const rc_fn_entry *table, uint32_t count);
+/* Add the table of one more lifted binary (a program that links several, at
+ * most 16); false if there is no room. */
+bool rc_add_lifted(const rc_fn_entry *table, uint32_t count);
+
+/* Called before every indirect transfer (tracing; NULL for none). */
+void rc_set_call_hook(void (*hook)(rc_cpu *c, uint32_t target));
+
+/* The lifted function at `addr`, or NULL. */
 rc_fn rc_lookup(uint32_t addr);
 
-/* Call the function for target, with c->eip = target. Fatal if there is none. */
-void rc_dispatch(rc_cpu *c, uint32_t target);
+/* Patches (the game project's, games/<id>/patches.c): `wrapper` runs in
+ * place of the lifted function at `addr` whenever it is reached through
+ * rc_dispatch. The manifest's [patch] hooks makes the lifter route every
+ * call of that function through dispatch. The wrapper is entered as the
+ * function would be and calls the original with rc_lookup_lifted. Returns
+ * the wrapper registered for `addr` before, or NULL: two patches wrapping
+ * one function chain, the later calling the earlier instead of the
+ * original. */
+rc_fn rc_hook(uint32_t addr, rc_fn wrapper);
 
-/* Patch points: `fn` runs before the instruction at `addr` when lifted code reaches an
- * rc_point() for it. Unused until a manifest lists patch points. */
+/* The lifted function at `addr`, not its wrapper; NULL if none. */
+rc_fn rc_lookup_lifted(uint32_t addr);
+
+/* Patch points: `fn` runs before the instruction at `addr`, which the
+ * manifest's [patch] points lists, with the registers and flags in `c`; it
+ * may change them and guest memory. A point nothing is registered for does
+ * nothing. */
 void rc_on_point(uint32_t addr, rc_fn fn);
+
+/* Patch variables: guest memory the runtime keeps for the game project's
+ * patches (the manifest's [patch] operands load from it), RC_PATCH_VARS_SIZE
+ * bytes at RC_PATCH_VARS, zero until written. */
+#define RC_PATCH_VARS 0x0001f000u
+#define RC_PATCH_VARS_SIZE 0x1000u
+
+/* Where rc_dispatch goes for addresses that are not lifted code (the
+ * reserved import addresses). Returns NULL if `addr` is not one. */
+typedef rc_fn (*rc_import_resolver)(uint32_t addr);
+void rc_set_import_resolver(rc_import_resolver r);
 
 #ifdef __cplusplus
 }
 #endif
+
 #endif

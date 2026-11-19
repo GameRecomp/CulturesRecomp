@@ -3,7 +3,7 @@
  * What generated code includes: memory accessors that take the arena base
  * as a local (so that the compiler need not reload a global after every
  * store), shifts that are defined for every count, and the few operations
- * C has no operator for. Shared with TropicoRecomp.
+ * C has no operator for.
  */
 #ifndef RC_LIFTED_H
 #define RC_LIFTED_H
@@ -12,7 +12,6 @@
 #include <string.h>
 
 #include "rc/cpu.h"
-#include "rc/dispatch.h"
 #include "rc/log.h"
 #include "rc/x87.h"
 
@@ -20,13 +19,18 @@
 extern "C" {
 #endif
 
+typedef void (*rc_fn)(rc_cpu *c);
+
+/* Call the guest function at `target` (lifted code or an import). */
+void rc_dispatch(rc_cpu *c, uint32_t target);
+
 /* Stop: an instruction that cannot continue, or one the lifter does not
  * model. The registers are in `c`. */
 RC_NORETURN void rc_trap(rc_cpu *c, uint32_t addr, const char *why);
 
-/* A patch point: run the code registered for `addr` (rc_on_point) on the
- * state in `c`, before the instruction at `addr`. The lifter emits these
- * only for patch points a manifest asks for (none yet). */
+/* A patch point (the manifest's [patch] points): run the code the game
+ * project registered for `addr` (rc/dispatch.h, rc_on_point) on the state
+ * in `c`, before the instruction at `addr`. */
 void rc_point(rc_cpu *c, uint32_t addr);
 
 void rc_cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);

@@ -11,30 +11,35 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M1 Read the inputs | done | `rc-media` (Inno 5.5.0u, own LZMA1/LZMA2, ISO 9660, InstallShield 5, zip), `recomp list/extract`, runtime PE loader, `--check` |
 | M2 Find the code (C1) | done | `rc-discover` (descent, jump tables, SEH/EH, vtables, pointer scans with trial decoding, gaps, no-return fixed point, rebasing, reloc check), `recomp discover/codediff`, per-binary manifest hints (`seeds`, `no_return`, `returns`, `data`, `jump_tables`); 100 % of every C1 binary, no leftover |
 | M3 Lifter, integer core | done | TropicoRecomp's `rc-ir`, `rc-x86`, `rc-emit-c`, `rc-difftest` adapted; `recomp lift`; runtime on Tropico's `rc_cpu` layout, `lifted.h`, `x87`; all C1 binaries lift, compile warning-free (gcc, clang) and link; difftest 18720/18720 |
-| M4 x87 and the whole game | **in progress** | x87 done; open: MMX (probably dead, `cpuid` says none), DLL rebasing in the runtime loader |
-| M5 Boot to the main loop | next | — |
+| M4 x87 and the whole game | done | x87; DLL rebasing in the loader; MMX probably dead (`cpuid` says none), watched while playing |
+| M5 Boot to the main loop | done | runtime/hle/platform from TropicoRecomp + rc_shell (`runtime/src/game.c`); new HLE: advapi32, dinput, dsound (no device), dmusic (DX7 check), shell32, MCI CD audio |
+| M6 Picture and input | **in progress** | intro movie and main menu render, mouse clicks work (scripted run); open: keyboard, in-game screen |
 
 Check `git log` for the latest work.
 
-## Next steps: M4, then M5
+## Next steps: M6 → M8
 
-See `docs/PLAN.md` ("M4", "M5"). The pipeline is `recomp lift <binary>` → `generated/<game>/<binary>-<variant>/`
-(`code_XXXX.c`, `funcs.h`, `table.c`, `binary.c`, `codemap.json`) + `generated/<game>/set.c` → `cmake/lift.cmake`
-compiles all of it into `cultures-<game>`. `rc_game_main` (`runtime/src/game.c`) still stops before running lifted
-code: M5 maps the PE, registers each `rc_generated_binary`'s table (`rc_dispatch_add_table`), sets up TEB/stack and
-calls the entry. Facts that matter (details in `docs/RESEARCH.md`, "Code discovery" and "Lifting"):
+See `docs/PLAN.md`. Run the game (after `recomp lift` of the C1 binaries and a dev build with SDL3):
 
-- No executable has relocations; all are MSVC 6.0 builds with image base `0x400000`.
-- Imports are called as `call [IAT]` (also `mov esi, [IAT]; call esi`); the IAT holds HLE thunk addresses
-  (`0xF0000000+`), reached through `rc_dispatch`.
-- Lifted DLLs are rebased by the recompiler to the manifest `base` (C1 `DPlayDLL.dll` → `0x11000000`); the runtime
-  loader still has to do the same (M4).
-- Lifted code traps only on MMX (probably dead: `cpuid` reports no MMX and both the game and Bink check it),
-  `int 6` (CRT FDIV stubs) and `int3`. A trap or an unknown dispatch target is fatal and names the address.
-- The lifter, emitter, `rc/lifted.h`, `rc/x87.h` and the difftest are shared with TropicoRecomp: keep changes general.
+```sh
+CMAKE_PREFIX_PATH=<your SDL3 prefix> cmake --preset dev && cmake --build --preset dev
+build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en
+RC_TRACE=imports …                     # every API call;  --check: imports the HLE layer lacks
+SDL_VIDEO_DRIVER=dummy RC_CLOCK=virtual RC_INPUT=script.txt RC_SCREENSHOT=300:a.bmp RC_FRAMES=310 …   # scripted
+```
+
+Facts that matter (details in `docs/RESEARCH.md`, "Code discovery", "Lifting", "Start-up"):
+
+- `runtime/`, `hle/`, `platform/`, the lifter, emitter and difftest are shared with TropicoRecomp: keep changes
+  general, so they can go back; Cultures-only behaviour goes into new modules or the manifest.
+- No executable has relocations (image base `0x400000`); lifted DLLs are rebased to the manifest `base` by the
+  recompiler and by the loader (C1 `DPlayDLL.dll` → `0x11000000`).
+- Imports bind to the lifted DLLs' exports or to reserved addresses that `rc_dispatch` sends to HLE functions; an
+  unimplemented one stops with its name. COM vtables hold reserved addresses named after the methods.
+- Lifted code traps only on MMX (probably dead), `int 6` and `int3`. A trap or an unknown dispatch target is fatal and
+  names the address.
 - Output belongs in `generated/<game>/…` (git-ignored). Function addresses may appear in manifests and docs;
   disassembly, lifted or decompiled code never goes into the repo, issues or commits.
-- Test material: `recomp extract` the C1 media into `orig/<game>/<variant>/` (`docs/WORKFLOWS.md`).
 
 ## Layout
 
@@ -48,10 +53,11 @@ recomp/crates/rc-x86       x86 semantics: instructions → IR, functions and lab
 recomp/crates/rc-emit-c    IR → C: functions, funcs.h, code_XXXX.c, per-binary table
 recomp/crates/rc-difftest  `difftest`: lifted C against the real CPU in 32-bit mode (dev tool, runs in CI)
 recomp/crates/rc-cli       `recomp`: identify, info, list, extract, discover, codediff, lift (+ ignored tests on orig/)
-runtime/                   guest memory, CPU, x87, dispatcher + lifted tables, traps, HLE registry, VFS, PE loader,
-                           rc_game_main, tests; rc/lifted.h is what generated code includes
-hle/                       module table, kernel32 (GetTickCount), winmm (timeGetTime), tests
-platform/                  SDL3 and null backends, tests
+runtime/                   TropicoRecomp's runtime: memory/vm/heap, CPU, x87, dispatch (+ one table per lifted binary),
+                           imports, process (loader + DLL relocation), threads, clock, host files; rc_shell = game.c
+hle/                       TropicoRecomp's kernel32/user32/gdi32/ddraw/mss32/winmm + advapi32, dinput, dsound, dmusic,
+                           shell32, winmm/mci.c; frames.c = scripted input and screenshots
+platform/                  SDL3 (+ttf, mixer) and null backends
 games/<id>/                game.toml + CMakeLists.txt (rc_add_game → cultures-<id>)
 cmake/                     lift.cmake, game_main.c.in
 tools/                     audit.sh, hooks/ (pre-commit, commit-msg), dev-extract.sh, difftest/ (ref32.c, harness.c)

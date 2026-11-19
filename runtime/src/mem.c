@@ -1,135 +1,142 @@
 /* SPDX-License-Identifier: MIT */
-#if !defined(_WIN32)
-#define _DEFAULT_SOURCE 1 /* MAP_ANONYMOUS on glibc */
-#define _DARWIN_C_SOURCE 1
+/*
+ * Reserving the guest address space.
+ *
+ * 64-bit POSIX and Windows hosts reserve address space only and commit
+ * pages as the loader and the guest heap need them. Other hosts (32-bit)
+ * allocate the region outright, so they reserve less.
+ *
+ * Under Emscripten the region is the lower 2 GiB of the guest's addresses
+ * (everything the runtime maps lies below 0x80000000), taken from the
+ * top of the WebAssembly memory with sbrk: memory the browser adds is zero
+ * and is backed by real pages only once it is written.
+ */
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#elif !defined(_WIN32)
+/* MAP_ANONYMOUS and MAP_NORESERVE are not ISO C: glibc hides them in a
+ * strict C11 build unless asked (older releases, at least). */
+#define _DEFAULT_SOURCE
 #endif
-
 #include "rc/mem.h"
-#include "rc/log.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include <stdlib.h>
 
 #if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#else
+#define RC_MEM_VIRTUAL 1
+#elif defined(__EMSCRIPTEN__)
+#include <unistd.h>
+#define RC_MEM_VIRTUAL 0
+#define RC_MEM_GUEST_MAX UINT64_C(0x80000000)
+#elif (defined(__unix__) || defined(__APPLE__))
 #include <sys/mman.h>
 #include <unistd.h>
+#define RC_MEM_VIRTUAL 1
+#else
+#define RC_MEM_VIRTUAL 0
 #endif
 
 uint8_t *rc_mem_base;
+uint64_t rc_mem_size;
 
-#define GUEST_SPACE (UINT64_C(1) << 32)
-/* Unmapped slack after 4 GiB, so an access straddling 0xffffffff faults instead of wrapping. */
-#define GUARD_SIZE UINT64_C(0x10000)
-#define GUEST_PAGES (1u << 20)
-
-static uint8_t page_bits[GUEST_PAGES / 8];
-static uint64_t host_page = RC_PAGE_SIZE;
-
-static void mark(uint64_t start, uint64_t end, int mapped) {
-    for (uint64_t p = start / RC_PAGE_SIZE; p < end / RC_PAGE_SIZE; p++) {
-        if (mapped)
-            page_bits[p >> 3] |= (uint8_t)(1u << (p & 7));
-        else
-            page_bits[p >> 3] &= (uint8_t)~(1u << (p & 7));
-    }
-}
-
-/* Widen [addr, addr+size) to host pages. Returns -1 if it leaves the guest space. */
-static int host_range(uint32_t addr, uint32_t size, uint64_t *start, uint64_t *end) {
-    uint64_t s = (uint64_t)addr & ~(host_page - 1);
-    uint64_t e = ((uint64_t)addr + size + host_page - 1) & ~(host_page - 1);
-    if (e > GUEST_SPACE) return -1;
-    *start = s;
-    *end = e;
-    return 0;
-}
-
-int rc_mem_init(void) {
-#if UINTPTR_MAX <= 0xffffffffu
-    RC_ERROR("guest memory needs a 64-bit host");
-    return -1;
-#else
-    if (rc_mem_base) return 0;
-    const uint16_t probe = 1;
-    if (*(const uint8_t *)&probe != 1) {
-        RC_ERROR("big-endian hosts are not supported");
-        return -1;
-    }
-    const size_t total = (size_t)(GUEST_SPACE + GUARD_SIZE);
+static uint64_t page_size(void)
+{
 #if defined(_WIN32)
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    host_page = si.dwPageSize;
-    void *p = VirtualAlloc(NULL, total, MEM_RESERVE, PAGE_NOACCESS);
-    if (!p) {
-        RC_ERROR("cannot reserve 4 GiB of guest address space");
-        return -1;
-    }
+    return si.dwPageSize;
+#elif RC_MEM_VIRTUAL
+    long p = sysconf(_SC_PAGESIZE);
+    return p > 0 ? (uint64_t)p : 4096;
 #else
-    long ps = sysconf(_SC_PAGESIZE);
-    host_page = ps > 0 ? (uint64_t)ps : RC_PAGE_SIZE;
-    int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-#ifdef MAP_NORESERVE
-    flags |= MAP_NORESERVE;
-#endif
-    void *p = mmap(NULL, total, PROT_NONE, flags, -1, 0);
-    if (p == MAP_FAILED) {
-        RC_ERROR("cannot reserve 4 GiB of guest address space");
-        return -1;
-    }
-#endif
-    if (host_page < RC_PAGE_SIZE || (host_page & (host_page - 1)) != 0) {
-        RC_ERROR("unsupported host page size %llu", (unsigned long long)host_page);
-        return -1;
-    }
-    rc_mem_base = (uint8_t *)p;
-    for (size_t i = 0; i < sizeof page_bits; i++) page_bits[i] = 0;
-    return 0;
+    return 1;
 #endif
 }
 
-void rc_mem_shutdown(void) {
-    if (!rc_mem_base) return;
+bool rc_mem_reserve(uint64_t size)
+{
+    if (rc_mem_base != NULL || size == 0 || size > (UINT64_C(1) << 32)) {
+        return false;
+    }
+#if defined(_WIN32)
+    void *p = VirtualAlloc(NULL, (SIZE_T)size, MEM_RESERVE, PAGE_NOACCESS);
+    if (p == NULL) {
+        return false;
+    }
+#elif RC_MEM_VIRTUAL
+    void *p = mmap(NULL, (size_t)size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if (p == MAP_FAILED) {
+        return false;
+    }
+#elif defined(__EMSCRIPTEN__)
+    if (size > RC_MEM_GUEST_MAX) {
+        size = RC_MEM_GUEST_MAX;
+    }
+    /* Aligned to 64 KiB, in pieces: sbrk takes a signed size. */
+    uintptr_t at = (uintptr_t)sbrk(0);
+    uintptr_t pad = (0x10000u - (at & 0xffffu)) & 0xffffu;
+    if (pad && sbrk((intptr_t)pad) == (void *)-1) {
+        return false;
+    }
+    void *p = sbrk(0);
+    for (uint64_t got = 0; got < size;) {
+        uint64_t piece = size - got < (UINT64_C(1) << 30) ? size - got : (UINT64_C(1) << 30);
+        if (sbrk((intptr_t)piece) == (void *)-1) {
+            return false;
+        }
+        got += piece;
+    }
+#else
+    if ((uint64_t)(size_t)size != size) {
+        return false;
+    }
+    void *p = calloc(1, (size_t)size);
+    if (p == NULL) {
+        return false;
+    }
+#endif
+    rc_mem_base = p;
+    rc_mem_size = size;
+    return true;
+}
+
+bool rc_mem_commit(rc_addr addr, uint32_t len)
+{
+    if (rc_mem_base == NULL || len == 0) {
+        return rc_mem_base != NULL;
+    }
+    uint64_t pg = page_size();
+    uint64_t start = (uint64_t)addr / pg * pg;
+    uint64_t end = ((uint64_t)addr + len + pg - 1) / pg * pg;
+    if (end > rc_mem_size) {
+        return false;
+    }
+#if defined(_WIN32)
+    return VirtualAlloc(rc_mem_base + start, (SIZE_T)(end - start), MEM_COMMIT, PAGE_READWRITE) != NULL;
+#elif RC_MEM_VIRTUAL
+    return mprotect(rc_mem_base + start, (size_t)(end - start), PROT_READ | PROT_WRITE) == 0;
+#else
+    (void)start;
+    return true;
+#endif
+}
+
+void rc_mem_release(void)
+{
+    if (rc_mem_base == NULL) {
+        return;
+    }
 #if defined(_WIN32)
     VirtualFree(rc_mem_base, 0, MEM_RELEASE);
+#elif RC_MEM_VIRTUAL
+    munmap(rc_mem_base, (size_t)rc_mem_size);
+#elif defined(__EMSCRIPTEN__)
+    /* Taken for the life of the program. */
 #else
-    munmap(rc_mem_base, (size_t)(GUEST_SPACE + GUARD_SIZE));
+    free(rc_mem_base);
 #endif
     rc_mem_base = NULL;
-}
-
-int rc_mem_map(uint32_t addr, uint32_t size) {
-    uint64_t s, e;
-    if (!rc_mem_base || size == 0 || host_range(addr, size, &s, &e) != 0) return -1;
-#if defined(_WIN32)
-    if (!VirtualAlloc(rc_mem_base + s, (size_t)(e - s), MEM_COMMIT, PAGE_READWRITE)) return -1;
-#else
-    if (mprotect(rc_mem_base + s, (size_t)(e - s), PROT_READ | PROT_WRITE) != 0) return -1;
-#endif
-    mark(s, e, 1);
-    return 0;
-}
-
-int rc_mem_unmap(uint32_t addr, uint32_t size) {
-    uint64_t s, e;
-    if (!rc_mem_base || size == 0 || host_range(addr, size, &s, &e) != 0) return -1;
-#if defined(_WIN32)
-    if (!VirtualFree(rc_mem_base + s, (size_t)(e - s), MEM_DECOMMIT)) return -1;
-#else
-    int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED;
-#ifdef MAP_NORESERVE
-    flags |= MAP_NORESERVE;
-#endif
-    /* Replacing the pages drops their contents; a later map sees zeroes again. */
-    if (mmap(rc_mem_base + s, (size_t)(e - s), PROT_NONE, flags, -1, 0) == MAP_FAILED) return -1;
-#endif
-    mark(s, e, 0);
-    return 0;
-}
-
-int rc_mem_is_mapped(uint32_t addr) {
-    uint32_t p = addr / RC_PAGE_SIZE;
-    return rc_mem_base && (page_bits[p >> 3] >> (p & 7) & 1u);
+    rc_mem_size = 0;
 }
