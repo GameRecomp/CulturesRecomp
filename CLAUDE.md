@@ -16,7 +16,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M6 Picture and input | done | intro, menus and a scenario (1024x768x8) render; mouse and keyboard; all three C1 builds start |
 | M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
 | M8 In game | **in progress** | scenario runs 30,000 frames without trap; save and load work; open: a whole mission, timing, the minimap |
-| M11 Northland, 8th Wonder, Saga | **in progress** | all lift and reach their menus; open: DirectSound 8 (sound), DirectShow (movies) |
+| M11 Northland, 8th Wonder, Saga | **in progress** | all lift and reach their menus; DirectSound 8 and the MPEG movies (dshow + pl_mpeg) work; open: in game |
 | M10 Cultures 2 | **in progress** | boots to its serial prompt (silent DirectMusic objects); needs the player's serial once; MMX lifted; next: music (DLS synth) |
 
 Check `git log` for the latest work.
@@ -64,6 +64,7 @@ hle/                       TropicoRecomp's kernel32/user32/gdi32/ddraw/mss32/win
 platform/                  SDL3 (+ttf, mixer) and null backends
 games/<id>/                game.toml + CMakeLists.txt (rc_add_game → cultures-<id>)
 cmake/                     lift.cmake, game_main.c.in
+third_party/               vendored code under its own licence (pl_mpeg), see its README
 tools/                     audit.sh, hooks/ (pre-commit, commit-msg), dev-extract.sh, difftest/ (ref32.c, harness.c)
 docs/                      PLAN, ARCHITECTURE, TARGETS, RESEARCH, WORKFLOWS
 orig/                      the user's game media (git-ignored): 10 GOG installers, Gold ISO, Saga zip

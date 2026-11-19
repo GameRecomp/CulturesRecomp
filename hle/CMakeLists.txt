@@ -7,6 +7,7 @@ add_library(rc_hle STATIC
     dsound/dsound.c
     shell32/shell32.c
     wsock/wsock.c
+    dshow/dshow.c
     kernel32/process.c
     kernel32/memory.c
     kernel32/locale.c
@@ -28,5 +29,5 @@ add_library(rc_hle STATIC
     winmm/winmm.c
     winmm/mci.c
 )
-target_include_directories(rc_hle PUBLIC include PRIVATE .)
+target_include_directories(rc_hle PUBLIC include PRIVATE . "${PROJECT_SOURCE_DIR}/third_party/pl_mpeg")
 target_link_libraries(rc_hle PUBLIC rc_runtime rc_platform)

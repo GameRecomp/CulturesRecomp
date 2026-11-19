@@ -31,6 +31,10 @@ typedef struct rc_dd_surface {
 
 /* Object kinds of Direct3D 7, in DirectDraw's table. */
 enum { RC_DD_D3D = 5, RC_DD_DEVICE = 6, RC_DD_VB = 7 };
+/* An off-screen surface of the display's format: its IDirectDrawSurface. */
+uint32_t rc_dd_offscreen(uint32_t w, uint32_t h);
+/* The surface kind, for rc_dd_object_of (dshow.c writes movie frames into surfaces). */
+enum { RC_DD_SURFACE = 2 };
 
 /* A new object of a kind (its index); its guest interface of version v. */
 uint32_t rc_dd_new(int kind);

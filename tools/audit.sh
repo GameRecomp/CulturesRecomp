@@ -44,6 +44,10 @@ for f in "${files[@]}"; do
     *.c|*.h|*.in|*.rs|*.cmake|*.toml|*.sh|*.py|*.yml|*.yaml|CMakeLists.txt|*/CMakeLists.txt) needs_spdx=1 ;;
     tools/hooks/*) needs_spdx=1 ;;
   esac
+  # Vendored code keeps its own licence header (third_party/README.md lists each).
+  case "$f" in
+    third_party/*) needs_spdx=0 ;;
+  esac
   if (( needs_spdx )) && ! head -n 5 "$f" | grep -q 'SPDX-License-Identifier: MIT'; then
     err "$f: missing 'SPDX-License-Identifier: MIT' in the first 5 lines"
   fi

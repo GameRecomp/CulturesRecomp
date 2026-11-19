@@ -252,6 +252,12 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
       `mmio*` without `mmioOpen` (never reached: errors), `DirectSoundCreate8` (no device yet)
 - [x] Research question 2 answered: the movies go through DirectShow (`CoCreateInstance(CLSID_FilterGraph,
       IID_IGraphBuilder)`); without it the games skip them
+- [x] DirectSound 8 (`hle/dsound`): buffers in guest memory fed into the platform's PCM streams from the play
+      position, looping and one-shot, volume, frequency, duplicates; the games create a buffer per sample (over 700)
+- [x] Movies: the games use DirectShow's multimedia streams (`CLSID_AMMultiMediaStream`, `IDirectDrawMediaStream`,
+      `IDirectDrawStreamSample::Update`) and draw the frames themselves. `hle/dshow` decodes the MPEG-1 files with
+      pl_mpeg (`third_party/`, MIT) into a DirectDraw surface it makes, frame by frame on the clock, with their sound;
+      the filter-graph interfaces are there too. Northland's intro plays
 - [ ] Research question 2: MPEG playback path → `dshow` or MCI-MPEG HLE on top of an MPEG-1 decoder
 - [ ] `DirectSoundCreate8` and the `IDirectSound8` buffers
 - [ ] Northland `Game.exe` (one build for EN/DE/ES), 8th Wonder `Game.exe` EN/DE and ES

@@ -3,6 +3,7 @@
 #include "ddraw/ddraw.h"
 #include "dinput/dinput.h"
 #include "dmusic/dmusic.h"
+#include "dshow/dshow.h"
 #include "dsound/dsound.h"
 #include "shell32/shell32.h"
 #include "wsock/wsock.h"
@@ -68,8 +69,11 @@ void rc_hle_shell32(void) { rc_register_imports(rc_shell32_defs, rc_shell32_coun
 
 void rc_hle_wsock(void) { rc_register_imports(rc_wsock_defs, rc_wsock_count); }
 
+void rc_hle_dshow(void) { rc_dshow_init(); }
+
 void rc_hle_all(void)
 {
+    rc_hle_dshow();
     rc_hle_wsock();
     rc_hle_advapi32();
     rc_hle_dinput();

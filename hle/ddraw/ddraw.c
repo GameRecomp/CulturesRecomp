@@ -545,6 +545,14 @@ static uint32_t make_surface(uint32_t w, uint32_t h, uint32_t bpp, uint32_t caps
     return o;
 }
 
+/* An off-screen surface in the display's format, for other modules (a movie stream's
+ * frames): its guest IDirectDrawSurface interface. */
+uint32_t rc_dd_offscreen(uint32_t w, uint32_t h)
+{
+    uint32_t o = make_surface(w, h, display.bpp ? display.bpp : 16, 0x40u /* DDSCAPS_OFFSCREENPLAIN */);
+    return iface(o, 1);
+}
+
 static void k_CreateSurface(rc_cpu *c)
 {
     self(c, O_DDRAW);
