@@ -227,8 +227,14 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
       through its initialisation. New for it: a `switch` bounded through a stack slot (`cmp [esp+4], n` before
       `mov eax, [esp+4]`; general in discovery), `emms` (MMX state), Winsock as an offline network (wsock32 and
       ws2_32 by ordinal), `MoveFileA`, `GetTempFileNameA`, `SetThreadPriority`, `ShellExecuteExA`, `CoCreateGuid`
-- [ ] Next: DirectMusic. The game creates `IDirectMusicPerformance8` and the composer; without them a list stays empty
-      and the game divides by its length (`0x473199`). Then MMX: the C2 engine uses it without a CPUID check
+- [x] DirectMusic as silent objects (`hle/dmusic`): performance, loader, segments and their states, audio paths and
+      the composer answer as when music plays, without sound. Miles keeps up to 4096 samples (Cultures 2 loads about
+      1100 at start; the divide by zero at `0x473199` came from samples that did not load)
+- [x] Cultures 2 shows its splash screen and then asks for the serial number, as the original does on a fresh install:
+      it keeps it in `HKCU\SOFTWARE\Funatics\Cultures2\SerialNumber` (our registry, `registry.txt`), which the player's
+      own serial fills once. GOG's CD-check patch (drive `.`) passes unchanged
+- [ ] Next: past the serial prompt (keyboard text entry), then MMX, which the C2 engine uses without a CPUID check;
+      music through a DLS synth
 - [ ] Research question 1: is `.cms_t` executed? Compare with the untouched `Cultures2MP.exe`
 - [ ] Discovery and lifting reuse M2–M4 (new manifest seeds only)
 - [ ] `ole32` COM class registry. `dmusic`: Loader, Performance, Segment, AudioPath as far as `gedx8musicdrv.dll` uses them.

@@ -35,7 +35,8 @@ typedef struct voice {
     int is_stream;
 } voice;
 
-#define VOICES 256
+/* Cultures 2 loads about 1100 samples at start; Tropico far fewer. */
+#define VOICES 4096
 static voice voices[VOICES];
 static int audio_ok;
 static uint32_t digital; /* the driver handle */

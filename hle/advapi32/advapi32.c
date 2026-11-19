@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "rc/hostfs.h"
+#include "rc/log.h"
 #include "rc/process.h"
 
 #define ADV "ADVAPI32.dll"
@@ -253,6 +254,9 @@ static void k_RegOpenKeyExA(rc_cpu *c)
         RC_RETURN(c, ERROR_INVALID_HANDLE, 5);
     }
     int k = find_key(path);
+    if (rc_trace("registry")) {
+        rc_log("[registry] open %s: %s", path, k < 0 ? "not found" : "ok");
+    }
     if (k < 0) {
         RC_RETURN(c, ERROR_FILE_NOT_FOUND, 5);
     }
@@ -302,6 +306,9 @@ static void k_RegQueryValueExA(rc_cpu *c)
     }
     const char *name = rc_str(RC_ARG(c, 1));
     value *v = find_value(k, name ? name : "");
+    if (rc_trace("registry")) {
+        rc_log("[registry] query %s \\ %s: %s", keys[k], name ? name : "", v ? "ok" : "not found");
+    }
     if (!v) {
         RC_RETURN(c, ERROR_FILE_NOT_FOUND, 6);
     }
