@@ -23,6 +23,8 @@ void rc_hle_kernel32(void)
     rc_register_imports(rc_k32_file, rc_k32_file_count);
     rc_register_imports(rc_k32_profile, rc_k32_profile_count);
     rc_register_imports(rc_k32_sync, rc_k32_sync_count);
+    rc_k32_global_init();
+    rc_k32_misc_init();
     rc_register_imports(rc_version_defs, rc_version_count); /* VERSION.dll, on the same files */
     rc_register_imports(rc_ole32_defs, rc_ole32_count);
 }
@@ -36,6 +38,9 @@ void rc_hle_user32(void)
 void rc_hle_gdi32(void)
 {
     rc_register_imports(rc_gdi32_setup, rc_gdi32_setup_count);
+    rc_register_imports(rc_gdi32_objects, rc_gdi32_objects_count);
+    rc_register_imports(rc_gdi32_draw, rc_gdi32_draw_count);
+    rc_register_imports(rc_gdi32_region, rc_gdi32_region_count);
     rc_register_imports(rc_gdi32_text, rc_gdi32_text_count);
     rc_register_imports(rc_gdi32_palette, rc_gdi32_palette_count);
 }

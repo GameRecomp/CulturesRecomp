@@ -1,18 +1,15 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * gdi32: bitmaps, fonts, text and lines, drawn into guest memory.
- *
- * A memory DC draws into the bitmap selected into it, a surface DC into a
- * DirectDraw surface. Text is rasterised by the platform's fonts (see
- * rc/text.h) without antialiasing, in the DC's text colour, over its
- * background colour (the DC default, opaque white, since these games never
- * change the background mode).
+ * gdi32: fonts and text. Text is rasterised by the platform's fonts (see rc/text.h) without
+ * antialiasing, in the DC's text color, over its background color when the background mode is
+ * OPAQUE (the default), and drawn through the clipping of draw.c.
  */
 #include <stdio.h>
 #include <string.h>
 
 #include "dc.h"
 #include "gdi32.h"
+#include "objects.h"
 #include "rc/hle.h"
 #include "rc/log.h"
 #include "rc/text.h"
@@ -20,202 +17,68 @@
 
 #define G32 "GDI32.dll"
 
-/* ---- objects ---- */
+/* ---- fonts ---- */
 
-enum okind { OB_FREE, OB_BITMAP, OB_FONT, OB_PEN };
-
-typedef struct gobj {
-    enum okind kind;
-    /* bitmap */
-    uint32_t w, h, bpp, widthbytes, pixels;
-    /* font */
-    char face[64];
-    int32_t height;
-    uint32_t weight, italic;
-    /* pen */
-    uint32_t style, width, color;
-} gobj;
-
-#define OBJS 1024
-#define OBJ_HANDLE 0x03000000u
-static gobj objs[OBJS];
-
-static uint32_t obj_new(enum okind k)
+static uint32_t new_font(int32_t height, int32_t width, uint32_t weight, uint32_t italic, uint32_t underline,
+                         uint32_t charset, uint32_t pitch, const char *face)
 {
-    for (uint32_t i = 1; i < OBJS; i++) {
-        if (objs[i].kind == OB_FREE) {
-            memset(&objs[i], 0, sizeof objs[i]);
-            objs[i].kind = k;
-            return OBJ_HANDLE + 4 * i;
-        }
-    }
-    rc_fatal("gdi32: out of objects");
-}
-
-static gobj *obj_get(uint32_t h, enum okind k)
-{
-    if (h < OBJ_HANDLE || (h - OBJ_HANDLE) % 4 || (h - OBJ_HANDLE) / 4 >= OBJS) {
-        return NULL;
-    }
-    gobj *o = &objs[(h - OBJ_HANDLE) / 4];
-    return o->kind == k ? o : NULL;
-}
-
-static void k_CreateBitmapIndirect(rc_cpu *c)
-{
-    uint32_t p = RC_ARG(c, 0);
-    uint32_t w = rc_ld32(p + 4), h = rc_ld32(p + 8), wb = rc_ld32(p + 12);
-    uint32_t bpp = rc_ld16(p + 18), bits = rc_ld32(p + 20);
-    if (w == 0 || h == 0 || w > 8192 || h > 8192) {
-        RC_RETURN(c, 0, 1);
-    }
-    uint32_t min_wb = ((w * bpp + 15) / 16) * 2; /* rows are word aligned */
-    if (wb < min_wb) {
-        wb = min_wb;
-    }
-    uint32_t hb = obj_new(OB_BITMAP);
-    gobj *b = obj_get(hb, OB_BITMAP);
-    b->w = w;
-    b->h = h;
-    b->bpp = bpp;
-    b->widthbytes = wb;
-    b->pixels = rc_heap_alloc(wb * h, true);
-    if (bits) {
-        memcpy(rc_ptr(b->pixels), rc_ptr(bits), (size_t)wb * h);
-    }
-    if (rc_trace("gdi")) {
-        rc_log("[gdi] bitmap %ux%u, %u bits", w, h, bpp);
-    }
-    RC_RETURN(c, hb, 1);
-}
-
-bool rc_gdi_bitmap(uint32_t h, uint32_t *width, uint32_t *height, uint32_t *bpp, uint32_t *widthbytes,
-                   uint32_t *pixels)
-{
-    gobj *b = obj_get(h, OB_BITMAP);
-    if (!b) {
-        return false;
-    }
-    *width = b->w;
-    *height = b->h;
-    *bpp = b->bpp;
-    *widthbytes = b->widthbytes;
-    *pixels = b->pixels;
-    return true;
-}
-
-static void k_GetBitmapBits(rc_cpu *c)
-{
-    gobj *b = obj_get(RC_ARG(c, 0), OB_BITMAP);
-    uint32_t n = RC_ARG(c, 1), out = RC_ARG(c, 2);
-    if (!b) {
-        RC_RETURN(c, 0, 3);
-    }
-    uint32_t size = b->widthbytes * b->h;
-    if (n > size) {
-        n = size;
-    }
-    memcpy(rc_ptr(out), rc_ptr(b->pixels), n);
-    RC_RETURN(c, n, 3);
-}
-
-static void k_CreateFontA(rc_cpu *c)
-{
-    uint32_t hf = obj_new(OB_FONT);
-    gobj *f = obj_get(hf, OB_FONT);
-    f->height = (int32_t)RC_ARG(c, 0);
-    f->weight = RC_ARG(c, 4);
-    f->italic = RC_ARG(c, 5) & 0xff;
-    const char *face = rc_str(RC_ARG(c, 13));
+    uint32_t hf = rc_gobj_new(OB_FONT);
+    gobj *f = rc_gobj_get(hf, OB_FONT);
+    f->height = height;
+    f->width = width;
+    f->weight = weight ? weight : 400;
+    f->italic = italic;
+    f->underline = underline;
+    f->charset = charset;
+    f->pitch = pitch;
     snprintf(f->face, sizeof f->face, "%s", face && *face ? face : "Arial");
     if (rc_trace("gdi")) {
         rc_log("[gdi] font \"%s\" height %d weight %u%s", f->face, f->height, f->weight, f->italic ? " italic" : "");
     }
-    RC_RETURN(c, hf, 14);
+    return hf;
 }
 
-static rc_font *font_of(const rc_dc *d)
+/* CreateFontA(height, width, escapement, orientation, weight, italic, underline, strikeout,
+ * charset, precision, clip precision, quality, pitch and family, face) */
+static void k_CreateFontA(rc_cpu *c)
 {
-    gobj *f = obj_get(d->font, OB_FONT);
+    const char *face = RC_ARG(c, 13) ? rc_str(RC_ARG(c, 13)) : NULL;
+    RC_RETURN(c,
+              new_font((int32_t)RC_ARG(c, 0), (int32_t)RC_ARG(c, 1), RC_ARG(c, 4), RC_ARG(c, 5) & 0xff,
+                       RC_ARG(c, 6) & 0xff, RC_ARG(c, 8) & 0xff, RC_ARG(c, 12) & 0xff, face),
+              14);
+}
+
+/* CreateFontIndirectA(LOGFONTA) */
+static void k_CreateFontIndirectA(rc_cpu *c)
+{
+    uint32_t lf = RC_ARG(c, 0);
+    char face[33];
+    snprintf(face, sizeof face, "%.32s", (const char *)rc_ptr(lf + 28));
+    RC_RETURN(c,
+              new_font((int32_t)rc_ld32(lf), (int32_t)rc_ld32(lf + 4), rc_ld32(lf + 16), rc_ld8(lf + 20),
+                       rc_ld8(lf + 21), rc_ld8(lf + 23), rc_ld8(lf + 27), face),
+              1);
+}
+
+rc_font *rc_gdi_font_of(const rc_dc *d)
+{
+    gobj *f = rc_gobj_get(d->font ? d->font : rc_gdi_stock(13), OB_FONT);
     if (f) {
-        return rc_font_get(f->face, f->height, (int)f->weight, f->italic != 0);
+        rc_font *r = rc_font_get(f->face, f->height, (int)f->weight, f->italic != 0);
+        if (r) {
+            return r;
+        }
     }
     return rc_font_get("System", 16, 700, false);
 }
 
+static rc_font *font_of(const rc_dc *d) { return rc_gdi_font_of(d); }
+
 static const char *face_of(const rc_dc *d)
 {
-    gobj *f = obj_get(d->font, OB_FONT);
+    gobj *f = rc_gobj_get(d->font ? d->font : rc_gdi_stock(13), OB_FONT);
     return f ? f->face : "System";
-}
-
-static void k_DeleteObject(rc_cpu *c)
-{
-    uint32_t h = RC_ARG(c, 0);
-    if (rc_gdi_is_palette(h)) {
-        rc_gdi_free_palette(h);
-        RC_RETURN(c, 1, 1);
-    }
-    gobj *b = obj_get(h, OB_BITMAP);
-    if (b) {
-        rc_heap_free(b->pixels);
-        b->kind = OB_FREE;
-        RC_RETURN(c, 1, 1);
-    }
-    gobj *f = obj_get(h, OB_FONT);
-    if (f) {
-        f->kind = OB_FREE;
-    }
-    gobj *p = obj_get(h, OB_PEN);
-    if (p) {
-        p->kind = OB_FREE;
-    }
-    RC_RETURN(c, 1, 1);
-}
-
-static void k_CreateCompatibleDC(rc_cpu *c) { RC_RETURN(c, rc_dc_new(), 1); }
-
-static void k_DeleteDC(rc_cpu *c)
-{
-    rc_dc_free(RC_ARG(c, 0));
-    RC_RETURN(c, 1, 1);
-}
-
-static void k_SelectObject(rc_cpu *c)
-{
-    uint32_t hdc = RC_ARG(c, 0), h = RC_ARG(c, 1);
-    rc_dc *d = rc_dc_get(hdc);
-    if (!d) {
-        RC_RETURN(c, 0, 2);
-    }
-    gobj *b = obj_get(h, OB_BITMAP);
-    if (b) {
-        uint32_t old = d->bitmap;
-        d->bitmap = h;
-        uint32_t r = 0, g = 0, bl = 0;
-        if (b->bpp == 16) {
-            r = 0xf800;
-            g = 0x07e0;
-            bl = 0x001f;
-        } else if (b->bpp >= 24) {
-            r = 0xff0000;
-            g = 0xff00;
-            bl = 0xff;
-        }
-        d->target = (rc_pixels){b->pixels, b->w, b->h, b->widthbytes, b->bpp, r, g, bl};
-        RC_RETURN(c, old ? old : 0x03fffff0u, 2); /* a stand-in for the default bitmap */
-    }
-    if (obj_get(h, OB_FONT)) {
-        uint32_t old = d->font;
-        d->font = h;
-        RC_RETURN(c, old ? old : 0x03fffff4u, 2);
-    }
-    if (obj_get(h, OB_PEN) || h == 0x03fffffcu) {
-        uint32_t old = d->pen;
-        d->pen = h == 0x03fffffcu ? 0 : h;
-        RC_RETURN(c, old ? old : 0x03fffffcu, 2); /* a stand-in for the default pen */
-    }
-    RC_RETURN(c, 0x03fffff8u, 2);
 }
 
 static void k_SetTextColor(rc_cpu *c)
@@ -223,7 +86,7 @@ static void k_SetTextColor(rc_cpu *c)
     rc_dc *d = rc_dc_get(RC_ARG(c, 0));
     uint32_t old = d ? d->text_color : 0;
     if (d) {
-        d->text_color = RC_ARG(c, 1);
+        d->text_color = RC_ARG(c, 1) & 0xffffff;
     }
     RC_RETURN(c, old, 2);
 }
@@ -236,149 +99,6 @@ static void k_SetTextAlign(rc_cpu *c)
         d->text_align = RC_ARG(c, 1);
     }
     RC_RETURN(c, old, 2);
-}
-
-/* ---- pixels ---- */
-
-/* A COLORREF (0x00BBGGRR) as a pixel value of the target. */
-static uint32_t pixel_value(const rc_dc *d, uint32_t cr)
-{
-    uint32_t r = cr & 0xff, g = (cr >> 8) & 0xff, b = (cr >> 16) & 0xff;
-    const rc_pixels *t = &d->target;
-    switch (t->bpp) {
-    case 1:
-        return (r + g + b) / 3 >= 128 ? 1u : 0u;
-    case 8: {
-        if (!d->has_palette) {
-            return (r * 30 + g * 59 + b * 11) / 100;
-        }
-        uint32_t best = 0, dist = 0xffffffffu;
-        for (uint32_t i = 0; i < 256; i++) {
-            uint32_t p = d->palette[i];
-            int32_t dr = (int32_t)((p >> 16) & 0xff) - (int32_t)r, dg = (int32_t)((p >> 8) & 0xff) - (int32_t)g,
-                    db = (int32_t)(p & 0xff) - (int32_t)b;
-            uint32_t e = (uint32_t)(dr * dr + dg * dg + db * db);
-            if (e < dist) {
-                dist = e;
-                best = i;
-            }
-        }
-        return best;
-    }
-    case 16:
-        if (t->gmask == 0x03e0) {
-            return ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
-        }
-        return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
-    default:
-        return (r << 16) | (g << 8) | b;
-    }
-}
-
-static void plot_value(const rc_pixels *t, int32_t x, int32_t y, uint32_t v)
-{
-    if (!t->pixels || x < 0 || y < 0 || (uint32_t)x >= t->w || (uint32_t)y >= t->h) {
-        return;
-    }
-    uint32_t row = t->pixels + (uint32_t)y * t->pitch;
-    switch (t->bpp) {
-    case 1: {
-        uint32_t a = row + (uint32_t)x / 8;
-        uint8_t m = (uint8_t)(0x80u >> (x & 7));
-        rc_st8(a, (uint8_t)(v ? rc_ld8(a) | m : rc_ld8(a) & ~m));
-        break;
-    }
-    case 8: rc_st8(row + (uint32_t)x, (uint8_t)v); break;
-    case 16: rc_st16(row + 2 * (uint32_t)x, (uint16_t)v); break;
-    case 24:
-        rc_st8(row + 3 * (uint32_t)x, (uint8_t)v);
-        rc_st16(row + 3 * (uint32_t)x + 1, (uint16_t)(v >> 8));
-        break;
-    default: rc_st32(row + 4 * (uint32_t)x, v); break;
-    }
-}
-
-void rc_gdi_fill(uint32_t hdc, int32_t l, int32_t t, int32_t r, int32_t b, uint32_t colorref)
-{
-    rc_dc *d = rc_dc_get(hdc);
-    if (!d || !d->target.pixels) {
-        return;
-    }
-    uint32_t v = pixel_value(d, colorref);
-    for (int32_t y = t; y < b; y++) {
-        for (int32_t x = l; x < r; x++) {
-            plot_value(&d->target, x, y, v);
-        }
-    }
-}
-
-/* ---- lines ---- */
-
-/* PS_SOLID 0, PS_DASH 1, PS_DOT 2, PS_DASHDOT 3, PS_DASHDOTDOT 4, PS_NULL 5,
- * PS_INSIDEFRAME 6; the style is drawn solid. */
-static void k_CreatePen(rc_cpu *c)
-{
-    uint32_t h = obj_new(OB_PEN);
-    gobj *p = obj_get(h, OB_PEN);
-    p->style = RC_ARG(c, 0) & 0xf;
-    p->width = RC_ARG(c, 1) ? RC_ARG(c, 1) : 1;
-    p->color = RC_ARG(c, 2);
-    RC_RETURN(c, h, 3);
-}
-
-static void k_MoveToEx(rc_cpu *c)
-{
-    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
-    if (!d) {
-        RC_RETURN(c, 0, 4);
-    }
-    uint32_t old = RC_ARG(c, 3);
-    if (old) {
-        rc_st32(old, (uint32_t)d->cur_x);
-        rc_st32(old + 4, (uint32_t)d->cur_y);
-    }
-    d->cur_x = (int32_t)RC_ARG(c, 1);
-    d->cur_y = (int32_t)RC_ARG(c, 2);
-    RC_RETURN(c, 1, 4);
-}
-
-/* A line from the current position to (x, y), without its last pixel, as
- * GDI draws it; a wider pen draws a square of its width at each point. */
-static void k_LineTo(rc_cpu *c)
-{
-    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
-    int32_t x1 = (int32_t)RC_ARG(c, 1), y1 = (int32_t)RC_ARG(c, 2);
-    if (!d) {
-        RC_RETURN(c, 0, 3);
-    }
-    gobj *p = d->pen ? obj_get(d->pen, OB_PEN) : NULL;
-    uint32_t style = p ? p->style : 0, width = p ? p->width : 1, color = p ? p->color : 0;
-    if (style != 5 && d->target.pixels) {
-        uint32_t v = pixel_value(d, color);
-        int32_t x = d->cur_x, y = d->cur_y;
-        int32_t dx = x1 > x ? x1 - x : x - x1, dy = y1 > y ? y - y1 : y1 - y;
-        int32_t sx = x < x1 ? 1 : -1, sy = y < y1 ? 1 : -1, err = dx + dy;
-        int32_t lo = -(int32_t)(width - 1) / 2, hi = lo + (int32_t)width;
-        while (x != x1 || y != y1) {
-            for (int32_t j = lo; j < hi; j++) {
-                for (int32_t i = lo; i < hi; i++) {
-                    plot_value(&d->target, x + i, y + j, v);
-                }
-            }
-            int32_t e2 = 2 * err;
-            if (e2 >= dy) {
-                err += dy;
-                x += sx;
-            }
-            if (e2 <= dx) {
-                err += dx;
-                y += sy;
-            }
-        }
-    }
-    d->cur_x = x1;
-    d->cur_y = y1;
-    RC_RETURN(c, 1, 3);
 }
 
 /* Fonts are the platform's: none was added, so none is removed. */
@@ -425,8 +145,10 @@ static uint32_t to_unicode(uint8_t ch)
     return ((uint32_t)(p[0] & 0x0f) << 12) | ((uint32_t)(p[1] & 0x3f) << 6) | (p[2] & 0x3f);
 }
 
+/* ---- drawing text ---- */
+
 typedef struct plotter {
-    const rc_pixels *t;
+    rc_dc *d;
     int32_t x, y;
     uint32_t v;
 } plotter;
@@ -434,32 +156,57 @@ typedef struct plotter {
 static void plot(void *ctx, int x, int y)
 {
     plotter *p = ctx;
-    plot_value(p->t, p->x + x, p->y + y, p->v);
+    rc_dc_plot(p->d, p->x + x, p->y + y, p->v);
+}
+
+int rc_gdi_text(rc_dc *d, int32_t x, int32_t y, const char *s, uint32_t n)
+{
+    char text[2048];
+    to_utf8((const uint8_t *)s, n, text, sizeof text);
+    rc_font *f = font_of(d);
+    if (!f || !d->target.pixels) {
+        return 0;
+    }
+    plotter p = {d, x, y, rc_dc_pixel(d, d->text_color)};
+    return rc_font_draw(f, text, plot, &p);
+}
+
+void rc_gdi_text_size(rc_dc *d, const char *s, uint32_t n, int *w, int *h)
+{
+    char text[2048];
+    to_utf8((const uint8_t *)s, n, text, sizeof text);
+    rc_font *f = font_of(d);
+    *w = 0;
+    *h = 16;
+    if (f) {
+        rc_font_size(f, text, w, h);
+    }
 }
 
 #define TA_RIGHT 2u
 #define TA_CENTER 6u
 #define TA_BOTTOM 8u
 #define TA_BASELINE 24u
+#define ETO_OPAQUE 2u
+#define ETO_CLIPPED 4u
 
-static void k_TextOutA(rc_cpu *c)
+/* Text at (x, y) logical, aligned as the DC says; `opaque`, `clip`: ExtTextOut's rectangle. */
+static void text_out(rc_dc *d, int32_t x, int32_t y, uint32_t s, uint32_t n, uint32_t options, uint32_t rect)
 {
-    uint32_t hdc = RC_ARG(c, 0), s = RC_ARG(c, 3), n = RC_ARG(c, 4);
-    int32_t x = (int32_t)RC_ARG(c, 1), y = (int32_t)RC_ARG(c, 2);
-    rc_dc *d = rc_dc_get(hdc);
-    if (!d) {
-        RC_RETURN(c, 1, 5);
+    char raw[2048];
+    if (n > sizeof raw) {
+        n = sizeof raw;
     }
-    char text[2048];
-    to_utf8(rc_ptr(s), n, text, sizeof text);
+    memcpy(raw, rc_ptr(s), n);
+    int w = 0, h = 16;
+    rc_gdi_text_size(d, raw, n, &w, &h);
     rc_font *f = font_of(d);
-    if (!f) {
-        RC_RETURN(c, 1, 5);
+    rc_font_metrics m = {13, 3, 16, 0, 7, 14};
+    if (f) {
+        rc_font_metrics_of(f, &m);
     }
-    int w, h;
-    rc_font_size(f, text, &w, &h);
-    rc_font_metrics m;
-    rc_font_metrics_of(f, &m);
+    x = rc_dc_x(d, x);
+    y = rc_dc_y(d, y);
     uint32_t a = d->text_align;
     if ((a & TA_CENTER) == TA_CENTER) {
         x -= w / 2;
@@ -471,12 +218,125 @@ static void k_TextOutA(rc_cpu *c)
     } else if (a & TA_BOTTOM) {
         y -= h;
     }
-    if (d->bk_mode != 1) { /* OPAQUE, the default */
-        rc_gdi_fill(hdc, x, y, x + w, y + h, d->bk_color);
+    rc_rect r = {0, 0, 0, 0};
+    if (rect) {
+        r = (rc_rect){rc_dc_x(d, (int32_t)rc_ld32(rect)), rc_dc_y(d, (int32_t)rc_ld32(rect + 4)),
+                      rc_dc_x(d, (int32_t)rc_ld32(rect + 8)), rc_dc_y(d, (int32_t)rc_ld32(rect + 12))};
     }
-    plotter p = {&d->target, x, y, pixel_value(d, d->text_color)};
-    rc_font_draw(f, text, plot, &p);
+    if (rect && (options & ETO_OPAQUE)) {
+        rc_dc_fill(d, r, d->bk_color);
+    } else if (d->bk_mode != 1 && n) { /* OPAQUE */
+        rc_dc_fill(d, (rc_rect){x, y, x + w, y + h}, d->bk_color);
+    }
+    bool had = d->has_clip;
+    rc_rgn keep = d->clip;
+    if (rect && (options & ETO_CLIPPED)) {
+        if (!d->has_clip) {
+            rc_rgn_set(&d->clip, -0x40000000, -0x40000000, 0x40000000, 0x40000000);
+            d->has_clip = true;
+        }
+        rc_rgn_and_rect(&d->clip, r);
+    }
+    rc_gdi_text(d, x, y, raw, n);
+    d->has_clip = had;
+    d->clip = keep;
+}
+
+static void k_TextOutA(rc_cpu *c)
+{
+    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
+    if (d) {
+        text_out(d, (int32_t)RC_ARG(c, 1), (int32_t)RC_ARG(c, 2), RC_ARG(c, 3), RC_ARG(c, 4), 0, 0);
+    }
     RC_RETURN(c, 1, 5);
+}
+
+/* ExtTextOutA(dc, x, y, options, rect, text, n, dx) */
+static void k_ExtTextOutA(rc_cpu *c)
+{
+    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
+    if (d) {
+        text_out(d, (int32_t)RC_ARG(c, 1), (int32_t)RC_ARG(c, 2), RC_ARG(c, 5), RC_ARG(c, 6), RC_ARG(c, 3), RC_ARG(c, 4));
+    }
+    RC_RETURN(c, 1, 8);
+}
+
+/* GetTextExtentPoint32A / GetTextExtentPointA(dc, text, n, size) */
+static void k_GetTextExtentPoint32A(rc_cpu *c)
+{
+    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
+    uint32_t n = RC_ARG(c, 2), out = RC_ARG(c, 3);
+    if (!d) {
+        RC_RETURN(c, 0, 4);
+    }
+    char raw[2048];
+    if (n > sizeof raw) {
+        n = sizeof raw;
+    }
+    memcpy(raw, rc_ptr(RC_ARG(c, 1)), n);
+    int w, h;
+    rc_gdi_text_size(d, raw, n, &w, &h);
+    rc_font *f = font_of(d);
+    if (f) {
+        rc_font_metrics m;
+        rc_font_metrics_of(f, &m);
+        h = m.height;
+    }
+    rc_st32(out, (uint32_t)w);
+    rc_st32(out + 4, (uint32_t)h);
+    RC_RETURN(c, 1, 4);
+}
+
+/* GetTextMetricsA(dc, TEXTMETRICA) */
+static void k_GetTextMetricsA(rc_cpu *c)
+{
+    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
+    uint32_t t = RC_ARG(c, 1);
+    if (!d) {
+        RC_RETURN(c, 0, 2);
+    }
+    rc_font *f = font_of(d);
+    rc_font_metrics m = {13, 3, 16, 0, 7, 14};
+    if (f) {
+        rc_font_metrics_of(f, &m);
+    }
+    gobj *o = rc_gobj_get(d->font ? d->font : rc_gdi_stock(13), OB_FONT);
+    memset(rc_ptr(t), 0, 56);
+    rc_st32(t, (uint32_t)m.height);
+    rc_st32(t + 4, (uint32_t)m.ascent);
+    rc_st32(t + 8, (uint32_t)m.descent);
+    rc_st32(t + 12, (uint32_t)m.internal_leading);
+    rc_st32(t + 20, (uint32_t)m.avg_width);
+    rc_st32(t + 24, (uint32_t)m.max_width);
+    rc_st32(t + 28, o ? o->weight : 400);
+    rc_st32(t + 36, 96);
+    rc_st32(t + 40, 96);
+    rc_st8(t + 44, 0x20);  /* first char */
+    rc_st8(t + 45, 0xff);  /* last */
+    rc_st8(t + 46, 0x1f);  /* default */
+    rc_st8(t + 47, 0x20);  /* break */
+    rc_st8(t + 48, (uint8_t)(o ? o->italic : 0));
+    rc_st8(t + 49, (uint8_t)(o ? o->underline : 0));
+    /* pitch and family: TMPF_FIXED_PITCH (1) means variable here, plus TrueType (4) */
+    rc_st8(t + 51, (uint8_t)((o && o->pitch == 1) ? 0x04 : 0x05));
+    RC_RETURN(c, 1, 2);
+}
+
+/* GetCharWidthA / GetCharWidth32A(dc, first, last, widths) */
+static void k_GetCharWidthA(rc_cpu *c)
+{
+    rc_dc *d = rc_dc_get(RC_ARG(c, 0));
+    uint32_t first = RC_ARG(c, 1), last = RC_ARG(c, 2), out = RC_ARG(c, 3);
+    if (!d || last < first || last > 255) {
+        RC_RETURN(c, 0, 4);
+    }
+    for (uint32_t ch = first; ch <= last; ch++) {
+        char one = (char)ch;
+        int w, h;
+        rc_gdi_text_size(d, &one, 1, &w, &h);
+        rc_st32(out + 4 * (ch - first), (uint32_t)w);
+    }
+    RC_RETURN(c, 1, 4);
 }
 
 static void k_GetCharABCWidthsA(rc_cpu *c)
@@ -563,22 +423,20 @@ static void k_EnumFontFamiliesExA(rc_cpu *c)
 }
 
 const rc_import_def rc_gdi32_text[] = {
-    {G32, "CreateBitmapIndirect", k_CreateBitmapIndirect},
-    {G32, "GetBitmapBits", k_GetBitmapBits},
     {G32, "CreateFontA", k_CreateFontA},
-    {G32, "DeleteObject", k_DeleteObject},
-    {G32, "CreateCompatibleDC", k_CreateCompatibleDC},
-    {G32, "DeleteDC", k_DeleteDC},
-    {G32, "SelectObject", k_SelectObject},
+    {G32, "CreateFontIndirectA", k_CreateFontIndirectA},
     {G32, "SetTextColor", k_SetTextColor},
     {G32, "SetTextAlign", k_SetTextAlign},
     {G32, "TextOutA", k_TextOutA},
+    {G32, "ExtTextOutA", k_ExtTextOutA},
+    {G32, "GetTextExtentPoint32A", k_GetTextExtentPoint32A},
+    {G32, "GetTextExtentPointA", k_GetTextExtentPoint32A},
+    {G32, "GetTextMetricsA", k_GetTextMetricsA},
+    {G32, "GetCharWidthA", k_GetCharWidthA},
+    {G32, "GetCharWidth32A", k_GetCharWidthA},
     {G32, "GetCharABCWidthsA", k_GetCharABCWidthsA},
     {G32, "GetTextFaceA", k_GetTextFaceA},
     {G32, "EnumFontFamiliesExA", k_EnumFontFamiliesExA},
-    {G32, "CreatePen", k_CreatePen},
-    {G32, "MoveToEx", k_MoveToEx},
-    {G32, "LineTo", k_LineTo},
     {G32, "RemoveFontResourceA", k_RemoveFontResourceA},
 };
 const uint32_t rc_gdi32_text_count = sizeof rc_gdi32_text / sizeof rc_gdi32_text[0];

@@ -178,6 +178,9 @@ static void save(void)
         return;
     }
     for (int k = 0; k < nkeys; k++) {
+        if (!keys[k][0]) {
+            continue; /* deleted */
+        }
         bool any = false;
         for (int i = 0; i < nvalues; i++) {
             if (values[i].key != k) {
@@ -361,6 +364,187 @@ static void k_RegDeleteValueA(rc_cpu *c)
     RC_RETURN(c, ERROR_SUCCESS, 2);
 }
 
+/* ---- the Windows 3.1 calls (MFC's profile and registration code uses them) ---- */
+
+/* RegOpenKeyA(key, sub, result) */
+static void k_RegOpenKeyA(rc_cpu *c)
+{
+    load();
+    char path[256];
+    if (!path_of(RC_ARG(c, 0), RC_ARG(c, 1) ? rc_str(RC_ARG(c, 1)) : NULL, path, sizeof path)) {
+        RC_RETURN(c, ERROR_INVALID_HANDLE, 3);
+    }
+    int k = find_key(path);
+    if (k < 0) {
+        RC_RETURN(c, ERROR_FILE_NOT_FOUND, 3);
+    }
+    rc_st32(RC_ARG(c, 2), new_handle(k));
+    RC_RETURN(c, ERROR_SUCCESS, 3);
+}
+
+/* RegCreateKeyA(key, sub, result) */
+static void k_RegCreateKeyA(rc_cpu *c)
+{
+    load();
+    char path[256];
+    if (!path_of(RC_ARG(c, 0), RC_ARG(c, 1) ? rc_str(RC_ARG(c, 1)) : NULL, path, sizeof path)) {
+        RC_RETURN(c, ERROR_INVALID_HANDLE, 3);
+    }
+    bool existed = find_key(path) >= 0;
+    int k = add_key(path);
+    if (k < 0) {
+        RC_RETURN(c, ERROR_FILE_NOT_FOUND, 3);
+    }
+    if (!existed) {
+        save();
+    }
+    rc_st32(RC_ARG(c, 2), new_handle(k));
+    RC_RETURN(c, ERROR_SUCCESS, 3);
+}
+
+/* RegSetValueA(key, sub, type, text, size): the unnamed value of the subkey, a string. */
+static void k_RegSetValueA(rc_cpu *c)
+{
+    load();
+    char path[256];
+    if (!path_of(RC_ARG(c, 0), RC_ARG(c, 1) ? rc_str(RC_ARG(c, 1)) : NULL, path, sizeof path)) {
+        RC_RETURN(c, ERROR_INVALID_HANDLE, 5);
+    }
+    int k = add_key(path);
+    if (k < 0) {
+        RC_RETURN(c, ERROR_FILE_NOT_FOUND, 5);
+    }
+    const char *text = RC_ARG(c, 3) ? rc_str(RC_ARG(c, 3)) : "";
+    set_value(k, "", 1 /* REG_SZ */, (const uint8_t *)text, (uint32_t)strlen(text) + 1);
+    save();
+    RC_RETURN(c, ERROR_SUCCESS, 5);
+}
+
+/* RegQueryValueA(key, sub, text, size*): the unnamed value of the subkey. */
+static void k_RegQueryValueA(rc_cpu *c)
+{
+    load();
+    char path[256];
+    if (!path_of(RC_ARG(c, 0), RC_ARG(c, 1) ? rc_str(RC_ARG(c, 1)) : NULL, path, sizeof path)) {
+        RC_RETURN(c, ERROR_INVALID_HANDLE, 4);
+    }
+    int k = find_key(path);
+    value *v = k >= 0 ? find_value(k, "") : NULL;
+    if (k < 0) {
+        RC_RETURN(c, ERROR_FILE_NOT_FOUND, 4);
+    }
+    uint32_t data = RC_ARG(c, 2), psize = RC_ARG(c, 3), size = v ? v->size : 1;
+    if (psize) {
+        uint32_t cap = rc_ld32(psize);
+        rc_st32(psize, size);
+        if (data && cap < size) {
+            RC_RETURN(c, ERROR_MORE_DATA, 4);
+        }
+    }
+    if (data) {
+        if (v) {
+            memcpy(rc_ptr(data), v->data, v->size);
+        } else {
+            rc_st8(data, 0);
+        }
+    }
+    RC_RETURN(c, ERROR_SUCCESS, 4);
+}
+
+/* The name of the `index`th key directly below `parent`, or NULL. */
+static const char *child_key(int parent, uint32_t index)
+{
+    size_t pl = strlen(keys[parent]);
+    for (int i = 0; i < nkeys; i++) {
+        const char *k = keys[i];
+        if (i != parent && strlen(k) > pl + 1 && k[pl] == '\\' && !strchr(k + pl + 1, '\\')) {
+            char head[256];
+            snprintf(head, sizeof head, "%.*s", (int)pl, k);
+            if (ieq(head, keys[parent]) && index-- == 0) {
+                return k + pl + 1;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* RegEnumKeyA(key, index, name, size) */
+static void k_RegEnumKeyA(rc_cpu *c)
+{
+    load();
+    int k = key_of(RC_ARG(c, 0));
+    const char *name = k >= 0 ? child_key(k, RC_ARG(c, 1)) : NULL;
+    if (!name) {
+        RC_RETURN(c, k < 0 ? ERROR_INVALID_HANDLE : 259 /* ERROR_NO_MORE_ITEMS */, 4);
+    }
+    if (strlen(name) + 1 > RC_ARG(c, 3)) {
+        RC_RETURN(c, ERROR_MORE_DATA, 4);
+    }
+    rc_put_str(RC_ARG(c, 2), RC_ARG(c, 3), name);
+    RC_RETURN(c, ERROR_SUCCESS, 4);
+}
+
+/* RegEnumKeyExA(key, index, name, size*, reserved, class, class size*, time) */
+static void k_RegEnumKeyExA(rc_cpu *c)
+{
+    load();
+    int k = key_of(RC_ARG(c, 0));
+    const char *name = k >= 0 ? child_key(k, RC_ARG(c, 1)) : NULL;
+    if (!name) {
+        RC_RETURN(c, k < 0 ? ERROR_INVALID_HANDLE : 259, 8);
+    }
+    uint32_t cap = rc_ld32(RC_ARG(c, 3)), len = (uint32_t)strlen(name);
+    if (len + 1 > cap) {
+        RC_RETURN(c, ERROR_MORE_DATA, 8);
+    }
+    rc_put_str(RC_ARG(c, 2), cap, name);
+    rc_st32(RC_ARG(c, 3), len);
+    RC_RETURN(c, ERROR_SUCCESS, 8);
+}
+
+/* RegDeleteKeyA(key, sub): the key, its values and the keys below it (their names are cleared). */
+static void k_RegDeleteKeyA(rc_cpu *c)
+{
+    load();
+    char path[256];
+    if (!path_of(RC_ARG(c, 0), RC_ARG(c, 1) ? rc_str(RC_ARG(c, 1)) : NULL, path, sizeof path)) {
+        RC_RETURN(c, ERROR_INVALID_HANDLE, 2);
+    }
+    if (find_key(path) < 0) {
+        RC_RETURN(c, ERROR_FILE_NOT_FOUND, 2);
+    }
+    size_t pl = strlen(path);
+    for (int i = 0; i < nkeys; i++) {
+        char head[256];
+        snprintf(head, sizeof head, "%.*s", (int)pl, keys[i]);
+        if (ieq(head, path) && (keys[i][pl] == 0 || keys[i][pl] == '\\')) {
+            for (int v = 0; v < nvalues;) {
+                if (values[v].key == i) {
+                    free(values[v].data);
+                    values[v] = values[--nvalues];
+                } else {
+                    v++;
+                }
+            }
+            keys[i][0] = 0;
+        }
+    }
+    save();
+    RC_RETURN(c, ERROR_SUCCESS, 2);
+}
+
+/* GetFileSecurityA / SetFileSecurityA: there is no security to copy (MFC copes). */
+static void k_GetFileSecurityA(rc_cpu *c)
+{
+    rc_last_error = 50; /* ERROR_NOT_SUPPORTED */
+    RC_RETURN(c, 0, 5);
+}
+static void k_SetFileSecurityA(rc_cpu *c)
+{
+    rc_last_error = 50;
+    RC_RETURN(c, 0, 3);
+}
+
 /* GetUserNameA(buffer, size) */
 static void k_GetUserNameA(rc_cpu *c)
 {
@@ -386,5 +570,14 @@ const rc_import_def rc_advapi32_defs[] = {
     {ADV, "RegSetValueExA", k_RegSetValueExA},
     {ADV, "RegDeleteValueA", k_RegDeleteValueA},
     {ADV, "GetUserNameA", k_GetUserNameA},
+    {ADV, "RegOpenKeyA", k_RegOpenKeyA},
+    {ADV, "RegCreateKeyA", k_RegCreateKeyA},
+    {ADV, "RegSetValueA", k_RegSetValueA},
+    {ADV, "RegQueryValueA", k_RegQueryValueA},
+    {ADV, "RegEnumKeyA", k_RegEnumKeyA},
+    {ADV, "RegEnumKeyExA", k_RegEnumKeyExA},
+    {ADV, "RegDeleteKeyA", k_RegDeleteKeyA},
+    {ADV, "GetFileSecurityA", k_GetFileSecurityA},
+    {ADV, "SetFileSecurityA", k_SetFileSecurityA},
 };
 const uint32_t rc_advapi32_count = sizeof rc_advapi32_defs / sizeof rc_advapi32_defs[0];

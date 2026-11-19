@@ -54,4 +54,8 @@ extern const uint32_t rc_k32_profile_count;
 /* Signal an event object (SetEvent from host code, e.g. DirectPlay's message events). */
 bool rc_k32_set_event(uint32_t handle);
 
+/* Registered by modules.c besides the tables above. */
+void rc_k32_global_init(void);
+void rc_k32_misc_init(void);
+
 #endif

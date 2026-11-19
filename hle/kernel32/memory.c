@@ -131,13 +131,104 @@ static void k_IsBadCodePtr(rc_cpu *c)
     RC_RETURN(c, !rc_vm_committed(p, 1), 1);
 }
 
-/* Nothing here hands out local memory (FormatMessage gives none): no-op. */
-static void k_LocalFree(rc_cpu *c) { RC_RETURN(c, 0, 1); }
+/* ---- global and local memory ----
+ * Windows has movable blocks with handles that are locked into pointers; here every block is
+ * fixed and its handle is its address (GlobalLock returns it). The blocks handed out are kept in
+ * a set, so freeing anything else (a handle of another kind) does no harm. */
+
+#define GMEM_MOVEABLE 0x02u
+#define GMEM_ZEROINIT 0x40u
+#define BLOCKS 16384u
+
+static uint32_t blocks[BLOCKS]; /* open addressing, 0 free, 1 deleted */
+
+static uint32_t *slot_of(uint32_t p, bool insert)
+{
+    uint32_t i = (p >> 3) * 2654435761u % BLOCKS, del = BLOCKS;
+    for (uint32_t k = 0; k < BLOCKS; k++, i = (i + 1) % BLOCKS) {
+        if (blocks[i] == p) {
+            return &blocks[i];
+        }
+        if (blocks[i] == 1 && del == BLOCKS) {
+            del = i;
+        }
+        if (blocks[i] == 0) {
+            return insert ? &blocks[del < BLOCKS ? del : i] : NULL;
+        }
+    }
+    return insert && del < BLOCKS ? &blocks[del] : NULL;
+}
+
+static uint32_t block_alloc(uint32_t size, uint32_t flags)
+{
+    uint32_t p = rc_heap_alloc(size ? size : 1, (flags & GMEM_ZEROINIT) != 0);
+    uint32_t *s = p ? slot_of(p, true) : NULL;
+    if (s) {
+        *s = p;
+    }
+    return p;
+}
+
+static bool block_known(uint32_t p) { return p > 1 && slot_of(p, false) != NULL; }
+
+static uint32_t block_free(uint32_t p)
+{
+    uint32_t *s = p > 1 ? slot_of(p, false) : NULL;
+    if (!s) {
+        return p; /* not ours: as a failed free */
+    }
+    *s = 1;
+    rc_heap_free(p);
+    return 0;
+}
+
+static uint32_t block_realloc(uint32_t p, uint32_t size, uint32_t flags)
+{
+    if (!block_known(p)) {
+        return 0;
+    }
+    uint32_t q = rc_heap_realloc(p, size ? size : 1, (flags & GMEM_ZEROINIT) != 0, false);
+    if (q && q != p) {
+        *slot_of(p, false) = 1;
+        uint32_t *s = slot_of(q, true);
+        if (s) {
+            *s = q;
+        }
+    }
+    return q;
+}
+
+/* GlobalAlloc(flags, size), LocalAlloc(flags, size) */
+static void k_GlobalAlloc(rc_cpu *c) { RC_RETURN(c, block_alloc(RC_ARG(c, 1), RC_ARG(c, 0)), 2); }
+/* GlobalReAlloc(handle, size, flags) */
+static void k_GlobalReAlloc(rc_cpu *c) { RC_RETURN(c, block_realloc(RC_ARG(c, 0), RC_ARG(c, 1), RC_ARG(c, 2)), 3); }
+static void k_GlobalFree(rc_cpu *c) { RC_RETURN(c, block_free(RC_ARG(c, 0)), 1); }
+static void k_GlobalLock(rc_cpu *c) { RC_RETURN(c, RC_ARG(c, 0), 1); }
+static void k_GlobalUnlock(rc_cpu *c) { RC_RETURN(c, 0, 1); } /* no lock count left: unlocked */
+static void k_GlobalHandle(rc_cpu *c) { RC_RETURN(c, RC_ARG(c, 0), 1); }
+static void k_GlobalFlags(rc_cpu *c) { RC_RETURN(c, 0, 1); }
+static void k_GlobalSize(rc_cpu *c)
+{
+    uint32_t p = RC_ARG(c, 0);
+    RC_RETURN(c, block_known(p) ? rc_heap_size(p) : 0, 1);
+}
+
+static const rc_import_def global_defs[] = {
+    {K32, "GlobalAlloc", k_GlobalAlloc},     {K32, "GlobalReAlloc", k_GlobalReAlloc},
+    {K32, "GlobalFree", k_GlobalFree},       {K32, "GlobalLock", k_GlobalLock},
+    {K32, "GlobalUnlock", k_GlobalUnlock},   {K32, "GlobalHandle", k_GlobalHandle},
+    {K32, "GlobalFlags", k_GlobalFlags},     {K32, "GlobalSize", k_GlobalSize},
+    {K32, "LocalAlloc", k_GlobalAlloc},      {K32, "LocalReAlloc", k_GlobalReAlloc},
+    {K32, "LocalFree", k_GlobalFree},        {K32, "LocalLock", k_GlobalLock},
+    {K32, "LocalUnlock", k_GlobalUnlock},    {K32, "LocalHandle", k_GlobalHandle},
+    {K32, "LocalFlags", k_GlobalFlags},      {K32, "LocalSize", k_GlobalSize},
+};
+
+void rc_k32_global_init(void) { rc_register_imports(global_defs, sizeof global_defs / sizeof global_defs[0]); }
 
 const rc_import_def rc_k32_memory[] = {
     {K32, "IsBadReadPtr", k_IsBadReadPtr},
     {K32, "IsBadCodePtr", k_IsBadCodePtr},
-    {K32, "LocalFree", k_LocalFree},
     {K32, "HeapCreate", k_HeapCreate},
     {K32, "HeapDestroy", k_HeapDestroy},
     {K32, "HeapAlloc", k_HeapAlloc},

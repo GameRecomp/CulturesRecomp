@@ -183,11 +183,17 @@ static uint32_t to_ref(const rc_dc *d, uint32_t p)
     return unchannel(p, rm) | unchannel(p, gm) << 8 | unchannel(p, bm) << 16;
 }
 
-/* The address of pixel (x, y) of the DC's target, or 0 outside it. */
+/* The address of pixel (x, y) (logical) of the DC's target, or 0 outside where it draws. */
 static uint32_t pixel_at(const rc_dc *d, int32_t x, int32_t y)
 {
     const rc_pixels *t = &d->target;
-    if (!t->pixels || x < 0 || y < 0 || (uint32_t)x >= t->w || (uint32_t)y >= t->h) {
+    int32_t dx = rc_dc_x(d, x), dy = rc_dc_y(d, y);
+    x = dx + d->org_x;
+    y = dy + d->org_y;
+    if (!t->pixels || x < 0 || y < 0 || (uint32_t)x >= t->w || (uint32_t)y >= t->h || t->bpp < 8) {
+        return 0;
+    }
+    if ((d->vis.n >= 0 && !rc_rgn_has(&d->vis, x, y)) || (d->has_clip && !rc_rgn_has(&d->clip, dx, dy))) {
         return 0;
     }
     return t->pixels + (uint32_t)y * t->pitch + (uint32_t)x * (t->bpp / 8);

@@ -15,6 +15,7 @@ add_library(rc_hle STATIC
     dplay/dpnet.c
     kernel32/process.c
     kernel32/memory.c
+    kernel32/misc.c
     kernel32/locale.c
     kernel32/file.c
     kernel32/profile.c
@@ -26,6 +27,9 @@ add_library(rc_hle STATIC
     gdi32/gdi32.c
     gdi32/dc.c
     gdi32/text.c
+    gdi32/objects.c
+    gdi32/draw.c
+    gdi32/region.c
     gdi32/palette.c
     ddraw/ddraw.c
     ddraw/d3d.c

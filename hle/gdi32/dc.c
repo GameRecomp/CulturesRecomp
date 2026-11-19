@@ -11,7 +11,7 @@
 #include "ddraw/ddraw.h"
 #include "rc/log.h"
 
-#define DCS 64
+#define DCS 256
 #define DC_HANDLE 0x02000000u
 
 static rc_dc dcs[DCS];
@@ -33,6 +33,10 @@ uint32_t rc_dc_new(void)
             dcs[i].used = 1;
             dcs[i].text_color = 0x000000;
             dcs[i].bk_color = 0xffffff;
+            dcs[i].bk_mode = 2; /* OPAQUE */
+            dcs[i].rop2 = 13;   /* R2_COPYPEN */
+            dcs[i].map_mode = 1; /* MM_TEXT */
+            dcs[i].vis.n = -1;
             return DC_HANDLE + 4 * i;
         }
     }

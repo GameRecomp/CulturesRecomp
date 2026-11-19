@@ -383,6 +383,7 @@ const rc_import_def rc_k32_locale[] = {
     {K32, "GetLocaleInfoA", k_GetLocaleInfoA},
     {K32, "GetLocaleInfoW", k_GetLocaleInfoW},
     {K32, "GetStringTypeA", k_GetStringTypeA},
+    {K32, "GetStringTypeExA", k_GetStringTypeA}, /* the same arguments */
     {K32, "GetStringTypeW", k_GetStringTypeW},
     {K32, "LCMapStringA", k_LCMapStringA},
     {K32, "LCMapStringW", k_LCMapStringW},
