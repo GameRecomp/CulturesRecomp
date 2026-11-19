@@ -129,7 +129,7 @@ static dls_collection *collection(const char *file, dm_reader read)
     free(data);
     for (int i = 0; i < COLLECTIONS; i++) {
         if (!collections[i].file[0]) {
-            strncpy(collections[i].file, file, sizeof collections[i].file - 1);
+            snprintf(collections[i].file, sizeof collections[i].file, "%s", file);
             collections[i].c = c;
             break;
         }
