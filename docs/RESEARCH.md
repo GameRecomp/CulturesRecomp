@@ -311,7 +311,8 @@ What `Cultures.exe` (GOG EN) does before its first frame, as `RC_TRACE=imports` 
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?
-2. How do Northland and 8th Wonder play MPEG-1: DirectShow, MCI or their own decoder?
+2. ~~How do Northland and 8th Wonder play MPEG-1: DirectShow, MCI or their own decoder?~~ DirectShow: they create a
+   filter graph (`CLSID_FilterGraph`, `IID_IGraphBuilder`), as does the Saga.
 3. Which DirectDraw interfaces and pixel formats does each engine use exactly?
 4. Does `gedx8musicdrv.dll` use the DirectMusic *synth* (DLS) or only segment playback, and which interfaces?
 5. ~~How much code differs between the three C1 executables?~~ Answered in M2: EN/DE differ in 2 functions, Gold in about 80 (see "Code discovery").

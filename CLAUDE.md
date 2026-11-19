@@ -16,6 +16,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M6 Picture and input | done | intro, menus and a scenario (1024x768x8) render; mouse and keyboard; all three C1 builds start |
 | M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
 | M8 In game | **in progress** | scenario runs 30,000 frames without trap; save and load work; open: a whole mission, timing, the minimap |
+| M11 Northland, 8th Wonder, Saga | **in progress** | all lift and reach their menus; open: DirectSound 8 (sound), DirectShow (movies) |
 | M10 Cultures 2 | **in progress** | boots to its serial prompt (silent DirectMusic objects); needs the player's serial once; MMX lifted; next: music (DLS synth) |
 
 Check `git log` for the latest work.

@@ -355,6 +355,11 @@ static void k_LoadCursorFromFileA(rc_cpu *c)
     RC_RETURN(c, h, 1);
 }
 
+/* The clipboard is not shared with the host: it cannot be opened and holds nothing. */
+static void k_OpenClipboard(rc_cpu *c) { RC_RETURN(c, 0, 1); }
+static void k_GetClipboardData(rc_cpu *c) { RC_RETURN(c, 0, 1); }
+static void k_CloseClipboard(rc_cpu *c) { RC_RETURN(c, 1, 0); }
+
 /* wsprintfA(buffer, format, ...): cdecl, so the caller removes the arguments. The
  * conversions Windows has: %c %d %i %u %x %X %s and %%, with the flags '-', '0' and '#',
  * a width, a precision, and 'l' or 'h'; at most 1024 characters. */
@@ -767,6 +772,9 @@ const rc_import_def rc_user32_setup[] = {
     {U32, "LoadCursorA", k_LoadCursorA},
     {U32, "LoadCursorFromFileA", k_LoadCursorFromFileA},
     {U32, "wsprintfA", k_wsprintfA},
+    {U32, "OpenClipboard", k_OpenClipboard},
+    {U32, "GetClipboardData", k_GetClipboardData},
+    {U32, "CloseClipboard", k_CloseClipboard},
     {U32, "SetCursor", k_SetCursor},
     {U32, "ShowCursor", k_ShowCursor},
     {U32, "LoadIconA", k_LoadIconA},

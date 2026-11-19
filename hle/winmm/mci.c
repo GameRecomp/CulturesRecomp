@@ -383,7 +383,21 @@ static void k_nodriver1(rc_cpu *c) { RC_RETURN(c, MMSYSERR_NODRIVER, 1); }
 static void k_nodriver3(rc_cpu *c) { RC_RETURN(c, MMSYSERR_NODRIVER, 3); }
 static void k_nodriver5(rc_cpu *c) { RC_RETURN(c, MMSYSERR_NODRIVER, 5); }
 
+/* mmio: these games import the RIFF reading functions but not mmioOpen, so no file is ever
+ * open; every call reports an error. */
+#define MMIOERR_CANNOTREAD 263u
+static void k_mmio_err2(rc_cpu *c) { RC_RETURN(c, MMIOERR_CANNOTREAD, 2); }
+static void k_mmio_err3(rc_cpu *c) { RC_RETURN(c, MMIOERR_CANNOTREAD, 3); }
+static void k_mmio_err4(rc_cpu *c) { RC_RETURN(c, MMIOERR_CANNOTREAD, 4); }
+static void k_mmioSeek(rc_cpu *c) { RC_RETURN(c, 0xffffffffu, 3); }
+
 const rc_import_def rc_winmm_mci_defs[] = {
+    {WMM, "mmioClose", k_mmio_err2},
+    {WMM, "mmioGetInfo", k_mmio_err3},
+    {WMM, "mmioSetInfo", k_mmio_err3},
+    {WMM, "mmioAdvance", k_mmio_err3},
+    {WMM, "mmioDescend", k_mmio_err4},
+    {WMM, "mmioSeek", k_mmioSeek},
     {WMM, "mciSendCommandA", k_mciSendCommandA},
     {WMM, "mciGetErrorStringA", k_mciGetErrorStringA},
     {WMM, "mixerGetNumDevs", k_mixerGetNumDevs},

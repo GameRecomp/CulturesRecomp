@@ -23,6 +23,8 @@ static void k_DirectSoundEnumerateA(rc_cpu *c) { RC_RETURN(c, 0, 2); }
 
 const rc_import_def rc_dsound_defs[] = {
     {DS, "#1", k_DirectSoundCreate},
+    {DS, "#11", k_DirectSoundCreate},
+    {DS, "DirectSoundCreate8", k_DirectSoundCreate},
     {DS, "DirectSoundCreate", k_DirectSoundCreate},
     {DS, "#2", k_DirectSoundEnumerateA},
     {DS, "DirectSoundEnumerateA", k_DirectSoundEnumerateA},
