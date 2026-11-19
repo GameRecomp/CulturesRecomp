@@ -63,6 +63,12 @@ tools/audit.sh
 
 ## Conventions
 
+- **Share code between the games as much as possible.** One recompiler, one runtime, one HLE layer and one
+  platform layer serve all five games and both engines. Per-game or per-build differences belong in the manifest
+  (`games/<id>/game.toml`: hashes, bases, discovery hints, later patches) or in a small, clearly named game module,
+  never in a copy of shared code. Before writing something game-specific, check whether a general rule or an
+  existing module covers it, and prefer generalising that. Discovery and lifting rules must hold for every target,
+  not just the one at hand (check the other binaries in `orig/` when changing them).
 - Docs, code and comments in English (the maintainer writes in German).
 - Commits: author **and** committer `TerminShock <357108427+TerminShock@users.noreply.github.com>` (as in the
   initial commit), e.g. `GIT_COMMITTER_NAME=… GIT_COMMITTER_EMAIL=… git commit --author="TerminShock <…>"`.

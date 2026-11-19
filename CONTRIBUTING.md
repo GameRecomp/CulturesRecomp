@@ -20,7 +20,10 @@ git config core.hooksPath tools/hooks    # once per clone: audit before each com
    `SPDX-License-Identifier: MIT`. `tools/audit.sh` enforces this.
 4. **Hashes, not files.** New builds are added by hash and size (see [docs/WORKFLOWS.md](docs/WORKFLOWS.md)).
 5. **Keep it deterministic.** The recompiler output must not depend on the host, the time or the order of hash maps.
-6. **Tests go with the change.** The lifter gets difftests, the HLE gets unit tests where it can be
+6. **Share code between the games.** All games use the same recompiler, runtime, HLE and platform code.
+   Differences between games and builds go into `games/<id>/game.toml` or a small game module, never into a
+   copy of shared code. A change to a shared rule must hold for every target, not just the one you work on.
+7. **Tests go with the change.** The lifter gets difftests, the HLE gets unit tests where it can be
    tested without the game, and the manifests are covered by the consistency test.
 
 ## Style
