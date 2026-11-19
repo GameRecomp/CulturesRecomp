@@ -206,6 +206,9 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 
 ### M8 – In game
 
+- [x] Save and load (scripted): the in-game menu saves to `SAVE/save0000.sav` in the user directory (2.7 MB); after a
+      fresh start, Single Player → Load Game lists it with its map preview and loads it. The game keeps its settings
+      in the registry (`HKLM\SOFTWARE\Funatics\Cultures`, `registry.txt`)
 - [x] A scripted soak in a running scenario (30,000 frames with random clicks): no trap, no crash
 - [ ] Play the campaign. Fix traps and HLE gaps as they show up
 - [ ] Save/load and the options menu. Timing (`timeGetTime`, frame limiter) must match the original game speed
