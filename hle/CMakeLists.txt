@@ -4,6 +4,8 @@ add_library(rc_hle STATIC
     advapi32/advapi32.c
     dinput/dinput.c
     dmusic/dmusic.c
+    dmusic/dls.c
+    dmusic/player.c
     dsound/dsound.c
     shell32/shell32.c
     wsock/wsock.c

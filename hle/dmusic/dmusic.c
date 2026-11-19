@@ -20,9 +20,15 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <stdlib.h>
+
+#include "kernel32/k32.h"
+#include "player.h"
+#include "rc/hostfs.h"
 #include "rc/log.h"
 #include "rc/process.h"
 #include "rc/vm.h"
+#include "user32/user32.h"
 
 #define COM "DMUSIC_COM"
 #define S_OK 0u
@@ -96,6 +102,7 @@ typedef struct object {
     /* A segment: its length and repeats (music time); a state: its segment and start. */
     uint32_t length, repeats, segment;
     uint64_t start;
+    dm_segment *dm; /* a segment loaded from a file */
 } object;
 
 #define OBJECTS 512
@@ -159,6 +166,53 @@ static void put(uint32_t p, uint32_t v)
     }
 }
 
+/* ---- files ---- */
+
+static char search_dir[RC_PATH_MAX];
+
+/* A guest wide string as ASCII. */
+static void wide(uint32_t w, char *out, size_t cap)
+{
+    size_t n = 0;
+    for (; w && n + 1 < cap; n++) {
+        uint16_t ch = rc_ld16(w + 2 * (uint32_t)n);
+        if (!ch) {
+            break;
+        }
+        out[n] = ch < 0x80 ? (char)ch : '_';
+    }
+    out[n] = 0;
+}
+
+/* A file by guest path, relative names in the search directory. */
+static uint8_t *read_guest(const char *name, uint32_t *size)
+{
+    char path[2 * RC_PATH_MAX + 2], rel[RC_PATH_MAX], host[RC_PATH_MAX];
+    bool absolute = name[0] && (name[1] == ':' || name[0] == '\\');
+    if (absolute || !search_dir[0]) {
+        snprintf(path, sizeof path, "%s", name);
+    } else {
+        snprintf(path, sizeof path, "%s\\%s", search_dir, name);
+    }
+    if (!rc_k32_guest_rel(path, rel, sizeof rel) || !rc_k32_find_existing(rel, host, NULL, NULL)) {
+        if (rc_trace("music")) {
+            rc_log("[music] %s: not found", path);
+        }
+        return NULL;
+    }
+    return rc_host_read(host, size);
+}
+
+static void pump(rc_cpu *c)
+{
+    (void)c;
+    dm_pump();
+    static uint32_t calls;
+    if (rc_trace("music") && ++calls % 2000 == 0) {
+        rc_log("[music] %u notes, %u without an instrument region, peak %.0f", dm_notes, dm_missed, (double)dm_peak);
+    }
+}
+
 /* ---- every interface ---- */
 
 static void m_QueryInterface(rc_cpu *c)
@@ -179,7 +233,6 @@ static void ok1(rc_cpu *c) { RC_RETURN(c, S_OK, 1); }
 static void ok2(rc_cpu *c) { RC_RETURN(c, S_OK, 2); }
 static void ok3(rc_cpu *c) { RC_RETURN(c, S_OK, 3); }
 static void ok4(rc_cpu *c) { RC_RETURN(c, S_OK, 4); }
-static void ok5(rc_cpu *c) { RC_RETURN(c, S_OK, 5); }
 static void ok6(rc_cpu *c) { RC_RETURN(c, S_OK, 6); }
 
 /* ---- the performance ---- */
@@ -202,6 +255,9 @@ static void p_PlaySegmentEx(rc_cpu *c)
 {
     object *seg = object_at(RC_ARG(c, 1));
     uint32_t out = RC_ARG(c, 7);
+    if (seg && seg->dm) {
+        dm_play(seg->dm, (RC_ARG(c, 4) & 0x80u) != 0); /* DMUS_SEGF_SECONDARY */
+    }
     if (out) {
         object *st = new_object(K_STATE);
         st->segment = seg ? RC_ARG(c, 1) : 0;
@@ -215,6 +271,10 @@ static void p_PlaySegmentEx(rc_cpu *c)
 static void p_PlaySegment(rc_cpu *c)
 {
     uint32_t out = RC_ARG(c, 5);
+    object *seg = object_at(RC_ARG(c, 1));
+    if (seg && seg->dm) {
+        dm_play(seg->dm, (RC_ARG(c, 2) & 0x80u) != 0);
+    }
     if (out) {
         object *st = new_object(K_STATE);
         st->segment = RC_ARG(c, 1);
@@ -224,8 +284,63 @@ static void p_PlaySegment(rc_cpu *c)
     RC_RETURN(c, S_OK, 6);
 }
 
-/* IsPlaying(this, segment, state): nothing sounds, so nothing is playing. */
-static void p_IsPlaying(rc_cpu *c) { RC_RETURN(c, S_FALSE, 3); }
+/* IsPlaying(this, segment, state) */
+static void p_IsPlaying(rc_cpu *c)
+{
+    object *o = object_at(RC_ARG(c, 1));
+    if (!o) {
+        object *st = object_at(RC_ARG(c, 2));
+        o = st ? object_at(st->segment) : NULL;
+    }
+    RC_RETURN(c, o && o->dm && dm_is_playing(o->dm) ? S_OK : S_FALSE, 3);
+}
+
+/* The segment an object stands for: a segment or a segment state; NULL for everything. */
+static const dm_segment *segment_of(uint32_t g)
+{
+    object *o = object_at(g);
+    if (o && o->kind == K_STATE) {
+        o = object_at(o->segment);
+    }
+    return o ? o->dm : NULL;
+}
+
+/* Stop(this, segment, state, time, flags) and StopEx(this, object, time (64-bit), flags) */
+static void p_Stop(rc_cpu *c)
+{
+    uint32_t g = RC_ARG(c, 1) ? RC_ARG(c, 1) : RC_ARG(c, 2);
+    const dm_segment *s = segment_of(g);
+    if (s || !g) {
+        dm_stop(s);
+    }
+    RC_RETURN(c, S_OK, 5);
+}
+static void p_StopEx(rc_cpu *c)
+{
+    uint32_t g = RC_ARG(c, 1);
+    const dm_segment *s = segment_of(g);
+    if (s || !g) {
+        dm_stop(s);
+    }
+    RC_RETURN(c, S_OK, 5);
+}
+
+/* SetGlobalParam(this, guid, data, size): the master volume (GUID_PerfMasterVolume). */
+static void p_SetGlobalParam(rc_cpu *c)
+{
+    uint32_t guid = RC_ARG(c, 1), data = RC_ARG(c, 2);
+    if (guid && data && rc_ld32(guid) == 0xd2ac28b1u) {
+        dm_set_volume((int32_t)rc_ld32(data));
+    }
+    RC_RETURN(c, S_OK, 4);
+}
+
+/* AudioPath SetVolume(this, volume, duration) */
+static void path_SetVolume(rc_cpu *c)
+{
+    dm_set_volume((int32_t)RC_ARG(c, 1));
+    RC_RETURN(c, S_OK, 3);
+}
 
 /* GetTime(this, reference time*, music time*) */
 static void p_GetTime(rc_cpu *c)
@@ -278,22 +393,66 @@ static void p_GetGlobalParam(rc_cpu *c) { RC_RETURN(c, DMUS_E_NOT_FOUND, 4); }
 
 /* ---- the loader ---- */
 
-/* GetObject(this, DMUS_OBJECTDESC*, iid, object*) and LoadObjectFromFile(this, class, iid,
- * file, object*): a silent segment of four bars. */
-static void l_GetObject(rc_cpu *c)
+/* An object for a file's bytes: a segment if it is one, else a silent stand-in. */
+static object *load_object(uint8_t *data, uint32_t size, const char *what)
 {
     object *s = new_object(K_SEGMENT);
     s->length = 16 * DMUS_PPQ;
-    put(RC_ARG(c, 3), s->guest);
+    s->dm = data ? dm_segment_load(data, size, read_guest) : NULL;
+    if (s->dm) {
+        s->length = dm_segment_length(s->dm);
+        s->repeats = dm_segment_repeats(s->dm);
+    }
+    if (rc_trace("music")) {
+        rc_log("[music] load %s: %s", what, s->dm ? "segment" : data ? "not a segment" : "not found");
+    }
+    free(data);
+    return s;
+}
+
+/* GetObject(this, DMUS_OBJECTDESC*, iid, object*): by file name (in the search directory or
+ * a full path) or from memory. */
+static void l_GetObject(rc_cpu *c)
+{
+    uint32_t d = RC_ARG(c, 1);
+    uint32_t valid = rc_ld32(d + 4);
+    uint8_t *data = NULL;
+    uint32_t size = 0;
+    char name[RC_PATH_MAX] = "";
+    if (valid & 0x30u) { /* DMUS_OBJ_FILENAME | DMUS_OBJ_FULLPATH */
+        wide(d + 312, name, sizeof name);
+        data = read_guest(name, &size);
+    } else if (valid & 0x400u) { /* DMUS_OBJ_MEMORY */
+        size = rc_ld32(d + 832);
+        uint32_t mem = rc_ld32(d + 840);
+        data = mem && size ? malloc(size) : NULL;
+        if (data) {
+            memcpy(data, rc_ptr(mem), size);
+        }
+        snprintf(name, sizeof name, "(memory)");
+    }
+    put(RC_ARG(c, 3), load_object(data, size, name)->guest);
     RC_RETURN(c, S_OK, 4);
 }
 
+/* LoadObjectFromFile(this, class, iid, file, object*) */
 static void l_LoadObjectFromFile(rc_cpu *c)
 {
-    object *s = new_object(K_SEGMENT);
-    s->length = 16 * DMUS_PPQ;
-    put(RC_ARG(c, 4), s->guest);
+    char name[RC_PATH_MAX];
+    uint32_t size = 0;
+    wide(RC_ARG(c, 3), name, sizeof name);
+    uint8_t *data = read_guest(name, &size);
+    put(RC_ARG(c, 4), load_object(data, size, name)->guest);
     RC_RETURN(c, S_OK, 5);
+}
+
+/* SetSearchDirectory(this, class, path, clear) */
+static void l_SetSearchDirectory(rc_cpu *c)
+{
+    if (RC_ARG(c, 2)) {
+        wide(RC_ARG(c, 2), search_dir, sizeof search_dir);
+    }
+    RC_RETURN(c, S_OK, 4);
 }
 
 /* ---- segments and their states ---- */
@@ -315,7 +474,11 @@ static void s_GetRepeats(rc_cpu *c)
 }
 static void s_SetRepeats(rc_cpu *c)
 {
-    self(c)->repeats = RC_ARG(c, 1);
+    object *o = self(c);
+    if (o->dm) {
+        dm_segment_set_repeats(o->dm, RC_ARG(c, 1));
+    }
+    o->repeats = RC_ARG(c, 1);
     RC_RETURN(c, S_OK, 2);
 }
 /* Clone(this, start, end, segment*) */
@@ -429,6 +592,11 @@ static uint32_t create_performance(rc_cpu *c, uint32_t iid)
 {
     (void)c;
     (void)iid;
+    static bool hooked;
+    if (!hooked) {
+        rc_add_pump_hook(pump);
+        hooked = true;
+    }
     return new_object(K_PERFORMANCE)->guest;
 }
 static uint32_t create_composer(rc_cpu *c, uint32_t iid)
@@ -469,8 +637,8 @@ static const rc_import_def defs[] = {
     {COM, "IDirectMusicPerformance8::InitAudio", p_InitAudio},
     {COM, "IDirectMusicPerformance8::PlaySegment", p_PlaySegment},
     {COM, "IDirectMusicPerformance8::PlaySegmentEx", p_PlaySegmentEx},
-    {COM, "IDirectMusicPerformance8::Stop", ok5},
-    {COM, "IDirectMusicPerformance8::StopEx", ok5}, /* this, object, time (64-bit), flags */
+    {COM, "IDirectMusicPerformance8::Stop", p_Stop},
+    {COM, "IDirectMusicPerformance8::StopEx", p_StopEx}, /* this, object, time (64-bit), flags */
     {COM, "IDirectMusicPerformance8::IsPlaying", p_IsPlaying},
     {COM, "IDirectMusicPerformance8::GetTime", p_GetTime},
     {COM, "IDirectMusicPerformance8::GetSegmentState", p_GetSegmentState},
@@ -482,7 +650,7 @@ static const rc_import_def defs[] = {
     {COM, "IDirectMusicPerformance8::GetParam", p_GetParam},
     {COM, "IDirectMusicPerformance8::SetParam", ok6},
     {COM, "IDirectMusicPerformance8::GetGlobalParam", p_GetGlobalParam},
-    {COM, "IDirectMusicPerformance8::SetGlobalParam", ok4},
+    {COM, "IDirectMusicPerformance8::SetGlobalParam", p_SetGlobalParam},
     {COM, "IDirectMusicPerformance8::Invalidate", ok3},
     {COM, "IDirectMusicPerformance8::CloseDown", ok1},
     {COM, "IDirectMusicPerformance8::CreateAudioPath", p_CreateAudioPath},
@@ -493,7 +661,7 @@ static const rc_import_def defs[] = {
     {COM, "IDirectMusicLoader8::GetObject", l_GetObject},
     {COM, "IDirectMusicLoader8::LoadObjectFromFile", l_LoadObjectFromFile},
     {COM, "IDirectMusicLoader8::SetObject", ok2},
-    {COM, "IDirectMusicLoader8::SetSearchDirectory", ok4},
+    {COM, "IDirectMusicLoader8::SetSearchDirectory", l_SetSearchDirectory},
     {COM, "IDirectMusicLoader8::ScanDirectory", ok4},
     {COM, "IDirectMusicLoader8::CacheObject", ok2},
     {COM, "IDirectMusicLoader8::ReleaseObject", ok2},
@@ -536,7 +704,7 @@ static const rc_import_def defs[] = {
     {COM, "IDirectMusicPerformance8::GetQueueTime", p_GetLatencyTime},
     {COM, "IDirectMusicPerformance8::GetPrepareTime", zero2},
     {COM, "IDirectMusicPerformance8::GetBumperLength", zero2},
-    {COM, "IDirectMusicAudioPath8::SetVolume", ok3},
+    {COM, "IDirectMusicAudioPath8::SetVolume", path_SetVolume},
     /* composer */
     {COM, "IDirectMusicComposer8::ComposeTransition", c_ComposeTransition},
     {COM, "IDirectMusicComposer8::AutoTransition", c_AutoTransition},

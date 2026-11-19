@@ -96,7 +96,7 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `dsound`    | SDL3 audio                     | c1, northland, eighthwonder, saga | DirectSound / DirectSound8 buffers fed into the platform's PCM streams |
 | `mss32`     | dsound HLE / SDL3 audio        | c1, c2    | Miles reimplementation: samples, streams, MP3 (`Mp3dec.asi` is not loaded) |
 | `winmm`     | runtime clock + audio          | all       | `timeGetTime`, mixer API stubs, **MCI CD audio → `MUSIC/TrackNN.*`** |
-| `dmusic`    | DLS synth + segment player     | c2, northland, eighthwonder, saga | DirectMusic Performance/Loader/Segment as used by `gedx8musicdrv.dll` (now: silent objects: everything answers, no sound) |
+| `dmusic`    | DLS synth + segment player     | c2, northland, eighthwonder, saga | DirectMusic Performance/Loader/Segment as used by `gedx8musicdrv.dll` segments (pattern, sequence, band, tempo tracks) through our own DLS synthesizer |
 | `dshow`    | MPEG-1 decoder (pl_mpeg, MIT)  | northland, eighthwonder, saga | multimedia streams into DirectDraw surfaces (what the games use), and the filter graph |
 | `dplay`     | null at first, later UDP       | c1 (DirectPlay 4 under `DPlayDLL.dll`) | no service providers until M12 |
 | `dpnet`     | null at first, later UDP       | c2 engine (DirectPlay 8) | same |

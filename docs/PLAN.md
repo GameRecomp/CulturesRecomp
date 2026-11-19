@@ -237,7 +237,10 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
       separate with `emms`), the operations as C functions in `rc/mmx.h`; the difftest loads all eight registers from
       its window, runs the instruction and stores them back, so every MMX form is checked against the real CPU (1766
       forms, 222 mnemonics, all agree). No MMX trap is left in any lifted binary; only the CRT's `int 6` and `int3`
-- [ ] Next: past the serial prompt with the player's serial, then music through a DLS synth
+- [x] Music: `hle/dmusic/player.c` plays the segments (tempo, band, pattern and sequence tracks) through a DLS
+      synthesizer (`dls.c`: the games' own .dls files, regions, loops, envelope) into a PCM stream; the loader
+      finds segments and the collections bands name in its search directory (RESEARCH "DirectMusic music")
+- [ ] Next: past the serial prompt with the player's serial
 - [ ] Research question 1: is `.cms_t` executed? Compare with the untouched `Cultures2MP.exe`
 - [ ] Discovery and lifting reuse M2–M4 (new manifest seeds only)
 - [ ] `ole32` COM class registry. `dmusic`: Loader, Performance, Segment, AudioPath as far as `gedx8musicdrv.dll` uses them.

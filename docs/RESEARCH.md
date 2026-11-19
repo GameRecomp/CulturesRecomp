@@ -308,6 +308,23 @@ What `Cultures.exe` (GOG EN) does before its first frame, as `RC_TRACE=imports` 
   through DirectInput, cursors from `.cur`/`.ani` files (`LoadCursorFromFileA`), sound through Miles' quick API,
   Bink's sound through Miles streams (`BinkOpenMiles`).
 
+## DirectMusic music (M10/M11)
+
+The C2-engine games' music driver (`gedx8musicdrv.dll`, lifted) loads segments (`DataX/DM/*.sgt`, `DataX/DM2/*.sgt`)
+through the loader's search directory and plays them on the performance; bands name their DLS collections there by
+file (`012.dls`, ...). Measured on all segments of Cultures 2, Northland and the Saga:
+
+- Tracks: tempo, time signature, pattern (`DMPT`, by far the most), band, plain MIDI sequence, and in four Northland
+  segments a chord track.
+- About 90 % of pattern notes use the "purpleized" play mode (chord and scale intervals from the chord root), the rest
+  are fixed to the key; none are plain fixed MIDI. Without a chord track the default chord applies (C major 7 on the
+  C major scale). A music value of octave *o* lands in MIDI octave *o − 1*: that way 12 % of notes fall outside the
+  key ranges of the instruments they play on (mostly low bass notes), against 40 % an octave higher, and the drum
+  parts land on the kit's keys.
+- About 95 % of band instruments reference the games' own DLS collections; the rest set only volume or pan, or would
+  need the General MIDI set, which is not shipped (they stay silent).
+- The DLS files are level 1 with simple articulation (volume envelope only); wave attenuation is in 1/655360 dB.
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?
