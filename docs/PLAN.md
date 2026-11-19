@@ -56,7 +56,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M11 | **Northland, 8th Wonder and Saga**         | 🔶 | Both `Game.exe` builds (+ 8th Wonder ES) and the Saga run. DirectSound 8 works. MPEG-1 movies play. A campaign mission each (Saga: Drachenland and one community campaign) is played through. Release v0.3. |
 | M12 | Multiplayer                                | ⬜ | DirectPlay 4 (C1) and DirectPlay 8 (C2 engine) over UDP/LAN between two recompiled builds. `*MP.exe` builds lifted where they are needed. |
 | M13 | Editors                                    | ⬜ | Northland and 8th Wonder `Editor.exe` run: GDI, common controls, file dialogs. |
-| M14 | Converter                                  | ⬜ | `recomp convert <installer|iso>` produces a runnable build in one step. Later the browser page (the toolchain is built for wasm32). |
+| M14 | Converter                                  | 🔶 | `recomp convert <installer|iso>` produces a runnable build in one step. Later the browser page (the toolchain is built for wasm32). |
 | M15 | Polish and more platforms                  | ⬜ | Opt-in high resolutions and widescreen, integer scaling, settings UI, performance work, then Android and WebAssembly. |
 
 ### M0 – Foundation ✅
@@ -282,7 +282,8 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 
 ### M14 – Converter
 
-- [ ] `recomp convert`: identify → extract → lift → invoke CMake → result in `out/<game>/`
+- [x] `recomp convert`: identify (installer, CD image, zip or installed folder) → extract → lift every binary the
+      manifest lifts → CMake build of the game's shell → `out/<game>/` with `play.sh`/`play.bat`
 - [ ] Prebuilt runtime packages, so users need no compiler: native back end via Cranelift (as in comparable
       projects) or shipping a C compiler toolchain (to be decided in M14)
 - [ ] Browser converter (wasm32 build of the pipeline, local only, nothing uploaded)

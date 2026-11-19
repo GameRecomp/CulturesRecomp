@@ -22,7 +22,7 @@ pub fn list(paths: &[PathBuf]) -> Result<ExitCode, String> {
 }
 
 /// The manifest variant a medium belongs to, by SHA-256.
-fn find_variant<'a>(ms: &'a [Manifest], sha: &str) -> Option<(&'a Manifest, &'a str)> {
+pub(crate) fn find_variant<'a>(ms: &'a [Manifest], sha: &str) -> Option<(&'a Manifest, &'a str)> {
     ms.iter().find_map(|m| {
         m.variants
             .iter()
@@ -31,7 +31,7 @@ fn find_variant<'a>(ms: &'a [Manifest], sha: &str) -> Option<(&'a Manifest, &'a 
     })
 }
 
-fn is_empty_dir(p: &Path) -> bool {
+pub(crate) fn is_empty_dir(p: &Path) -> bool {
     fs::read_dir(p)
         .map(|mut d| d.next().is_none())
         .unwrap_or(true)

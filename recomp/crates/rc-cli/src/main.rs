@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 //! `recomp`: the Cultures recompiler command line.
 //!
-//! Implemented: `identify`, `info`, `list`, `extract`, `discover`, `codediff`, `lift`.
-//! Planned (see docs/PLAN.md): `convert` (M14).
+//! Commands: `identify`, `info`, `list`, `extract`, `discover`, `codediff`, `lift`, `convert`.
 
+mod convert;
 mod discover;
 mod lift;
 mod media;
@@ -38,6 +38,10 @@ USAGE:
                                             generated/<game>/<binary>-<variant>/, plus the
                                             game's set.c); --comments puts each instruction
                                             above its C
+    recomp convert [--games DIR] [--preset NAME] [--force] MEDIA_OR_FOLDER
+                                            in one step: unpack (if needed), lift every binary
+                                            the manifest lifts, build the game (CMake preset,
+                                            default: release) into out/<game>/ with play.sh
     recomp help | --help
     recomp version | --version
 
@@ -65,6 +69,7 @@ struct Opts {
     verbose: bool,
     no_relocs: bool,
     comments: bool,
+    preset: Option<String>,
     paths: Vec<PathBuf>,
 }
 
@@ -88,6 +93,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         verbose: false,
         no_relocs: false,
         comments: false,
+        preset: None,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -103,6 +109,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--no-relocs" => o.no_relocs = true,
             "--verbose" | "-v" => o.verbose = true,
             "--comments" => o.comments = true,
+            "--preset" => o.preset = Some(it.next().ok_or("--preset needs a name")?.clone()),
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             p => o.paths.push(p.into()),
         }
@@ -149,6 +156,17 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                     base: o.base,
                     comments: o.comments,
                     verbose: o.verbose,
+                },
+                &o.paths,
+            )
+        }
+        "convert" => {
+            let o = parse_opts(rest)?;
+            convert::convert(
+                &convert::ConvertOpts {
+                    games: &o.games,
+                    preset: o.preset.as_deref().unwrap_or("release"),
+                    force: o.force,
                 },
                 &o.paths,
             )

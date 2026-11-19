@@ -94,6 +94,19 @@ recomp/target/release/difftest --states 1 --coverage orig/cultures1/gog-en/Cultu
 The difftest needs clang (`-m32 -nostdlib`, no 32-bit libc) and an x86-64 Linux host, and writes to
 `build/difftest/`. CI runs it on every push.
 
+## Converting in one step
+
+```sh
+CMAKE_PREFIX_PATH=<your SDL3 prefix> recomp/target/release/recomp convert orig/setup_northland_2.1.0.9.exe
+recomp/target/release/recomp convert orig/cultures1/gog-en          # an installed (or already unpacked) folder
+out/northland/play.sh                                               # starts it with the unpacked game files
+```
+
+`convert` identifies the medium by hash (or an installed folder by its executable), unpacks it into
+`orig/<game>/<variant>/` unless that is already there (`--force` unpacks again), lifts every binary the manifest
+lifts, builds the game's program with the CMake preset `release` (`--preset dev` for a debug build) and puts it
+with a launcher into `out/<game>/`. Both stay on your machine: they contain code derived from your copy.
+
 ## Running a game
 
 ```sh

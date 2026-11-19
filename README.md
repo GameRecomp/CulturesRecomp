@@ -80,6 +80,9 @@ recomp/target/release/recomp identify orig/
 # Unpack one (→ orig/<game>/<variant>/, binaries verified)
 recomp/target/release/recomp extract orig/setup_cultures_2.1.0.12.exe
 
+# Or everything in one step: unpack, lift, build → out/cultures1/play.sh
+recomp/target/release/recomp convert orig/setup_cultures_2.1.0.12.exe
+
 # Lift it (→ generated/cultures1/…, never committed)
 recomp/target/release/recomp lift orig/cultures1/gog-en/Cultures.exe
 
