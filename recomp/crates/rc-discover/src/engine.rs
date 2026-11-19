@@ -208,6 +208,9 @@ pub(crate) struct ScopeTable {
 pub struct Options {
     pub seeds: Vec<u32>,
     pub no_return: Vec<u32>,
+    /// Functions checked by hand to return although a call to them falls into another
+    /// function (MSVC's x87 helpers): not reported as no-return candidates.
+    pub returns: Vec<u32>,
     /// Data ranges in code sections (`end` exclusive).
     pub data: Vec<(u32, u32)>,
     /// `(jmp address, table address, count)`.
@@ -224,6 +227,7 @@ impl Default for Options {
         Options {
             seeds: Vec::new(),
             no_return: Vec::new(),
+            returns: Vec::new(),
             data: Vec::new(),
             jump_tables: Vec::new(),
             gap_functions: true,
@@ -327,6 +331,10 @@ pub(crate) struct Engine<'a> {
     /// Gap candidates may not fall into a known function (they would be the tail of data
     /// placed right before it); referenced candidates may (a second entry point).
     strict: bool,
+    /// The gap candidate being tried starts at a 16-byte boundary right after padding, where
+    /// MSVC places functions: it may fall into a second entry of the next function (the CRT's
+    /// unreferenced `strchr` runs into `__from_strstr_to_strchr`).
+    aligned_gap: bool,
     /// Cross-jump entries from the previous round.
     joins: &'a BTreeSet<u32>,
     exec_lo: u32,
@@ -503,6 +511,7 @@ impl<'a> Engine<'a> {
             dead: Vec::new(),
             tx: None,
             strict: false,
+            aligned_gap: false,
             joins,
             exec_lo,
             exec_hi,
@@ -660,6 +669,7 @@ impl<'a> Engine<'a> {
                     // relocations, that rule removed no junk and lost real functions.)
                     if !trusted
                         && self.strict
+                        && !self.aligned_gap
                         && !first
                         && !after_call
                         && self
@@ -1182,8 +1192,10 @@ impl<'a> Engine<'a> {
                 self.begin();
                 self.add_func(t, src);
                 self.strict = src == Source::Gap;
+                self.aligned_gap = self.strict && self.after_padding(t);
                 let r = self.drain(false);
                 self.strict = false;
+                self.aligned_gap = false;
                 match r {
                     Ok(()) => {
                         self.commit();
@@ -1198,6 +1210,13 @@ impl<'a> Engine<'a> {
             }
             _ => false,
         }
+    }
+
+    /// `va` is 16-byte aligned and follows padding or a `ret`.
+    fn after_padding(&self, va: u32) -> bool {
+        va % 16 == 0
+            && (self.sp.get(va - 1) == Some(PAD)
+                || matches!(self.img.byte(va - 1), Some(0xcc | 0x90 | 0xc3)))
     }
 
     fn trusted_roots(&mut self) {
@@ -1482,8 +1501,11 @@ impl<'a> Engine<'a> {
                 }
             }
             if self.sp.get(p) == Some(UNK) {
-                if let Some(n) = self.string_at(p, e) {
+                if let Some((n, pad)) = self.string_at(p, e) {
                     let _ = self.mark_data(p, p + n, DataKind::String, true);
+                    for va in p + n..p + n + pad {
+                        self.set_state(va, PAD);
+                    }
                     continue;
                 }
             }
@@ -1498,19 +1520,36 @@ impl<'a> Engine<'a> {
         progress
     }
 
-    /// A NUL-terminated run of at least 8 printable ASCII characters (copyright notices that
-    /// some libraries keep in their code section), including the NUL padding after it.
-    fn string_at(&self, p: u32, e: u32) -> Option<u32> {
+    /// A run of at least 8 printable ASCII characters (CR, LF and tab included) that nothing
+    /// decodes as code: copyright notices that some libraries keep in their code section, and
+    /// the CRT's `VC20XC00` marker in front of `__except_handler3`. It ends at a NUL (the NULs
+    /// after it belong to the string), at `int3` padding, right where known code starts, or at
+    /// the end of the section.
+    /// Returns the string's length and the length of the padding after it.
+    fn string_at(&self, p: u32, e: u32) -> Option<(u32, u32)> {
         let t = self.img.tail(p)?;
         let t = &t[..t.len().min((e - p) as usize)];
-        let n = t.iter().position(|&b| {
-            !(b == b'\r' || b == b'\n' || b == b'\t' || (0x20..0x7f).contains(&b))
-        })?;
-        if n < 8 || t[n] != 0 {
+        let printable = |b: u8| b == b'\r' || b == b'\n' || b == b'\t' || (0x20..0x7f).contains(&b);
+        let n = t.iter().position(|&b| !printable(b)).unwrap_or(t.len());
+        if n < 8 {
             return None;
         }
-        let zeros = t[n..].iter().take_while(|&&b| b == 0).count();
-        Some((n + zeros) as u32)
+        if n == t.len() {
+            // Up to the end of the gap: only if code or the end of the section follows.
+            let sec_end = self.img.section_of(p).map(|x| x.va + x.size);
+            return (self.sp.get(e) == Some(INSN) || sec_end == Some(e)).then_some((n as u32, 0));
+        }
+        match t[n] {
+            0 => {
+                let zeros = t[n..].iter().take_while(|&&b| b == 0).count();
+                Some(((n + zeros) as u32, 0))
+            }
+            0xcc => {
+                let pad = t[n..].iter().take_while(|&&b| b == 0xcc).count();
+                Some((n as u32, pad as u32))
+            }
+            _ => None,
+        }
     }
 
     pub fn unknown_runs(&self) -> Vec<(u32, u32)> {
@@ -1731,6 +1770,7 @@ impl Engine<'_> {
                 let next = va + u32::from(ins.len);
                 let strong = Source::Call.bit() | Source::Entry.bit() | Source::Export.bit();
                 if t != next
+                    && !self.opts.returns.contains(&t)
                     && self.funcs.contains_key(&t)
                     && !self.no_return.contains(&t)
                     && self.funcs.get(&next).is_some_and(|b| b & strong != 0)

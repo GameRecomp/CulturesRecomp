@@ -44,7 +44,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 |-----|--------------------------------------------|--------|----------------|
 | M0  | Foundation                                 | ✅ | The repo, CMake and Cargo build, CI, the audit hook and all manifests exist. `recomp identify` recognises every file in TARGETS.md. |
 | M1  | Read the inputs                            | ✅ | `recomp extract` unpacks all 10 GOG installers, the Gold ISO and the Saga zip into `orig/<game>/<variant>/` without innoextract/unshield. The PE loader maps every target. |
-| M2  | Find the code (C1)                         | ✅ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. |
+| M2  | Find the code (C1)                         | ✅ | Coverage report for the three `Cultures.exe` builds: ≥ 99 % of `.text` classified as code, data or padding. Jump tables and vtables resolved. Reached: 100 % for every C1 binary, every leftover settled by analysis or a manifest hint. |
 | M3  | Lifter, integer core                       | ⬜ | All integer and string instructions used by the C1 executables are lifted. Difftests are green. The generated C compiles warning-free. |
 | M4  | x87 and the whole game                     | ⬜ | Every function of `Cultures.exe` and `binkw32.dll` is lifted. No trap is left in reachable code. The executable links. |
 | M5  | Boot to the main loop                      | ⬜ | CRT start-up, `WinMain`, the registry and ini reads and file access through the VFS all work. The game creates its window and asks DirectDraw for a mode. |
@@ -115,10 +115,15 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
 - [x] Constant scanning: aligned 32-bit values in `.data` and `.rdata` and 32-bit immediates in code that point into
       `.text` (for DLLs: exactly the relocated values). Every candidate is trial-decoded in a transaction and rolled
       back on implausible instructions or overlaps; gaps are then filled with padding, strings and unreferenced code
-- [x] Coverage report (code, data, padding, unknown) per executable: **99.99 %** for all three `Cultures.exe`.
+- [x] Coverage report (code, data, padding, unknown) per executable: **100 %** for all three `Cultures.exe`.
       `recomp codediff` compares two builds function by function (research question 5 answered, see RESEARCH.md)
-- [x] Same for `binkw32.dll` and `DPlayDLL.dll` (99.91–99.99 %). `DPlayDLL.dll` is rebased to `0x11000000`, and
+- [x] Same for `binkw32.dll` and `DPlayDLL.dll` (100 %). `DPlayDLL.dll` is rebased to `0x11000000`, and
       discovery is checked against the relocations (`--no-relocs`: the heuristics alone agree with them)
+- [x] Every leftover settled, as in TropicoRecomp's M2: no unknown byte in any C1 binary, every `no-return?`
+      candidate checked by hand (`no_return` or the new `returns` hint), the unresolved indirect jumps explained as
+      run-time dispatch (RESEARCH.md). Strings that end at padding or code and aligned gap code that falls into a
+      second entry are found by discovery; unreferenced x87 stubs in `binkw32.dll` are `seeds`. The ignored test
+      `orig_discover` checks exactly this, with the hints applied and with and without the DLLs' relocations
 - [ ] Later (M10): GOG `Cultures2.exe` (99.68 %, one `switch` with an index table but no bound), `.cms_t`
 
 ### M3 – Lifter, integer core
@@ -251,5 +256,6 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
 | 2026-11-19 | Store extras (GOG Galaxy DLLs, GOG's Ogg/Vorbis wrapper dependencies, uninstallers) are skipped by name in `recomp identify`, not pinned. |
 | 2026-11-19 | Code maps go to `generated/<game>/<binary>-<variant>/codemap.json` (lower-case file name plus the first variant of the `[[binary]]`), because one game has several builds of the same binary. Addresses in the JSON are hex strings. |
 | 2026-11-19 | `DPlayDLL.dll` (both C1 builds) is rebased to `0x11000000` (`base` in the manifest); `binkw32.dll` keeps its preferred base. |
+| 2026-11-19 | M2 closes at TropicoRecomp's bar, not only at ≥ 99 %: no unknown byte in any lifted C1 binary, and every `no-return?` candidate settled by a hint. A function checked to return gets a `returns` hint, so the report only shows unchecked candidates. |
 | 2026-11-19 | Discovery accepts a heuristic candidate (pointer constant, vtable slot, gap) only after trial decoding in a transaction that rolls back on implausible instructions or overlaps. Calls that fall into another function are reported as `no-return?` candidates and become `no_return` hints only after a manual check, because MSVC's x87 math routines have second entries right after returning calls. |
 | 2026-11-18 | *Cultures – Die Saga* (German retail, supplied as a zip of an installed copy) is a separate game `saga` on the C2 engine, because its executables, data archive and content differ from Northland and 8th Wonder. Both single-player builds (`Game.exe` 2003, `GameSaga.exe` 2005) are pinned. |

@@ -118,6 +118,10 @@ pub struct DiscoverHints {
     /// Functions that never return to their caller.
     #[serde(default)]
     pub no_return: Vec<u32>,
+    /// Functions checked by hand to return although a call to them falls into another
+    /// function (`no-return?` candidates that are MSVC x87 helpers).
+    #[serde(default)]
+    pub returns: Vec<u32>,
     /// Ranges inside code sections that hold data (`end` exclusive).
     #[serde(default)]
     pub data: Vec<Range>,

@@ -2,9 +2,10 @@
 //! Code discovery on the extracted Cultures 1 binaries in `../orig/cultures1/<variant>/`
 //! (not available in CI): `cargo test --release -p rc-cli -- --ignored`.
 //!
-//! The M2 exit criterion: at least 99 % of every code section classified as code, data or
-//! padding, no unresolved jump tables, and for the DLLs a result that agrees with their base
-//! relocations even when discovery does not use them.
+//! The M2 exit criterion, with the manifest hints applied: every byte of every code section
+//! classified as code, data or padding, no unresolved jump tables, every `no-return?` candidate
+//! settled by a hint, and for the DLLs a result that agrees with their base relocations even
+//! when discovery does not use them.
 
 use rc_discover::{Image, Options};
 use std::path::Path;
@@ -41,21 +42,35 @@ fn cultures1_binaries_are_discovered() {
         );
         let pe = rc_pe::parse(&data).expect("pe");
         let img = Image::load(&data, &pe, b.base).expect("image");
+        let hints = b.discover.clone().unwrap_or_default();
         for use_relocs in [true, false] {
             let opts = Options {
+                seeds: hints.seeds.clone(),
+                no_return: hints.no_return.clone(),
+                returns: hints.returns.clone(),
+                data: hints.data.iter().map(|r| (r.start, r.end)).collect(),
+                jump_tables: hints
+                    .jump_tables
+                    .iter()
+                    .map(|t| (t.at, t.table, t.count))
+                    .collect(),
                 use_relocs,
                 ..Options::default()
             };
             let m = rc_discover::discover(&img, &opts, &b.name, &b.sha256);
             let what = format!("{v}/{} (relocs used: {use_relocs})", b.name);
             for c in &m.coverage {
-                assert!(
-                    c.classified_percent() >= 99.0,
-                    "{what}: {} only {:.2} % classified",
-                    c.section,
-                    c.classified_percent()
+                assert_eq!(
+                    c.unknown, 0,
+                    "{what}: {} has {} unknown bytes",
+                    c.section, c.unknown
                 );
             }
+            assert!(
+                m.no_return_candidates.is_empty(),
+                "{what}: unchecked no-return candidates {:?}",
+                m.no_return_candidates
+            );
             assert!(m.warnings.is_empty(), "{what}: {:?}", m.warnings);
             assert!(
                 m.jump_tables.iter().all(|t| !t.targets.is_empty()),
@@ -63,7 +78,7 @@ fn cultures1_binaries_are_discovered() {
             );
             if let Some(r) = &m.reloc_check {
                 assert!(r.bad_targets.is_empty(), "{what}: {:?}", r.bad_targets);
-                assert!(r.bad_sites.len() <= 1, "{what}: {:?}", r.bad_sites);
+                assert!(r.bad_sites.is_empty(), "{what}: {:?}", r.bad_sites);
             }
             if !img.is_dll {
                 assert!(

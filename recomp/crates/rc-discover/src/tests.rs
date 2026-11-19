@@ -230,3 +230,69 @@ fn moved_code_has_the_same_fingerprint() {
     assert_eq!(d.identical, ma.functions.len());
     assert!(d.a_only.is_empty() && d.b_only.is_empty());
 }
+
+#[test]
+fn strings_in_code_end_at_padding_or_code() {
+    let c = code(
+        0x40,
+        &[
+            (0x40_1000, &[0xe8, 0x0b, 0, 0, 0, 0xc3]), // call 0x401010; ret
+            (0x40_1008, b"VC20XC00"),                  // CRT marker, code follows directly
+            (0x40_1010, &[0x55, 0x8b, 0xec, 0x5d, 0xc3]), // push ebp; mov ebp, esp; pop ebp; ret
+            (0x40_1015, b"\r\nCopyright (C) 1999 Example Tools\r\n"), // right after a ret; int3 follows
+        ],
+    );
+    let m = discover(&image(&c, &[0; 8]), &Options::default(), "t.exe", "00");
+    let string = |va: u32| m.data.iter().any(|d| d.start.0 == va && d.kind == "string");
+    assert!(string(0x40_1008), "{:?}", m.data);
+    assert!(string(0x40_1015), "{:?}", m.data);
+    assert!(m.unknown.is_empty(), "{:?}", m.unknown);
+}
+
+#[test]
+fn aligned_gap_code_may_fall_into_a_second_entry() {
+    // The entry calls a second entry at 0x401030; the unreferenced code in front of it starts
+    // at a 16-byte boundary after padding and runs into it, like the CRT's strchr.
+    let c = code(
+        0x40,
+        &[
+            (0x40_1000, &[0xe8, 0x2b, 0, 0, 0, 0xc3]), // call 0x401030; ret
+            (0x40_1020, &[0x31, 0xc0]),                // xor eax, eax
+            (0x40_1022, &[0x8b, 0x44, 0x24, 0x04]),    // mov eax, [esp+4]
+            (0x40_1026, &[0x8b, 0x44, 0x24, 0x04]),
+            (0x40_102a, &[0x8b, 0x44, 0x24, 0x04]),
+            (0x40_102e, &[0x89, 0xc1]), // mov ecx, eax
+            (0x40_1030, &[0xc3]),       // ret
+        ],
+    );
+    let m = discover(&image(&c, &[0; 8]), &Options::default(), "t.exe", "00");
+    assert!(m.functions.iter().any(|f| f.entry.0 == 0x40_1020));
+    assert!(m.functions.iter().any(|f| f.entry.0 == 0x40_1030));
+    assert!(m.unknown.is_empty(), "{:?}", m.unknown);
+}
+
+#[test]
+fn returns_hint_settles_a_no_return_candidate() {
+    // A calls a helper that returns, and the call is A's last instruction: B, another entry,
+    // follows it (MSVC's x87 routines are laid out like this).
+    let c = code(
+        0x30,
+        &[
+            (0x40_1000, &[0xe8, 0x06, 0, 0, 0]), // call A (0x40100b)
+            (0x40_1005, &[0xe8, 0x06, 0, 0, 0]), // call B (0x401010)
+            (0x40_100a, &[0xc3]),
+            (0x40_100b, &[0xe8, 0x10, 0, 0, 0]), // A: call helper (0x401020)
+            (0x40_1010, &[0x31, 0xc0, 0xc3]),    // B: xor eax, eax; ret
+            (0x40_1020, &[0xc3]),                // helper: ret
+        ],
+    );
+    let img = image(&c, &[0; 8]);
+    let m = discover(&img, &Options::default(), "t.exe", "00");
+    assert!(!m.no_return_candidates.is_empty());
+    let opts = Options {
+        returns: m.no_return_candidates.iter().map(|c| c[0].0).collect(),
+        ..Options::default()
+    };
+    let m = discover(&img, &opts, "t.exe", "00");
+    assert!(m.no_return_candidates.is_empty());
+}

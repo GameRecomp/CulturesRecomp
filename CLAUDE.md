@@ -9,11 +9,10 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 |-----------|-------|-------------|
 | M0 Foundation | done | CMake + presets, C runtime core, SDL3/null platform, HLE module table, game shells, audit + hooks, CI |
 | M1 Read the inputs | done | `rc-media` (Inno 5.5.0u, own LZMA1/LZMA2, ISO 9660, InstallShield 5, zip), `recomp list/extract`, runtime PE loader, `--check` |
-| M2 Find the code (C1) | done | `rc-discover` (descent, jump tables, SEH/EH, vtables, pointer scans with trial decoding, gaps, no-return fixed point, rebasing, reloc check), `recomp discover/codediff`, per-binary manifest hints; 99.99 % of all three `Cultures.exe` |
+| M2 Find the code (C1) | done | `rc-discover` (descent, jump tables, SEH/EH, vtables, pointer scans with trial decoding, gaps, no-return fixed point, rebasing, reloc check), `recomp discover/codediff`, per-binary manifest hints (`seeds`, `no_return`, `returns`, `data`, `jump_tables`); 100 % of every C1 binary, no leftover |
 | M3 Lifter, integer core | **next** | — |
 
-Last commits: `987cd40` (docs), `e15564c` (M2 start), `003c031` (M1), `50881ba` (M0). Check `git status`/`git log`
-for M2 itself.
+M2 is in `fe709eb` and the commit after it (leftovers settled). Check `git log` for later work.
 
 ## Next step: M3
 

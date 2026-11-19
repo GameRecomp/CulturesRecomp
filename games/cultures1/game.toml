@@ -48,6 +48,7 @@ sha256 = "65417291a96241d650d5664b6b40ee7a1485f963f5cc959760a951130a1cbfc1"
 variants = ["gog-en"]
 [binary.discover]
 no_return = [0x49cd22]   # CRT _exit: returns only for other callers of the shared doexit
+returns = [0x49d8f5]     # CRT x87 argument load: returns; a second entry follows each call to it
 
 [[binary]]
 name = "Cultures.exe"
@@ -58,6 +59,7 @@ sha256 = "3fc2f057f169013568816ba1fb48e5926536eb9da82bc71a913adeece322099c"
 variants = ["gog-de"]
 [binary.discover]
 no_return = [0x49cd22]   # CRT _exit: returns only for other callers of the shared doexit
+returns = [0x49d8f5]     # CRT x87 argument load: returns; a second entry follows each call to it
 
 [[binary]]
 name = "Cultures.exe"
@@ -68,6 +70,7 @@ sha256 = "ff5b8acd577fa77e81e2f1a89c4da3555a007d7ded783c4f1bf4008d9e6cecf6"
 variants = ["gold-de"]
 [binary.discover]
 no_return = [0x49dc82]   # CRT _exit: returns only for other callers of the shared doexit
+returns = [0x49e855]     # CRT x87 argument load: returns; a second entry follows each call to it
 
 # --- libraries ---------------------------------------------------------------
 
@@ -78,6 +81,11 @@ treatment = "lift"
 size = 291840
 sha256 = "70f28f6e469eceaecd5e5795d58b017f096a536227584c2684bc74cd279bcce8"
 variants = ["gog-en", "gold-de"]
+[binary.discover]
+returns = [0x1002e645]   # CRT x87 argument load: returns; a second entry follows the call to it
+# CRT x87 error stubs that nothing references (no pointer or relocation to them); they run into
+# shared tails at 0x1002e4dd, so gap filling may not take them.
+seeds = [0x1002e22e, 0x1002e233, 0x1002e288, 0x1002e28d]
 
 [[binary]]
 name = "binkw32.dll"
@@ -86,6 +94,10 @@ treatment = "lift"
 size = 310835
 sha256 = "ee68dcf51e8e3b482f9fb5ef617f44a2d9e970d03f3ed21fe26d40cd63c57a48"
 variants = ["gog-de"]
+[binary.discover]
+returns = [0x3002fd85]   # CRT x87 argument load: returns; a second entry follows the call to it
+# CRT x87 error stubs that nothing references (as in the other build, at 0x3002fc1d here)
+seeds = [0x3002f96e, 0x3002f973, 0x3002f9c8, 0x3002f9cd]
 
 [[binary]]
 name = "DPlayDLL.dll"
@@ -95,6 +107,8 @@ size = 114688
 sha256 = "628db393586430dd3d867777669b3db6800b68c78a1eedf53299f85f37f1afd2"
 base = 0x11000000      # preferred 0x10000000 collides with binkw32.dll (gog-en, gold-de)
 variants = ["gog-en"]
+[binary.discover]
+no_return = [0x1100b1f4]   # CRT _exit: returns only for other callers of the shared doexit
 
 [[binary]]
 name = "DPlayDLL.dll"
@@ -104,6 +118,8 @@ size = 102400
 sha256 = "3b0169c7e0ecb61e10fdc8c1f48e0e3eddddd2c1e31af7381a4d26c837fefb64"
 base = 0x11000000      # preferred 0x10000000 collides with binkw32.dll (gog-en, gold-de)
 variants = ["gog-de", "gold-de"]
+[binary.discover]
+no_return = [0x1100b143]   # CRT _exit: returns only for other callers of the shared doexit
 
 [[binary]]
 name = "Mss32.dll"
@@ -176,12 +192,13 @@ variants = ["gold-de"]
 
 # --- discovery hints ---------------------------------------------------------
 # Hints go into a [binary.discover] table right after the [[binary]] they belong to
-# (addresses are virtual addresses after rebasing). `recomp discover` classifies more than
-# 99.9 % of every C1 code section on its own (docs/RESEARCH.md); `--verbose` lists the
-# `no-return?` candidates, which are checked by hand before they become hints.
+# (addresses are virtual addresses after rebasing). With them, `recomp discover` classifies
+# every byte of every C1 code section (docs/RESEARCH.md); `--verbose` lists the `no-return?`
+# candidates, which are checked by hand and then become `no_return` or `returns` hints.
 #
 # [binary.discover]
 # seeds = [0x401000]                                # extra function entry points
 # no_return = [0x401000]                            # functions that never return
+# returns = [0x401000]                              # no-return? candidates checked to return
 # data = [{ start = 0x401000, end = 0x401010 }]     # data inside a code section
 # jump_tables = [{ at = 0x401000, table = 0x401010, count = 4 }]

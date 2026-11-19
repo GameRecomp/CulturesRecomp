@@ -40,6 +40,7 @@ fn options(known: Option<&Known>) -> Options {
     if let Some(h) = known.and_then(|k| k.binary.discover.as_ref()) {
         o.seeds = h.seeds.clone();
         o.no_return = h.no_return.clone();
+        o.returns = h.returns.clone();
         o.data = h.data.iter().map(|r| (r.start, r.end)).collect();
         o.jump_tables = h
             .jump_tables

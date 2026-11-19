@@ -198,19 +198,44 @@ Findings from M1, verified by extracting every medium byte-identically against i
 
 ## Code discovery (M2)
 
-`recomp discover` results for the Cultures 1 binaries (addresses as in the manifest, `DPlayDLL.dll` rebased to
-`0x11000000`). "Classified" is code + data + padding as a share of all code sections. The DLL rows also hold when
-discovery ignores their relocations (`--no-relocs`): then every relocated pointer into code still hits an instruction
-start or data, and at most one fixup site (inside dead x87 CRT code of `binkw32.dll`) is missed.
+`recomp discover` results for the Cultures 1 binaries, with the manifest hints applied (addresses as in the manifest,
+`DPlayDLL.dll` rebased to `0x11000000`). "Classified" is code + data + padding as a share of all code sections: every
+byte of every C1 binary is classified. The DLL rows also hold when discovery ignores their relocations (`--no-relocs`):
+then every fixup site lies inside an instruction or data, and every relocated pointer into code hits an instruction
+start or data.
 
 | Binary | Code bytes | Functions | No-return | Jump tables | Vtables | SEH scope tables | Classified |
 |--------|-----------:|----------:|----------:|------------:|--------:|-----------------:|-----------:|
-| `Cultures.exe` gog-en / gog-de | 669 844 | 4003 | 25 | 78 | 119 | 10 | 99.99 % |
-| `Cultures.exe` gold-de | 673 780 | 4013 | 25 | 78 | 119 | 10 | 99.99 % |
-| `binkw32.dll` gog-en / gold-de | 202 314 | 743 | 16 | 45 | 0 | 3 | 99.93 % |
-| `binkw32.dll` gog-de | 211 590 (7 sections) | 725 | 16 | 46 | 0 | 3 | 99.94 % |
-| `DPlayDLL.dll` gog-en | 66 290 | 326 | 6 | 48 | 0 | 14 | 99.99 % |
-| `DPlayDLL.dll` gog-de / gold-de | 61 922 | 295 | 6 | 48 | 0 | 9 | 99.91 % |
+| `Cultures.exe` gog-en / gog-de | 669 844 | 3983 | 12 | 79 | 119 | 10 | 100 % |
+| `Cultures.exe` gold-de | 673 780 | 3993 | 12 | 79 | 119 | 10 | 100 % |
+| `binkw32.dll` gog-en / gold-de | 202 314 | 772 | 16 | 45 | 0 | 3 | 100 % |
+| `binkw32.dll` gog-de | 211 590 (31 sections) | 753 | 16 | 46 | 0 | 3 | 100 % |
+| `DPlayDLL.dll` gog-en | 66 290 | 347 | 18 | 48 | 0 | 14 | 100 % |
+| `DPlayDLL.dll` gog-de / gold-de | 61 922 | 317 | 18 | 48 | 0 | 9 | 100 % |
+
+What the last bytes were, and how each case is settled:
+
+- **Text in `.text`:** the CRT's 8-byte `VC20XC00` marker in front of `__except_handler3` (every binary) and RAD's
+  copyright notice in `binkw32.dll`, which has CR/LF in it and ends in `int3` padding or at the end of its section.
+  Discovery now takes such a run of at least 8 printable characters as a string when it ends at a NUL, at padding, at
+  known code or at the section end.
+- **Unreferenced CRT code that runs into a second entry:** `strchr` in `DPlayDLL.dll` (nothing calls it, but
+  `strstr` calls its second entry `__from_strstr_to_strchr`). Gap code may fall into a known function only when it
+  starts at a 16-byte boundary after padding, where MSVC puts functions; elsewhere such a run is more likely data in
+  front of the function (the `VC20XC00` case).
+- **Unreferenced x87 error stubs in `binkw32.dll`** (about 60 bytes per build): no pointer or relocation leads to
+  them, they are not aligned, and they run into shared tails. They are `seeds` in the manifest.
+- **`no-return?` candidates:** the CRT's x87 argument loader (`0x49d8f5` GOG, `0x49e855` Gold, and one per
+  `binkw32.dll` build) returns; the routine after each call to it is a second entry. These are `returns` hints. The
+  CRT's `_exit` in `DPlayDLL.dll` (`0x1100b1f4` gog-en, `0x1100b143` gog-de/Gold) is a `no_return` hint, as in
+  `Cultures.exe`.
+- **Indirect jumps that stay unresolved** (3 in `Cultures.exe`, 2 or 6 in `binkw32.dll`, 4 in `DPlayDLL.dll`) are
+  not `switch` tables and are dispatched at run time: the CRT's x87 dispatch through a per-function handler table
+  (`jmp [ebx]`), a virtual tail call (`jmp [eax+0x30]`), the CRT's unwind/SEH helpers (`jmp eax`) and `longjmp`
+  (`jmp [ebx+0x18]`), and in the gog-de `binkw32.dll` jumps through function pointers in `.data`. Their targets are
+  all discovered through the tables and pointers that hold them.
+- **FDIV stubs in `binkw32.dll`:** the CRT's Pentium FDIV workaround has 16 five-byte stubs ending in `int 6`. With
+  relocations they are separate no-return entries; without, they decode as one run. Both are code either way.
 
 Facts that the lifter (M3/M4) depends on:
 
@@ -227,13 +252,13 @@ Facts that the lifter (M3/M4) depends on:
 - **MMX is used**: 220 MMX instructions in `Cultures.exe` and about 4150 in `binkw32.dll` (Bink's decoder). There is no SSE,
   3DNow! or `cmov`. x87 is everywhere (about 1900 instructions in `Cultures.exe`). M4 therefore needs MMX, not only x87.
 - **No-return functions:** the CRT's `_exit` (`doexit(code, 1, 0)`) cannot be proven no-return without
-  constant propagation, so it is a manifest hint (`0x49cd22` GOG, `0x49dc82` Gold). The game's own fatal-error
+  constant propagation, so it is a manifest hint (`0x49cd22` GOG, `0x49dc82` Gold; `DPlayDLL.dll` likewise). The game's own fatal-error
   routine follows from it. Calls that fall straight into another function are reported as `no-return?`
   candidates, but they are not applied automatically: the CRT's x87 math routines (`sin` → `_CIsin` …) have a
-  second entry right after a returning call.
+  second entry right after a returning call. Each candidate is settled by a `no_return` or a `returns` hint.
 - **Indirect control flow:** about 720 indirect calls (vtables, `mov esi, [IAT]; call esi`) and 3 unresolved
   indirect jumps in `Cultures.exe`. 214 of its 230 imports are called directly through the IAT.
-- **Build differences (research question 5):** GOG EN vs DE: 4001 of 4003 functions identical. GOG vs Gold: 98.1 % of
+- **Build differences (research question 5):** GOG EN vs DE: 3981 of 3983 functions identical. GOG vs Gold: 98.1 % of
   the functions (91.4 % of the code bytes) are identical up to addresses. About 77 functions changed and 10 more
   were added in Gold (the add-on). Function addresses differ between GOG and Gold, so the manifests keep per-build
   hints. The German GOG release also ships other library builds than EN/Gold: its `binkw32.dll` shares only 54 %
