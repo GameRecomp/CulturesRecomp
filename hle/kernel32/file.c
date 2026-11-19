@@ -778,6 +778,71 @@ static void k_DeleteFileA(rc_cpu *c)
     RC_RETURN(c, ok ? 1 : 0, 1);
 }
 
+/* MoveFileA(from, to): within the user directory a rename; a file of the installation is
+ * copied (the installation is read-only). */
+static void k_MoveFileA(rc_cpu *c)
+{
+    char from_rel[RC_PATH_MAX], to_rel[RC_PATH_MAX], from[RC_PATH_MAX], to[RC_PATH_MAX];
+    bool is_dir = false;
+    if (!rc_k32_guest_rel(rc_str(RC_ARG(c, 0)), from_rel, sizeof from_rel) ||
+        !rc_k32_guest_rel(rc_str(RC_ARG(c, 1)), to_rel, sizeof to_rel) ||
+        !rc_k32_find_existing(from_rel, from, &is_dir, NULL) || is_dir) {
+        rc_last_error = ERROR_FILE_NOT_FOUND;
+        RC_RETURN(c, 0, 2);
+    }
+    if (rc_host_resolve(rc_cfg->user_dir, to_rel, false, to) && rc_host_exists(to, NULL, NULL)) {
+        rc_last_error = ERROR_FILE_EXISTS;
+        RC_RETURN(c, 0, 2);
+    }
+    if (!rc_host_resolve(rc_cfg->user_dir, to_rel, true, to)) {
+        rc_last_error = ERROR_PATH_NOT_FOUND;
+        RC_RETURN(c, 0, 2);
+    }
+    char mine[RC_PATH_MAX];
+    bool in_user = rc_host_resolve(rc_cfg->user_dir, from_rel, false, mine) && strcmp(mine, from) == 0;
+    int ok = in_user ? rename(from, to) == 0 : copy_file(from, to);
+    if (ok) {
+        SAVED();
+    } else {
+        rc_last_error = ERROR_ACCESS_DENIED;
+    }
+    RC_RETURN(c, ok ? 1 : 0, 2);
+}
+
+/* GetTempFileNameA(dir, prefix, unique, out): dir\PREFxxxx.TMP; with unique 0 a new name,
+ * created empty. */
+static void k_GetTempFileNameA(rc_cpu *c)
+{
+    static uint32_t counter = 0x1000;
+    const char *dir = rc_str(RC_ARG(c, 0)), *prefix = rc_str(RC_ARG(c, 1));
+    uint32_t unique = RC_ARG(c, 2), out = RC_ARG(c, 3);
+    char name[RC_PATH_MAX];
+    for (int tries = 0; tries < 0x10000; tries++) {
+        uint32_t n = unique ? unique & 0xffff : counter++ & 0xffff;
+        snprintf(name, sizeof name, "%s%s%.3s%04X.TMP", dir ? dir : "",
+                 dir && *dir && dir[strlen(dir) - 1] != '\\' ? "\\" : "", prefix ? prefix : "", n);
+        if (unique) {
+            break;
+        }
+        char rel[RC_PATH_MAX], host[RC_PATH_MAX];
+        if (!rc_k32_guest_rel(name, rel, sizeof rel)) {
+            break;
+        }
+        if (rc_k32_find_existing(rel, host, NULL, NULL)) {
+            continue;
+        }
+        if (rc_host_resolve(rc_cfg->user_dir, rel, true, host)) {
+            FILE *f = fopen(host, "wb");
+            if (f) {
+                fclose(f);
+            }
+        }
+        break;
+    }
+    rc_put_str(out, RC_PATH_MAX < 260 ? RC_PATH_MAX : 260, name);
+    RC_RETURN(c, unique ? unique : 1, 4);
+}
+
 static void k_CreateDirectoryA(rc_cpu *c)
 {
     char rel[RC_PATH_MAX], host[RC_PATH_MAX];
@@ -902,6 +967,8 @@ const rc_import_def rc_k32_file[] = {
     {K32, "CopyFileA", k_CopyFileA},
     {K32, "GetDriveTypeA", k_GetDriveTypeA},
     {K32, "GetVolumeInformationA", k_GetVolumeInformationA},
+    {K32, "MoveFileA", k_MoveFileA},
+    {K32, "GetTempFileNameA", k_GetTempFileNameA},
     {K32, "GetDiskFreeSpaceA", k_GetDiskFreeSpaceA},
     {K32, "GetFileInformationByHandle", k_GetFileInformationByHandle},
     {K32, "PeekNamedPipe", k_PeekNamedPipe},

@@ -296,3 +296,34 @@ fn returns_hint_settles_a_no_return_candidate() {
     let m = discover(&img, &opts, "t.exe", "00");
     assert!(m.no_return_candidates.is_empty());
 }
+
+#[test]
+fn switch_bounded_through_a_stack_slot() {
+    // cmp dword [esp+4], 1; ja default; mov eax, [esp+4]; jmp [eax*4+0x401030]
+    let table: Vec<u8> = [0x40_1038u32, 0x40_103b]
+        .iter()
+        .flat_map(|&a| le(a))
+        .collect();
+    let c = code(
+        0x50,
+        &[
+            (0x40_1000, &[0x83, 0x7c, 0x24, 0x04, 0x01]), // cmp dword [esp+4], 1
+            (0x40_1005, &[0x77, 0x37]),                   // ja 0x40103e
+            (0x40_1007, &[0x8b, 0x44, 0x24, 0x04]),       // mov eax, [esp+4]
+            (0x40_100b, &[0xff, 0x24, 0x85, 0x30, 0x10, 0x40, 0x00]), // jmp [eax*4+0x401030]
+            (0x40_1030, &table),
+            (0x40_1038, &[0x31, 0xc0, 0xc3]),       // case 0
+            (0x40_103b, &[0x40, 0xc3]),             // case 1: inc eax; ret
+            (0x40_103e, &[0x83, 0xc8, 0xff, 0xc3]), // default
+        ],
+    );
+    let m = discover(&image(&c, &[0; 8]), &Options::default(), "t.exe", "00");
+    let t = m
+        .jump_tables
+        .iter()
+        .find(|t| t.at.0 == 0x40_100b)
+        .expect("table");
+    assert_eq!(t.count, 2);
+    assert_eq!(t.bound, "compare");
+    assert!(m.warnings.is_empty(), "{:?}", m.warnings);
+}

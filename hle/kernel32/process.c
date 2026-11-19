@@ -25,7 +25,7 @@
 #define MODULE_BASE 0x7a000000u
 static const char *const known_modules[] = {
     "KERNEL32", "USER32", "GDI32", "DDRAW", "MSS32", "BINKW32", "ADVAPI32", "WINMM", "OLE32", "VERSION",
-    "DINPUT", "DSOUND", "SHELL32",
+    "DINPUT", "DSOUND", "SHELL32", "WSOCK32", "WS2_32", "DPLAYX", "DPNET",
 };
 #define NMODULES (sizeof known_modules / sizeof known_modules[0])
 
@@ -465,6 +465,9 @@ static void k_GetComputerNameA(rc_cpu *c)
     RC_RETURN(c, 1, 2);
 }
 
+/* Guest threads take turns; their priorities change nothing. */
+static void k_SetThreadPriority(rc_cpu *c) { RC_RETURN(c, 1, 2); }
+
 static void k_lstrlenA(rc_cpu *c)
 {
     uint32_t s = RC_ARG(c, 0);
@@ -690,6 +693,7 @@ const rc_import_def rc_k32_process[] = {
     {K32, "GetTimeFormatA", k_GetTimeFormatA},
     {K32, "GetComputerNameA", k_GetComputerNameA},
     {K32, "lstrlenA", k_lstrlenA},
+    {K32, "SetThreadPriority", k_SetThreadPriority},
     {K32, "GetLocalTime", k_GetSystemTime},
     {K32, "FileTimeToSystemTime", k_FileTimeToSystemTime},
     {K32, "FileTimeToLocalFileTime", k_FileTimeToLocalFileTime},

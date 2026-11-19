@@ -7,9 +7,11 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "k32.h"
 #include "rc/log.h"
+#include "rc/process.h"
 
 #define OLE "ole32.dll"
 #define S_OK 0u
@@ -64,7 +66,25 @@ static void k_CoCreateInstance(rc_cpu *c)
     RC_RETURN(c, REGDB_E_CLASSNOTREG, 5);
 }
 
+/* CoCreateGuid(guid): a version-4 GUID from a counter mixed with the clock (unique within a
+ * run and across runs, which is all programs use it for). */
+static void k_CoCreateGuid(rc_cpu *c)
+{
+    static uint64_t n;
+    uint64_t t = rc_ticks_ms() * 0x9e3779b97f4a7c15ull + ++n * 0xbf58476d1ce4e5b9ull + (uint64_t)time(NULL);
+    uint32_t g = RC_ARG(c, 0);
+    for (int i = 0; i < 16; i++) {
+        t ^= t >> 31;
+        t *= 0x94d049bb133111ebull;
+        rc_st8(g + (uint32_t)i, (uint8_t)(t >> 56));
+    }
+    rc_st8(g + 7, (uint8_t)((rc_ld8(g + 7) & 0x0f) | 0x40));
+    rc_st8(g + 8, (uint8_t)((rc_ld8(g + 8) & 0x3f) | 0x80));
+    RC_RETURN(c, S_OK, 1);
+}
+
 const rc_import_def rc_ole32_defs[] = {
+    {OLE, "CoCreateGuid", k_CoCreateGuid},
     {OLE, "CoInitialize", k_CoInitialize},
     {OLE, "CoUninitialize", k_CoUninitialize},
     {OLE, "CoCreateInstance", k_CoCreateInstance},

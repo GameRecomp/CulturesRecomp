@@ -6,6 +6,7 @@ add_library(rc_hle STATIC
     dmusic/dmusic.c
     dsound/dsound.c
     shell32/shell32.c
+    wsock/wsock.c
     kernel32/process.c
     kernel32/memory.c
     kernel32/locale.c

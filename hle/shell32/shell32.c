@@ -17,7 +17,21 @@ static void k_ShellExecuteA(rc_cpu *c)
     RC_RETURN(c, 42, 6);
 }
 
+/* ShellExecuteExA(SHELLEXECUTEINFOA*): the same; hInstApp (at +32) says success, no process. */
+static void k_ShellExecuteExA(rc_cpu *c)
+{
+    uint32_t info = RC_ARG(c, 0);
+    const char *file = rc_str(rc_ld32(info + 16));
+    rc_log("ShellExecuteExA(\"%s\"): not started", file ? file : "");
+    rc_st32(info + 32, 42);
+    if (rc_ld32(info + 4) & 0x40u) { /* SEE_MASK_NOCLOSEPROCESS: no process handle */
+        rc_st32(info + 56, 0);
+    }
+    RC_RETURN(c, 1, 1);
+}
+
 const rc_import_def rc_shell32_defs[] = {
+    {SH, "ShellExecuteExA", k_ShellExecuteExA},
     {SH, "ShellExecuteA", k_ShellExecuteA},
 };
 const uint32_t rc_shell32_count = sizeof rc_shell32_defs / sizeof rc_shell32_defs[0];

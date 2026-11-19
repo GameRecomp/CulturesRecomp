@@ -23,16 +23,30 @@ pub(crate) struct Known {
     pub binary: Binary,
 }
 
-fn find(manifests: &[Manifest], sha256: &str) -> Option<Known> {
-    manifests.iter().find_map(|m| {
-        m.binaries
-            .iter()
-            .find(|b| b.sha256 == sha256)
-            .map(|b| Known {
-                game: m.game.id.clone(),
-                binary: b.clone(),
-            })
-    })
+/// A binary as the manifests know it. One build can belong to several games (Cultures 2 ships
+/// the German Cultures 1 `binkw32.dll`): then the game whose id names a directory of the file's
+/// path (`orig/<game>/<variant>/`) wins, else the first.
+fn find(manifests: &[Manifest], sha256: &str, file: &Path) -> Option<Known> {
+    let hits: Vec<Known> = manifests
+        .iter()
+        .flat_map(|m| {
+            m.binaries
+                .iter()
+                .filter(|b| b.sha256 == sha256)
+                .map(|b| Known {
+                    game: m.game.id.clone(),
+                    binary: b.clone(),
+                })
+        })
+        .collect();
+    let in_path = |k: &Known| {
+        file.ancestors().any(|a| {
+            a.file_name()
+                .is_some_and(|n| n.eq_ignore_ascii_case(k.game.as_str()))
+        })
+    };
+    let pick = hits.iter().position(in_path).unwrap_or(0);
+    hits.into_iter().nth(pick)
 }
 
 fn options(known: Option<&Known>) -> Options {
@@ -67,7 +81,7 @@ pub(crate) fn load(
     let data = fs::read(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let sha256 = rc_manifest::sha256_hex(&data);
     let manifests = rc_manifest::load_dir(games).map_err(|e| e.to_string())?;
-    let known = find(&manifests, &sha256);
+    let known = find(&manifests, &sha256, file);
     let pe = rc_pe::parse(&data).map_err(|e| format!("{}: {e}", file.display()))?;
     let base = base.or(known.as_ref().and_then(|k| k.binary.base));
     let image = Image::load(&data, &pe, base).map_err(|e| format!("{}: {e}", file.display()))?;

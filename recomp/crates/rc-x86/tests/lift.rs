@@ -69,10 +69,19 @@ fn branches_and_tables() {
 
 #[test]
 fn traps_name_what_is_missing() {
-    // emms: MMX is not modelled.
-    let i = rc_x86::lift_insn(&dec(&[0x0f, 0x77]), Flow::Next, None);
+    // paddw mm0, mm1: MMX arithmetic is not modelled.
+    let i = rc_x86::lift_insn(&dec(&[0x0f, 0xfd, 0xc1]), Flow::Next, None);
     assert_eq!(i.term, Term::Stop);
-    assert!(trap_text(&i.stmts).is_some_and(|t| t.contains("emms") && t.contains("0x00401000")));
+    assert!(trap_text(&i.stmts).is_some_and(|t| t.contains("paddw") && t.contains("0x00401000")));
+    // emms is: every x87 register tagged empty.
+    let i = rc_x86::lift_insn(&dec(&[0x0f, 0x77]), Flow::Next, None);
+    assert!(trap_text(&i.stmts).is_none());
+    let frees = i
+        .stmts
+        .iter()
+        .filter(|s| matches!(s, Stmt::Fpu(rc_ir::Fpu::Free(_))))
+        .count();
+    assert_eq!(frees, 8);
     // int3 ends execution with a trap of its own.
     let i = rc_x86::lift_insn(&dec(&[0xcc]), Flow::Stop, None);
     assert_eq!(i.term, Term::Stop);

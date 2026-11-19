@@ -22,6 +22,7 @@ void rc_hle_dinput(void);
 void rc_hle_dmusic(void);
 void rc_hle_dsound(void);
 void rc_hle_shell32(void);
+void rc_hle_wsock(void);
 
 /* Everything above. */
 void rc_hle_all(void);

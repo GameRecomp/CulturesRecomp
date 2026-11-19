@@ -141,6 +141,12 @@ impl Cx {
             M::Fincstp => self.fpu(Fpu::IncStp),
             M::Fdecstp => self.fpu(Fpu::DecStp),
             M::Fnop => {}
+            // The end of MMX use: every register tagged empty, the top unchanged.
+            M::Emms => {
+                for i in 0..8 {
+                    self.fpu(Fpu::Free(i));
+                }
+            }
             M::Fninit => self.fpu(Fpu::Init),
             M::Fnclex => self.fpu(Fpu::Clex),
             M::Fnstsw => {

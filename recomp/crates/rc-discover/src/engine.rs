@@ -891,6 +891,17 @@ impl<'a> Engine<'a> {
     /// Find the index bound (and an index byte table) of `jmp [idx*4 + table]` at `va`.
     fn table_bound(&self, va: u32, idx: Register) -> (Option<(u32, Bound)>, Option<u32>) {
         let mut track = idx.full_register32();
+        // Once the index came from a memory slot (`mov eax, [esp+4]`): that slot, as
+        // (base, index, scale, displacement), which a `cmp [slot], n` then bounds.
+        let mut slot: Option<(Register, Register, u32, u64)> = None;
+        let mem_of = |i: &Instruction| {
+            (
+                i.memory_base(),
+                i.memory_index(),
+                i.memory_index_scale(),
+                i.memory_displacement64(),
+            )
+        };
         let mut index_table = None;
         // Instructions walked so far, nearest to the jump first (they follow the current one).
         let mut later: Vec<Instruction> = Vec::new();
@@ -921,8 +932,11 @@ impl<'a> Engine<'a> {
                     track = s.full_register32();
                 }
                 Mnemonic::Cmp
-                    if i.op0_kind() == OpKind::Register
-                        && reg0 == track
+                    if ((slot.is_none() && i.op0_kind() == OpKind::Register && reg0 == track)
+                        || (slot.is_some()
+                            && i.op0_kind() == OpKind::Memory
+                            && i.memory_size() == MemorySize::UInt32
+                            && Some(mem_of(&i)) == slot))
                         && matches!(i.op1_kind(), OpKind::Immediate32 | OpKind::Immediate8to32) =>
                 {
                     let n = i.immediate(1) as u32;
@@ -957,11 +971,25 @@ impl<'a> Engine<'a> {
                     break;
                 }
                 Mnemonic::Mov
-                    if i.op0_kind() == OpKind::Register
+                    if slot.is_none()
+                        && i.op0_kind() == OpKind::Register
                         && i.op1_kind() == OpKind::Register
                         && reg0 == track =>
                 {
                     track = i.op1_register().full_register32();
+                }
+                // The index loaded from a dword slot (a stack argument, a global): from here
+                // on the slot is what a compare bounds. Only one such step.
+                Mnemonic::Mov
+                    if slot.is_none()
+                        && i.op0_kind() == OpKind::Register
+                        && i.op1_kind() == OpKind::Memory
+                        && i.memory_size() == MemorySize::UInt32
+                        && reg0 == track
+                        && i.memory_index() == Register::None =>
+                {
+                    slot = Some(mem_of(&i));
+                    track = Register::None;
                 }
                 _ => {
                     // Another write to the tracked register ends the search.
@@ -970,6 +998,20 @@ impl<'a> Engine<'a> {
                         && !matches!(i.mnemonic(), Mnemonic::Cmp | Mnemonic::Test)
                     {
                         break;
+                    }
+                    if let Some(sl) = slot {
+                        // A stack slot moves with esp; a store into the slot changes it.
+                        let moves_esp = matches!(
+                            i.mnemonic(),
+                            Mnemonic::Push | Mnemonic::Pop | Mnemonic::Call
+                        ) || (i.op0_kind() == OpKind::Register
+                            && reg0 == Register::ESP);
+                        let stores = i.op0_kind() == OpKind::Memory
+                            && mem_of(&i) == sl
+                            && !matches!(i.mnemonic(), Mnemonic::Cmp | Mnemonic::Test);
+                        if (sl.0 == Register::ESP && moves_esp) || stores {
+                            break;
+                        }
                     }
                 }
             }

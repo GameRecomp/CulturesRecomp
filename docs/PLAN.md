@@ -52,7 +52,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M7  | Sound, music and video                     | 🔶 | Bink intro plays. Miles samples and streams work. CD music plays from `MUSIC/TrackNN.ogg`. |
 | M8  | In game                                    | 🔶 | First campaign mission played to the end. Save/load round-trips. A one-hour soak runs without crash on Linux and Windows. |
 | M9  | **Cultures 1 release**                     | ⬜ | gog-en, gog-de and gold-de all pass the same checklist (see "Definition of done"), including the add-on campaign on gold-de. Release v0.1. |
-| M10 | **Cultures 2** (C2 engine)                 | ⬜ | `Cultures2.exe` discovered, lifted and booted. The `.cms_*` question is answered. DirectMusic music plays through the lifted `gedx8musicdrv.dll`. Campaign mission 1 is played through. Release v0.2. |
+| M10 | **Cultures 2** (C2 engine)                 | 🔶 | `Cultures2.exe` discovered, lifted and booted. The `.cms_*` question is answered. DirectMusic music plays through the lifted `gedx8musicdrv.dll`. Campaign mission 1 is played through. Release v0.2. |
 | M11 | **Northland, 8th Wonder and Saga**         | ⬜ | Both `Game.exe` builds (+ 8th Wonder ES) and the Saga run. DirectSound 8 works. MPEG-1 movies play. A campaign mission each (Saga: Drachenland and one community campaign) is played through. Release v0.3. |
 | M12 | Multiplayer                                | ⬜ | DirectPlay 4 (C1) and DirectPlay 8 (C2 engine) over UDP/LAN between two recompiled builds. `*MP.exe` builds lifted where they are needed. |
 | M13 | Editors                                    | ⬜ | Northland and 8th Wonder `Editor.exe` run: GDI, common controls, file dialogs. |
@@ -219,6 +219,13 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 
 ### M10 – Cultures 2
 
+- [x] Started on the shared toolchain, runtime and HLE: `Cultures2.exe` (5344 functions), its `binkw32.dll` (the same
+      build as German Cultures 1's) and `gedx8musicdrv.dll` lift; the shell picks them by hash and the game boots
+      through its initialisation. New for it: a `switch` bounded through a stack slot (`cmp [esp+4], n` before
+      `mov eax, [esp+4]`; general in discovery), `emms` (MMX state), Winsock as an offline network (wsock32 and
+      ws2_32 by ordinal), `MoveFileA`, `GetTempFileNameA`, `SetThreadPriority`, `ShellExecuteExA`, `CoCreateGuid`
+- [ ] Next: DirectMusic. The game creates `IDirectMusicPerformance8` and the composer; without them a list stays empty
+      and the game divides by its length (`0x473199`). Then MMX: the C2 engine uses it without a CPUID check
 - [ ] Research question 1: is `.cms_t` executed? Compare with the untouched `Cultures2MP.exe`
 - [ ] Discovery and lifting reuse M2–M4 (new manifest seeds only)
 - [ ] `ole32` COM class registry. `dmusic`: Loader, Performance, Segment, AudioPath as far as `gedx8musicdrv.dll` uses them.
