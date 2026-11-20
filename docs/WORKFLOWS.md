@@ -140,7 +140,9 @@ programs are lined up with `FRAME wait PATH` (the script pauses until the file e
 `RC_RECORD=input.txt` writes what the player does as such a script; replayed with `RC_INPUT` and `RC_CLOCK=virtual`
 (set both times) it repeats the run. `--exe NAME` runs another program of the install, e.g.
 `cultures-northland --exe Editor.exe` (lift it first; `--check --exe Editor.exe` lists what it imports). Such programs (no DirectDraw) get a desktop of
-`RC_DESKTOP=WxH` pixels (default 1024x768) in the game window.
+`RC_DESKTOP=WxH` pixels (default 1024x768) in the game window. The map editors of Northland, 8th Wonder and
+the Saga run this way (`recomp lift <install>/Editor.exe` first, then build); their file dialogs show the
+installation folder, and maps are saved into the user directory.
 
 ## Inspecting a binary
 

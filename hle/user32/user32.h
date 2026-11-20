@@ -232,6 +232,18 @@ uint32_t rc_load_icon_or_cursor(rc_cpu *c, uint32_t inst, uint32_t name, uint32_
 /* LoadBitmapA's work: a 32-bit bitmap from a resource. */
 uint32_t rc_load_bitmap(uint32_t inst, uint32_t name);
 void rc_dialog_init(void);
+/* A dialog made in code: a modal-frame #32770 window of client size cw x ch, centred, with the
+ * dialog procedure `proc` (a guest or import address, or 0) and the default font. */
+uint32_t rc_dialog_create(rc_cpu *c, uint32_t owner, const char *title, int32_t cw, int32_t ch, uint32_t proc);
+/* A visible control in it (a BS_DEFPUSHBUTTON becomes the default button). */
+uint32_t rc_dialog_item(rc_cpu *c, uint32_t hwnd, const char *cls, const char *text, uint32_t style, int32_t x, int32_t y,
+                        int32_t w, int32_t h, uint32_t id);
+/* Show it modally (`owner` disabled meanwhile, `focus` or the first tab stop focused) until
+ * rc_dialog_end; destroys it and returns the result. */
+uint32_t rc_dialog_run(rc_cpu *c, uint32_t hwnd, uint32_t owner, uint32_t focus);
+void rc_dialog_end(rc_cpu *c, uint32_t hwnd, uint32_t result);
+/* MessageBoxA's box (answered at once when there is no desktop). */
+uint32_t rc_message_box(rc_cpu *c, uint32_t owner, const char *text, const char *caption, uint32_t type);
 void rc_controls_init(void);
 void rc_menu_init(void);
 

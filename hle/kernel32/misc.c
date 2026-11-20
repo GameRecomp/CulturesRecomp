@@ -205,11 +205,10 @@ static void k_FreeResource(rc_cpu *c) { RC_RETURN(c, 0, 1); }
 
 /* ---- files ---- */
 
-/* SetCurrentDirectoryA(path): the program's directory stays the game folder. */
+/* SetCurrentDirectoryA(path): an existing directory inside the installation directory. */
 static void k_SetCurrentDirectoryA(rc_cpu *c)
 {
-    char rel[RC_PATH_MAX];
-    if (!rc_k32_guest_rel(rc_str(RC_ARG(c, 0)), rel, sizeof rel)) {
+    if (!rc_k32_set_current_dir(rc_str(RC_ARG(c, 0)))) {
         rc_last_error = 3; /* ERROR_PATH_NOT_FOUND */
         RC_RETURN(c, 0, 1);
     }

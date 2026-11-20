@@ -838,12 +838,7 @@ void rc_modal_loop(rc_cpu *c, uint32_t dialog, const bool *done)
             continue;
         }
         uint32_t hwnd = rc_ld32(m), wp = rc_ld32(m + 8), lp = rc_ld32(m + 12);
-        if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) {
-            int ch = key_char(wp, (keys[0x10] & 0x80) != 0, keys[0x14] & 1);
-            if (ch && !(keys[0x11] & 0x80)) {
-                post_front(hwnd, message == WM_KEYDOWN ? WM_CHAR : WM_SYSCHAR, (uint32_t)ch, lp);
-            }
-        }
+        rc_translate_key(m);
         if (message == WM_TIMER && lp) {
             uint32_t targs[4] = {hwnd, WM_TIMER, wp, (uint32_t)rc_ticks_peek_ms()};
             rc_call_guest(c, lp, 4, targs);

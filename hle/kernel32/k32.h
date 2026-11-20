@@ -29,6 +29,9 @@
  * copy, else the game's (false if neither exists). */
 bool rc_k32_guest_rel(const char *in, char *rel, size_t cap);
 bool rc_k32_find_existing(const char *rel, char *host, bool *is_dir, uint64_t *size);
+/* Change the current directory, which relative guest paths start from (false: no such directory
+ * inside the installation directory). */
+bool rc_k32_set_current_dir(const char *path);
 
 /* The first `n` bytes of a guest file, by guest path, or (path NULL) by
  * an open file handle; -1 if it cannot be read. */

@@ -56,6 +56,11 @@ size = 1126400
 sha256 = "4cecdd9fb148ec8c5f5b3ca8e30b225398b0ef94cd442bd24a17ead553e85360"
 variants = ["retail-de"]
 
+[binary.discover]
+# A data value that points into the middle of an instruction (0x434470) decodes as a plausible
+# function before the code around it is found, and then blocks it: these entries come first.
+seeds = [0x434338, 0x44848b]
+
 # --- libraries ---------------------------------------------------------------
 
 [[binary]]

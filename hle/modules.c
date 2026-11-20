@@ -13,6 +13,7 @@
 #include "kernel32/k32.h"
 #include "rc/hle_modules.h"
 #include "comctl32/comctl32.h"
+#include "comdlg32/comdlg32.h"
 #include "user32/user32.h"
 #include "winmm/winmm.h"
 
@@ -40,6 +41,7 @@ void rc_hle_user32(void)
     rc_controls_init();
     rc_dialog_init();
     rc_comctl32_init();
+    rc_comdlg32_init();
 }
 
 void rc_hle_gdi32(void)

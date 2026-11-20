@@ -102,7 +102,8 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `dpnet`     | the same network (`net.c`)     | c2 engine (DirectPlay 8) | peer and address objects; everything reaches the game as handler messages at the message pump |
 | `wsock32`, `ws2_32` | host sockets           | c2 engine | by ordinal (now: offline, `WSAStartup` works, no sockets) |
 | `comctl32`  | user32 controls                | editors   | tool bar, status bar, progress bar, track bar, tool tips |
-| `comdlg32`, `winspool` | platform        | editors   | M13 (open) |
+| `comdlg32`  | user32 dialogs + host files    | editors   | open and save dialogs of our own: the program's installation folder (user directory over the game's), its file types, guest paths back |
+| `winspool`  | –                              | editors   | no printers |
 
 Lifted instead of reimplemented: `binkw32.dll` (Bink 1 video), `DPlayDLL.dll` and `gedx8musicdrv.dll`.
 These are game-side code with a narrow API below them, so lifting them is less work and more faithful than

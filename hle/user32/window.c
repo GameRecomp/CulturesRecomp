@@ -119,6 +119,9 @@ typedef struct window {
 static window windows[WINDOWS];
 static uint32_t main_hwnd, focus_hwnd, capture_hwnd, active_hwnd;
 static int64_t z_top = 1, z_bottom = 0;
+/* Changes with every move, resize, show, hide, restacking, creation and destruction: window DCs
+ * a program keeps recompute their origin and visible region when it has changed. */
+static uint32_t vis_gen = 1;
 
 static window *get(uint32_t hwnd)
 {
@@ -475,6 +478,33 @@ static void visible_region(window *w, bool whole, rc_rgn *g)
 
 uint32_t rc_window_dc(uint32_t hwnd) { return DC_BASE + (hwnd & 0xffffu); }
 
+/* A window DC's origin and visible region, as the windows are now. */
+static void refresh_dc(rc_dc *d)
+{
+    window *w = get(d->hwnd);
+    d->vis_gen = vis_gen;
+    if (!w) {
+        rc_rgn_empty(&d->vis);
+        return;
+    }
+    bool whole = d->vis_kind == 2;
+    rc_rect a = screen_area(w, whole);
+    d->org_x = a.l;
+    d->org_y = a.t;
+    if (rc_wnd_visible(d->hwnd)) {
+        visible_region(w, whole, &d->vis);
+    } else {
+        rc_rgn_empty(&d->vis);
+    }
+}
+
+static void refresh_if_stale(rc_dc *d)
+{
+    if (d->vis_gen != vis_gen) {
+        refresh_dc(d);
+    }
+}
+
 uint32_t rc_wnd_dc(uint32_t hwnd, bool whole)
 {
     window *w = get(hwnd);
@@ -486,14 +516,9 @@ uint32_t rc_wnd_dc(uint32_t hwnd, bool whole)
     d->target = (rc_pixels){fb, (uint32_t)desktop_w, (uint32_t)desktop_h, (uint32_t)desktop_w * 4, 32, 0xff0000, 0xff00, 0xff};
     d->hwnd = hwnd ? hwnd : 0xffffffffu;
     if (w) {
-        rc_rect a = screen_area(w, whole);
-        d->org_x = a.l;
-        d->org_y = a.t;
-        if (rc_wnd_visible(hwnd)) {
-            visible_region(w, whole, &d->vis);
-        } else {
-            rc_rgn_empty(&d->vis);
-        }
+        d->vis_kind = whole ? 2 : 1;
+        rc_dc_refresh = refresh_if_stale;
+        refresh_dc(d);
         d->font = w->font;
     } else {
         rc_rgn_set(&d->vis, 0, 0, desktop_w, desktop_h);
@@ -862,6 +887,7 @@ static uint32_t create(rc_cpu *c, uint32_t exstyle, uint32_t cls_arg, const char
     window *w = &windows[i];
     memset(w, 0, sizeof *w);
     w->used = true;
+    vis_gen++;
     w->cls = k;
     w->wndproc = k->wndproc;
     w->style = style & ~WS_VISIBLE;
@@ -879,6 +905,7 @@ static uint32_t create(rc_cpu *c, uint32_t exstyle, uint32_t cls_arg, const char
         w->parent = w->owner;
         w->menu = menu;
         w->z = ++z_top;
+        vis_gen++;
     }
     int32_t dw, dh;
     rc_desktop_size(&dw, &dh);
@@ -891,6 +918,7 @@ static uint32_t create(rc_cpu *c, uint32_t exstyle, uint32_t cls_arg, const char
         ht = child ? 0 : dh * 3 / 4;
     }
     w->rect = (rc_rect){x, y, x + wd, y + ht};
+    vis_gen++;
     w->text = strdup(title ? title : "");
     uint32_t hwnd = HWND_BASE + 4 * i;
     if (!child && !main_hwnd) {
@@ -924,6 +952,7 @@ static uint32_t create(rc_cpu *c, uint32_t exstyle, uint32_t cls_arg, const char
         /* the size the window was given, which the CBT hook or WM_NCCREATE may have changed */
         int32_t nx = (int32_t)rc_ld32(cs + 28), ny = (int32_t)rc_ld32(cs + 24);
         w->rect = (rc_rect){nx, ny, nx + (int32_t)rc_ld32(cs + 20), ny + (int32_t)rc_ld32(cs + 16)};
+        vis_gen++;
         calc_client(c, w);
         created = (int32_t)send(c, hwnd, WM_CREATE, 0, cs);
     }
@@ -934,6 +963,7 @@ static uint32_t create(rc_cpu *c, uint32_t exstyle, uint32_t cls_arg, const char
             send(c, hwnd, WM_NCDESTROY, 0, 0);
             free(w->text);
             w->used = false;
+            vis_gen++;
         }
         if (main_hwnd == hwnd) {
             main_hwnd = 0;
@@ -1014,6 +1044,7 @@ static void destroy_tree(rc_cpu *c, uint32_t hwnd, bool send_destroy)
     free(w->text);
     free(w->data);
     w->used = false;
+    vis_gen++;
     if (hwnd == main_hwnd) {
         main_hwnd = 0;
         if (!desktop_on) {
@@ -1052,6 +1083,7 @@ void rc_wnd_destroy(rc_cpu *c, uint32_t hwnd)
         return;
     }
     w->style &= ~WS_VISIBLE;
+    vis_gen++;
     destroy_tree(c, hwnd, true);
     if (was_visible) {
         if (parent && get(parent)) {
@@ -1133,6 +1165,7 @@ void rc_wnd_activate(rc_cpu *c, uint32_t hwnd)
     if (hwnd == active_hwnd) {
         if (!w->game && w->z != z_top) {
             w->z = ++z_top;
+            vis_gen++;
             invalidate_frame(w);
         }
         return;
@@ -1156,6 +1189,7 @@ void rc_wnd_activate(rc_cpu *c, uint32_t hwnd)
     }
     active_hwnd = hwnd;
     w->z = ++z_top;
+    vis_gen++;
     send(c, hwnd, WM_NCACTIVATE, 1, 0);
     send(c, hwnd, WM_ACTIVATE, 1, old);
     if (get(hwnd) == w) {
@@ -1187,6 +1221,7 @@ void rc_wnd_show(rc_cpu *c, uint32_t hwnd, int cmd)
             return;
         }
         w->style |= WS_VISIBLE;
+        vis_gen++;
         if (hwnd == main_hwnd && !desktop_on) {
             rc_plat_window(w->rect.r - w->rect.l, w->rect.b - w->rect.t);
             rc_plat_show(true);
@@ -1209,6 +1244,7 @@ void rc_wnd_show(rc_cpu *c, uint32_t hwnd, int cmd)
             return;
         }
         w->style &= ~WS_VISIBLE;
+        vis_gen++;
         if (top) {
             invalidate_all();
             if (hwnd == main_hwnd && !desktop_on) {
@@ -1310,6 +1346,7 @@ static void k_BringWindowToTop(rc_cpu *c)
     window *w = get(RC_ARG(c, 0));
     if (w) {
         w->z = ++z_top;
+        vis_gen++;
         invalidate_frame(w);
     }
     RC_RETURN(c, w != NULL, 1);
@@ -1354,6 +1391,7 @@ static void k_SetParent(rc_cpu *c)
     uint32_t old = w->parent;
     w->parent = RC_ARG(c, 1) == DESKTOP_HWND ? 0 : RC_ARG(c, 1);
     w->z = (w->style & WS_CHILD) ? --z_bottom : ++z_top;
+    vis_gen++;
     invalidate_all();
     RC_RETURN(c, old, 2);
 }
@@ -1606,6 +1644,7 @@ static void set_pos(rc_cpu *c, uint32_t hwnd, uint32_t after, int32_t x, int32_t
         int32_t nx = (int32_t)rc_ld32(wp + 8), ny = (int32_t)rc_ld32(wp + 12);
         int32_t nw = (int32_t)rc_ld32(wp + 16), nh = (int32_t)rc_ld32(wp + 20);
         w->rect = (rc_rect){nx, ny, nx + (nw > 0 ? nw : 0), ny + (nh > 0 ? nh : 0)};
+        vis_gen++;
     }
     if (change) {
         calc_client(c, w);
@@ -1613,10 +1652,13 @@ static void set_pos(rc_cpu *c, uint32_t hwnd, uint32_t after, int32_t x, int32_t
     if (!(flags & SWP_NOZORDER)) {
         if (after == 0 || after == 0xffffffffu) { /* HWND_TOP, HWND_TOPMOST */
             w->z = ++z_top;
+            vis_gen++;
         } else if (after == 1) { /* HWND_BOTTOM */
             w->z = --z_bottom;
+            vis_gen++;
         } else if (get(after)) {
             w->z = get(after)->z - 1;
+            vis_gen++;
         }
     }
     if (change || !(flags & SWP_NOZORDER)) {
@@ -1712,6 +1754,7 @@ void rc_window_resize(uint32_t hwnd, int32_t width, int32_t height)
     }
     w->game = true; /* a display mode change: the window is the game's screen */
     w->rect = (rc_rect){0, 0, width, height};
+    vis_gen++;
     w->crect = (rc_rect){0, 0, width, height};
     if (hwnd == main_hwnd) {
         rc_plat_window(width, height);
@@ -2177,6 +2220,9 @@ static void k_BeginPaint(rc_cpu *c)
     w->upd = (rc_rect){0, 0, 0, 0};
     w->erase = false;
     rc_dc *d = rc_dc_get(hdc);
+    if (d) {
+        d->vis_kind = 0; /* a paint DC keeps the update region's limit */
+    }
     if (d && !rc_rect_empty(upd)) {
         /* drawing is limited to what was invalid */
         rc_rgn_and_rect(&d->vis, (rc_rect){upd.l + d->org_x, upd.t + d->org_y, upd.r + d->org_x, upd.b + d->org_y});

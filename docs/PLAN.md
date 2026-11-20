@@ -297,8 +297,12 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [x] `comctl32`: tool bar, status bar, progress bar, track bar, tool tips, `DllGetVersion`
 - [x] Northland's `Editor.exe` (MFC 4.2, static) starts with `--exe Editor.exe` and shows its frame window,
       menus, tool bar and status bar
-- [ ] `comdlg32` (open/save dialogs), tree and list views if a dialog needs them
-- [ ] A map opened, edited and saved in Northland's editor; then 8th Wonder and the Saga
+- [x] `comdlg32`: open and save dialogs of our own inside the installation folder, `GetFileTitleA`
+- [x] The editors of Northland, 8th Wonder and the Saga: a new map created, players set, terrain painted, saved
+      as `.c2e` (with the exported `.c2m`) and opened again (scripted runs)
+- [ ] A map made in the editor played in the game; the editors' other tools (buildings, units, scripts, goals)
+      tried by hand
+- [ ] Tree and list views, if a dialog of the editors needs them
 
 ### M14 – Converter
 

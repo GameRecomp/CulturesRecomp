@@ -67,6 +67,10 @@ typedef struct rc_dc {
     uint32_t hwnd;
     int32_t org_x, org_y;
     rc_rgn vis;
+    /* 1: a window's client DC, 2: its whole-window DC, whose origin and region follow the window
+     * (rc_dc_refresh, user32's, when vis_gen is stale); 0: fixed. */
+    uint8_t vis_kind;
+    uint32_t vis_gen;
     /* The program's clip region (SelectClipRgn), in device coordinates of the DC. */
     bool has_clip;
     rc_rgn clip;
@@ -75,6 +79,8 @@ typedef struct rc_dc {
 } rc_dc;
 
 rc_dc *rc_dc_get(uint32_t hdc);
+/* Set by user32: brings a window DC (vis_kind != 0) up to date with the windows. */
+extern void (*rc_dc_refresh)(rc_dc *d);
 uint32_t rc_dc_new(void);
 void rc_dc_free(uint32_t hdc);
 

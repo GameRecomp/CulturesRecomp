@@ -603,6 +603,7 @@ bool rc_is_dialog_message(rc_cpu *c, uint32_t dlgw, uint32_t m)
         return true;
     }
     if (rc_wnd_ok(hwnd)) {
+        rc_translate_key(m); /* as TranslateMessage: the key's WM_CHAR comes next */
         rc_wnd_send(c, hwnd, msg, wp, rc_ld32(m + 12));
     }
     return true;
@@ -733,6 +734,72 @@ static void k_MapDialogRect(rc_cpu *c)
 
 static void k_GetDialogBaseUnits(rc_cpu *c) { ret(c, (13u << 16) | 6u, 0); }
 
+/* ---- dialogs made in code (message boxes, comdlg32) ---- */
+
+uint32_t rc_dialog_create(rc_cpu *c, uint32_t owner, const char *title, int32_t cw, int32_t ch, uint32_t proc)
+{
+    int32_t w = cw, h = ch;
+    uint32_t style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
+    adjust(&w, &h, style, WS_EX_DLGMODALFRAME);
+    int32_t dw, dh;
+    rc_desktop_size(&dw, &dh);
+    uint32_t hwnd =
+        rc_wnd_create(c, WS_EX_DLGMODALFRAME, "#32770", title, style, (dw - w) / 2, (dh - h) / 2, w, h, owner, 0, 0, 0);
+    if (!hwnd) {
+        return 0;
+    }
+    rc_wnd_set_long(hwnd, DWL_DLGPROC, proc);
+    dlg(hwnd);
+    rc_wnd_send(c, hwnd, WM_SETFONT, rc_gui_font(), 0);
+    return hwnd;
+}
+
+uint32_t rc_dialog_item(rc_cpu *c, uint32_t hwnd, const char *cls, const char *text, uint32_t style, int32_t x, int32_t y,
+                        int32_t w, int32_t h, uint32_t id)
+{
+    uint32_t k = rc_wnd_create(c, 0, cls, text, style | WS_CHILD | WS_VISIBLE, x, y, w, h, hwnd, id, 0, 0);
+    if (k) {
+        rc_wnd_send(c, k, WM_SETFONT, rc_gui_font(), 0);
+        if (!strcmp(cls, "Button") && (style & 0xf) == 1) {
+            dlg(hwnd)->defid = id;
+        }
+    }
+    return k;
+}
+
+uint32_t rc_dialog_run(rc_cpu *c, uint32_t hwnd, uint32_t owner, uint32_t focus)
+{
+    if (!hwnd) {
+        return 0;
+    }
+    if (owner && rc_wnd_ok(owner)) {
+        rc_wnd_enable(c, rc_wnd_top_level(owner), false);
+    }
+    dialog *d = dlg(hwnd);
+    rc_wnd_show(c, hwnd, 5);
+    set_focus_ctl(c, focus ? focus : first_tab(hwnd));
+    rc_modal_loop(c, hwnd, &d->ended);
+    uint32_t result = rc_wnd_ok(hwnd) && rc_wnd_data(hwnd) == d ? d->result : 2;
+    if (owner && rc_wnd_ok(owner)) {
+        rc_wnd_enable(c, rc_wnd_top_level(owner), true);
+        rc_wnd_activate(c, rc_wnd_top_level(owner));
+    }
+    if (rc_wnd_ok(hwnd)) {
+        rc_wnd_destroy(c, hwnd);
+    }
+    return result;
+}
+
+void rc_dialog_end(rc_cpu *c, uint32_t hwnd, uint32_t result)
+{
+    dialog *d = dlg(hwnd);
+    if (d) {
+        d->result = result;
+        d->ended = true;
+        rc_wnd_show(c, hwnd, 0);
+    }
+}
+
 /* ---- message boxes ---- */
 
 static uint32_t message_box(rc_cpu *c, uint32_t owner, const char *text, const char *caption, uint32_t type)
@@ -768,51 +835,31 @@ static uint32_t message_box(rc_cpu *c, uint32_t owner, const char *text, const c
     int32_t bw = 75, bh = 23, gap = 6, n = sets[set].n;
     int32_t cw = tr.r + 30 > n * (bw + gap) + 20 ? tr.r + 30 : n * (bw + gap) + 20;
     int32_t ch = tr.b + 20 + bh + 22;
-    int32_t w = cw, h = ch;
-    uint32_t style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME;
-    adjust(&w, &h, style, WS_EX_DLGMODALFRAME);
-    int32_t dw, dh;
-    rc_desktop_size(&dw, &dh);
-    uint32_t hwnd = rc_wnd_create(c, WS_EX_DLGMODALFRAME, "#32770", caption, style, (dw - w) / 2, (dh - h) / 2, w, h,
-                                  owner, 0, 0, 0);
+    uint32_t hwnd = rc_dialog_create(c, owner, caption, cw, ch, 0);
     if (!hwnd) {
         return 1;
     }
     dialog *dd = dlg(hwnd);
     dd->msgbox = 1;
-    dd->defid = sets[set].ids[0];
-    uint32_t font = rc_gui_font();
-    rc_wnd_send(c, hwnd, WM_SETFONT, font, 0);
-    uint32_t st = rc_wnd_create(c, 0, "Static", text, WS_CHILD | WS_VISIBLE | 0x80 /* SS_NOPREFIX */, 15, 12, tr.r + 4,
-                                tr.b, hwnd, 0xffff, 0, 0);
-    rc_wnd_send(c, st, WM_SETFONT, font, 0);
+    rc_dialog_item(c, hwnd, "Static", text, 0x80 /* SS_NOPREFIX */, 15, 12, tr.r + 4, tr.b, 0xffff);
     int32_t x = (cw - n * (bw + gap) + gap) / 2;
     uint32_t first = 0;
     for (int i = 0; i < n; i++) {
-        uint32_t b = rc_wnd_create(c, 0, "Button", sets[set].labels[i],
-                                   WS_CHILD | WS_VISIBLE | WS_TABSTOP | (i == 0 ? 1u | WS_GROUP : 0u), x, tr.b + 24, bw,
-                                   bh, hwnd, sets[set].ids[i], 0, 0);
-        rc_wnd_send(c, b, WM_SETFONT, font, 0);
+        uint32_t b = rc_dialog_item(c, hwnd, "Button", sets[set].labels[i], WS_TABSTOP | (i == 0 ? 1u | WS_GROUP : 0u),
+                                    x, tr.b + 24, bw, bh, sets[set].ids[i]);
         if (!first) {
             first = b;
         }
         x += bw + gap;
     }
-    if (owner && rc_wnd_ok(owner)) {
-        rc_wnd_enable(c, rc_wnd_top_level(owner), false);
-    }
-    rc_wnd_show(c, hwnd, 5);
-    set_focus_ctl(c, first);
-    rc_modal_loop(c, hwnd, &dd->ended);
-    uint32_t result = rc_wnd_ok(hwnd) && rc_wnd_data(hwnd) == dd ? dd->result : 2;
-    if (owner && rc_wnd_ok(owner)) {
-        rc_wnd_enable(c, rc_wnd_top_level(owner), true);
-        rc_wnd_activate(c, rc_wnd_top_level(owner));
-    }
-    if (rc_wnd_ok(hwnd)) {
-        rc_wnd_destroy(c, hwnd);
-    }
+    dd->defid = sets[set].ids[0];
+    uint32_t result = rc_dialog_run(c, hwnd, owner, first);
     return result ? result : 1;
+}
+
+uint32_t rc_message_box(rc_cpu *c, uint32_t owner, const char *text, const char *caption, uint32_t type)
+{
+    return message_box(c, owner, text, caption, type);
 }
 
 /* MessageBoxA(owner, text, caption, type) */

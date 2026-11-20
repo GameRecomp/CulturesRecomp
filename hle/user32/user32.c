@@ -2,9 +2,11 @@
 /*
  * user32: what a program does before its first window exists: resources
  * (cursors, icons, accelerators, strings), window classes, registered
- * messages, rectangles. Windows themselves, messages and input arrive with
- * the SDL3 platform layer.
+ * messages, rectangles. Windows are in window.c, messages and input in
+ * input.c, menus, dialogs and controls in their own files.
  */
+#define _POSIX_C_SOURCE 200809L /* strdup */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,11 +91,14 @@ void rc_class_builtin(const char *name, uint32_t style, void (*fn)(rc_cpu *c), u
 {
     char import[80];
     snprintf(import, sizeof import, "WndProc::%s", name);
-    rc_import_def *def = malloc(sizeof *def); /* the registry keeps the pointer */
-    if (!def) {
+    rc_import_def *def = malloc(sizeof *def); /* the registry keeps the pointers */
+    char *proc = strdup(import);
+    if (!def || !proc) {
+        free(def);
+        free(proc);
         return;
     }
-    *def = (rc_import_def){"USER32_CLASS", rc_str(rc_proc_str(import)), fn};
+    *def = (rc_import_def){"USER32_CLASS", proc, fn};
     rc_register_imports(def, 1);
     rc_wclass *k = class_slot(name);
     if (!k) {
@@ -206,10 +211,70 @@ static void k_LoadIconA(rc_cpu *c)
     RC_RETURN(c, next_resource, 2);
 }
 
+/* ---- accelerators ----
+ * A table is the program's RT_ACCELERATOR resource: entries of {u16 flags, u16 key, u16 command,
+ * u16 pad}, the last flagged 0x80. The handle points to it. */
+#define ACCELS 32
+#define ACCEL_HANDLE 0x00090000u
+static struct {
+    uint32_t data, n;
+} accels[ACCELS];
+static int naccels;
+
 static void k_LoadAcceleratorsA(rc_cpu *c)
 {
-    next_resource += 4;
-    RC_RETURN(c, next_resource, 2);
+    uint32_t module = RC_ARG(c, 0), name = RC_ARG(c, 1), data = 0, size = 0;
+    bool found = name < 0x10000 ? rc_resource(module, 9, name, &data, &size)
+                                : rc_resource_named(module, 9, rc_str(name), &data, &size);
+    if (!found || naccels == ACCELS) {
+        RC_RETURN(c, 0, 2);
+    }
+    for (int i = 0; i < naccels; i++) {
+        if (accels[i].data == data) {
+            RC_RETURN(c, ACCEL_HANDLE + 4u * (uint32_t)i, 2);
+        }
+    }
+    uint32_t n = 0;
+    while (n * 8 + 8 <= size) {
+        n++;
+        if (rc_ld16(data + (n - 1) * 8) & 0x80) {
+            break;
+        }
+    }
+    accels[naccels].data = data;
+    accels[naccels].n = n;
+    RC_RETURN(c, ACCEL_HANDLE + 4u * (uint32_t)naccels++, 2);
+}
+
+/* TranslateAcceleratorA(hwnd, table, msg): a key that matches an entry (with the same Shift,
+ * Ctrl and Alt) becomes WM_COMMAND (high word 1) to `hwnd`. */
+static void k_TranslateAcceleratorA(rc_cpu *c)
+{
+    uint32_t hwnd = RC_ARG(c, 0), i = (RC_ARG(c, 1) - ACCEL_HANDLE) / 4, msg = RC_ARG(c, 2);
+    uint32_t m = rc_ld32(msg + 4), key = rc_ld32(msg + 8);
+    bool down = m == 0x100 || m == 0x104, chr = m == 0x102 || m == 0x106;
+    if (i >= (uint32_t)naccels || !hwnd || (!down && !chr)) {
+        RC_RETURN(c, 0, 3);
+    }
+    bool shift = rc_key_state(0x10) & 0x80, ctrl = rc_key_state(0x11) & 0x80, alt = rc_key_state(0x12) & 0x80;
+    for (uint32_t e = 0; e < accels[i].n; e++) {
+        uint32_t at = accels[i].data + e * 8, flags = rc_ld16(at);
+        if ((flags & 1) ? !down : !chr) {
+            continue; /* FVIRTKEY entries match key downs, the others characters */
+        }
+        if (rc_ld16(at + 2) != (key & 0xffff)) {
+            continue;
+        }
+        if ((flags & 1) && (!!(flags & 4) != shift || !!(flags & 8) != ctrl)) {
+            continue;
+        }
+        if (!!(flags & 0x10) != alt) {
+            continue;
+        }
+        rc_wnd_send(c, hwnd, 0x111, 0x10000u | rc_ld16(at + 4), 0);
+        RC_RETURN(c, 1, 3);
+    }
+    RC_RETURN(c, 0, 3);
 }
 
 /* ---- cursors ----
@@ -927,6 +992,7 @@ const rc_import_def rc_user32_setup[] = {
     {U32, "ShowCursor", k_ShowCursor},
     {U32, "LoadIconA", k_LoadIconA},
     {U32, "LoadAcceleratorsA", k_LoadAcceleratorsA},
+    {U32, "TranslateAcceleratorA", k_TranslateAcceleratorA},
     {U32, "CreateIconIndirect", k_CreateIconIndirect},
     {U32, "DestroyCursor", k_DestroyCursor},
     {U32, "DestroyIcon", k_DestroyCursor},

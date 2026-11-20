@@ -1928,6 +1928,9 @@ static void wp_combobox(rc_cpu *c)
         RET(r);
     }
     switch (msg) {
+    case 0x0081: /* WM_NCCREATE: WS_VSCROLL and WS_HSCROLL are the list's, not the box's own */
+        rc_wnd_set_style(hwnd, style & ~(WS_VSCROLL | WS_HSCROLL));
+        RET(rc_def_window_proc(c, hwnd, msg, wp, lp));
     case WM_CREATE: {
         b->l.item_h = font_height(c, hwnd);
         rc_rect cr = rc_wnd_client(hwnd);

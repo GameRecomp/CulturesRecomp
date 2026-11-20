@@ -376,6 +376,20 @@ connection per client to the host, which relays.
 - Windows that are not visible with all their parents receive no `WM_PAINT`: the view of a hidden frame paints
   before its document exists otherwise.
 
+- The editors walk folders with `SetCurrentDirectoryA` and `_findfirst("*.*")`. With a current directory that
+  never changes, that walk recurses for ever (it ran out of find handles). kernel32 keeps a real current
+  directory now (inside the installation folder); relative paths start from it.
+- The map view keeps one window DC for its whole life. Its visible region has to follow the windows (a dialog
+  over the view and gone again), so window DCs recompute origin and region when the window tree has changed.
+- A new map is all "EDGE" texture, which is black; terrain shows once it is painted.
+- `IsDialogMessage` has to translate the keys it passes on (it replaces `TranslateMessage` in dialog loops),
+  or edit fields in dialogs get no characters.
+- The Saga's `Editor.exe`: a data value that points into the middle of an instruction (0x434470) decoded as a
+  function before the code around it was found, and blocked it (an indirect call to 0x44848b then hit code
+  that was never lifted). The manifest seeds 0x434338 and 0x44848b; afterwards discovery classifies the whole
+  section with that false function gone. **(open)** a general rule: a candidate from data that a code
+  immediate or call contradicts later should give way.
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?

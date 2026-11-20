@@ -15,12 +15,19 @@
 #define DC_HANDLE 0x02000000u
 
 static rc_dc dcs[DCS];
+void (*rc_dc_refresh)(rc_dc *d);
 
 rc_dc *rc_dc_get(uint32_t hdc)
 {
     if (hdc >= DC_HANDLE && hdc < DC_HANDLE + 4 * DCS && (hdc - DC_HANDLE) % 4 == 0) {
         rc_dc *d = &dcs[(hdc - DC_HANDLE) / 4];
-        return d->used ? d : NULL;
+        if (!d->used) {
+            return NULL;
+        }
+        if (d->vis_kind && rc_dc_refresh) {
+            rc_dc_refresh(d);
+        }
+        return d;
     }
     return NULL;
 }

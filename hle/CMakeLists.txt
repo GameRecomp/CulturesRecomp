@@ -30,6 +30,7 @@ add_library(rc_hle STATIC
     user32/controls.c
     user32/dialog.c
     comctl32/comctl32.c
+    comdlg32/comdlg32.c
     gdi32/gdi32.c
     gdi32/dc.c
     gdi32/text.c

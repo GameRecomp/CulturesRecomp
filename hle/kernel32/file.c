@@ -96,6 +96,57 @@ static int split(const char *path, char comps[][256], int max)
     return n;
 }
 
+/* The current directory: a guest path, the installation directory until the program changes it. */
+static char cwd[RC_PATH_MAX];
+
+static const char *current_dir(void) { return cwd[0] ? cwd : rc_cfg->guest_dir; }
+
+/* A guest path made absolute (relative ones from the current directory), "." and ".." resolved,
+ * '\\'-separated ("C:\\" for a drive's root). */
+static void absolute(const char *in, char *out, size_t cap)
+{
+    char abs[RC_PATH_MAX];
+    const char *base = current_dir();
+    if (in[0] && in[1] == ':') {
+        snprintf(abs, sizeof abs, "%s", in);
+    } else if (in[0] == '\\' || in[0] == '/') {
+        snprintf(abs, sizeof abs, "%c:%s", base[0], in);
+    } else {
+        int w = snprintf(abs, sizeof abs, "%s\\%s", base, in);
+        if (w < 0 || (size_t)w >= sizeof abs) {
+            abs[0] = 0;
+        }
+    }
+    static char comps[64][256];
+    int k = split(abs, comps, 64);
+    size_t used = 0;
+    out[0] = 0;
+    for (int i = 0; i < k && used < cap; i++) {
+        int w = snprintf(out + used, cap - used, "%s%s", i ? "\\" : "", comps[i]);
+        used += w > 0 ? (size_t)w : 0;
+        if (i == 0 && k == 1 && used < cap) {
+            used += (size_t)snprintf(out + used, cap - used, "\\");
+        }
+    }
+}
+
+/* SetCurrentDirectoryA's work: an existing directory inside the installation directory. */
+bool rc_k32_set_current_dir(const char *path)
+{
+    char abs[RC_PATH_MAX], rel[RC_PATH_MAX], host[RC_PATH_MAX];
+    absolute(path, abs, sizeof abs);
+    bool is_dir = false;
+    if (!rc_k32_guest_rel(abs, rel, sizeof rel) || !rc_k32_find_existing(rel, host, &is_dir, NULL) || !is_dir) {
+        return false;
+    }
+    size_t n = strlen(abs);
+    if (n > 3 && abs[n - 1] == '\\') {
+        abs[n - 1] = 0;
+    }
+    snprintf(cwd, sizeof cwd, "%s", abs);
+    return true;
+}
+
 /* The path below the guest installation directory, '/'-separated, or
  * false if the guest path lies elsewhere. */
 bool rc_k32_guest_rel(const char *in, char *rel, size_t cap)
@@ -104,14 +155,8 @@ bool rc_k32_guest_rel(const char *in, char *rel, size_t cap)
         return false;
     }
     char abs[RC_PATH_MAX];
+    absolute(in, abs, sizeof abs);
     const char *root = rc_cfg->guest_dir;
-    if (in[0] && in[1] == ':') {
-        snprintf(abs, sizeof abs, "%s", in);
-    } else if (in[0] == '\\' || in[0] == '/') {
-        snprintf(abs, sizeof abs, "%c:%s", root[0], in);
-    } else {
-        snprintf(abs, sizeof abs, "%s\\%s", root, in);
-    }
     static char a[64][256], r[16][256];
     int na = split(abs, a, 64), nr = split(root, r, 16);
     if (na < nr) {
@@ -699,36 +744,20 @@ static void k_PeekNamedPipe(rc_cpu *c)
 static void k_GetCurrentDirectoryA(rc_cpu *c)
 {
     uint32_t n = RC_ARG(c, 0), buf = RC_ARG(c, 1);
-    uint32_t len = (uint32_t)strlen(rc_cfg->guest_dir);
+    const char *dir = current_dir();
+    uint32_t len = (uint32_t)strlen(dir);
     if (n < len + 1) {
         RC_RETURN(c, len + 1, 2);
     }
-    RC_RETURN(c, rc_put_str(buf, n, rc_cfg->guest_dir), 2);
+    RC_RETURN(c, rc_put_str(buf, n, dir), 2);
 }
 
 static void k_GetFullPathNameA(rc_cpu *c)
 {
     const char *in = rc_str(RC_ARG(c, 0));
     uint32_t n = RC_ARG(c, 1), buf = RC_ARG(c, 2), part = RC_ARG(c, 3);
-    char abs[RC_PATH_MAX];
-    const char *root = rc_cfg->guest_dir;
-    if (in[0] && in[1] == ':') {
-        snprintf(abs, sizeof abs, "%s", in);
-    } else if (in[0] == '\\' || in[0] == '/') {
-        snprintf(abs, sizeof abs, "%c:%s", root[0], in);
-    } else {
-        snprintf(abs, sizeof abs, "%s\\%s", root, in);
-    }
-    static char comps[64][256];
-    int k = split(abs, comps, 64);
-    char out[RC_PATH_MAX] = {0};
-    size_t used = 0;
-    for (int i = 0; i < k; i++) {
-        used += (size_t)snprintf(out + used, sizeof out - used, "%s%s", i ? "\\" : "", comps[i]);
-        if (i == 0 && k == 1) {
-            used += (size_t)snprintf(out + used, sizeof out - used, "\\");
-        }
-    }
+    char out[RC_PATH_MAX];
+    absolute(in, out, sizeof out);
     uint32_t len = (uint32_t)strlen(out);
     if (n < len + 1) {
         RC_RETURN(c, len + 1, 4);
