@@ -245,6 +245,7 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [x] Music: `hle/dmusic/player.c` plays the segments (tempo, band, pattern and sequence tracks) through a DLS
       synthesizer (`dls.c`: the games' own .dls files, regions, loops, envelope) into a PCM stream; the loader
       finds segments and the collections bands name in its search directory (RESEARCH "DirectMusic music")
+- [x] German GOG version ("Die Tore Asgards"): converts with `recomp convert` and reaches its serial prompt too
 - [ ] Next: past the serial prompt with the player's serial
 - [x] Research question 1: `.cms_t` does not run up to the serial prompt; `Cultures2MP.exe` (no protection, same
       version, also lifted) is the fallback if it does later
