@@ -300,7 +300,8 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       lifts and every import is covered, should a lobby ever be rebuilt (RESEARCH "GameMp.exe")
 - [x] `Cultures2MP.exe` is not needed for multiplayer: it is `Cultures2.exe` without the copy protection (research
       questions 1 and 7); Cultures 2's own lobby (`Lobby.exe`) served a server that is gone
-- [ ] Cultures 2 multiplayer through its DirectPlay 8
+- [x] Cultures 2 multiplayer through its DirectPlay 8: two programs, host creates, client joins, the host starts
+      "Economy: Island Rule" and both load the mission (scripted, the same steps as Northland's)
 - [x] Determinism check: two recompiled Cultures 1 programs stay in lockstep for an hour on the real clock (65 min,
       about 30,000 messages each way, still in contact at the end, no desync message; the game ran on by itself,
       neither side gave commands). The virtual clock cannot test this (RESEARCH "DirectPlay")
