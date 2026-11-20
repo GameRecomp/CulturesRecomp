@@ -322,6 +322,9 @@ unpacked folder (entries guarded by a `Check:` function and deleting entries lef
 guest installation folder when the runtime loads the file). The serial stays on the player's machine with the rest of
 the unpacked game.
 
+With them Cultures 1 starts as after a GOG installation: 1024x768 (its built-in default without the entries is
+800x600), full volume, and the network defaults of `DPlayDLL` (`HKLM\SOFTWARE\Funatics\DPlayDLL\Cultures`).
+
 ## Start-up (M5)
 
 What `Cultures.exe` (GOG EN) does before its first frame, as `RC_TRACE=imports` shows it:
