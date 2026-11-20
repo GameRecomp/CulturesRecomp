@@ -152,9 +152,11 @@ void rc_trap(rc_cpu *c, uint32_t addr, const char *why)
              addr, c->r[0], c->r[1], c->r[2], c->r[3], c->r[4], c->r[5], c->r[6], c->r[7]);
 }
 
-/* A fixed CPU: a P6-class Intel processor with FPU, TSC, CX8 and CMOV, and
- * no MMX or SSE: libraries of the time (Bink) then take their plain code
- * paths, which the lifter models. */
+/* A fixed CPU: a P6-class Intel processor with FPU, TSC, CX8, CMOV and MMX
+ * (a Pentium II), and no SSE. MMX is lifted (rc/mmx.h, checked against the
+ * real CPU by the difftest), and programs of the time rely on it: Cultures 1
+ * draws its players' sprites in 16-bit modes only when CPUID reports MMX.
+ * SSE stays off, so libraries take their MMX or plain code paths. */
 void rc_cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
 {
     switch (*eax) {
@@ -168,7 +170,7 @@ void rc_cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
         *eax = 0x00000683; /* family 6, model 8, stepping 3 */
         *ebx = 0;
         *ecx = 0;
-        *edx = 0x00008111;
+        *edx = 0x00808111; /* FPU, TSC, CX8, CMOV, MMX (bit 23) */
         break;
     default:
         *eax = *ebx = *ecx = *edx = 0;

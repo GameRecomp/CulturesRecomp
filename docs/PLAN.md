@@ -215,6 +215,7 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       fresh start, Single Player → Load Game lists it with its map preview and loads it. The game keeps its settings
       in the registry (`HKLM\SOFTWARE\Funatics\Cultures`, `registry.txt`)
 - [x] A scripted soak in a running scenario (30,000 frames with random clicks): no trap, no crash
+- [x] 16-bit missions (Gold, or no settings): the players' sprites need CPUID to report MMX, which it does now
 - [ ] Play the campaign. Fix traps and HLE gaps as they show up
 - [ ] Save/load and the options menu. Timing (`timeGetTime`, frame limiter) must match the original game speed
 - [x] One-hour soak test with automated input: 216,000 frames of random clicks in a scenario (virtual clock), no trap

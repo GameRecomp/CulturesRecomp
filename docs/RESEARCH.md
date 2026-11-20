@@ -310,6 +310,16 @@ Facts that the lifter (M3/M4) depends on:
 - Labels that need entries of their own are few: SEH filters and handlers and code pointers into function bodies.
   Most labels in the DLLs are relocated jump-table entries, which the lifted `switch` reaches.
 
+## Cultures 1 in 16-bit colour
+
+Cultures 1 runs its menus in 16-bit modes and a mission in the mode of its settings (`Screen Resolution X/Y`,
+`Screen Color Depth`; the GOG installer writes 1024x768x8). Without settings, as after the Gold CD's installer
+(its `RegisterCultures.exe` only creates `HKLM\SOFTWARE\Funatics\Cultures`), a mission stays at 800x600x16. In
+16-bit modes the players' sprites (buildings, settlers, ships) are drawn by an MMX routine (0x487e70) that first asks
+CPUID for MMX (0x48fb20) and draws nothing without it; terrain, trees and animals use other code. The runtime's CPU
+reported no MMX, so buildings were missing. It reports MMX now (a Pentium II): MMX is lifted and checked against the
+real CPU, and Bink's intro frames come out bit-identical with and without it.
+
 ## Installer registry entries
 
 Inno installers write registry values as part of the installation. The GOG installers write their own bookkeeping
