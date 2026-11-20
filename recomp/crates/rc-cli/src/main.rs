@@ -25,6 +25,10 @@ USAGE:
     recomp extract [--games DIR] [--dest DIR] [--force] MEDIA
                                             unpack MEDIA (default: orig/<game>/<variant>/) and
                                             verify the binaries against the manifest
+    recomp extract [--games DIR] [--force] --game ID FOLDER
+                                            unpack game ID from the first of its variants
+                                            whose medium is in FOLDER (what the build does
+                                            for a game that has no folder in orig/ yet)
     recomp discover [--games DIR] [--out DIR] [--base ADDR] [--no-write] [--no-relocs]
                     [--verbose] FILE...     find the code of an executable or DLL, print the
                                             coverage report and write the code map (default:
@@ -63,6 +67,7 @@ struct Opts {
     games: PathBuf,
     imports: bool,
     dest: Option<PathBuf>,
+    game: Option<String>,
     force: bool,
     out: Option<PathBuf>,
     base: Option<u32>,
@@ -87,6 +92,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         games: rc_manifest::default_games_dir(),
         imports: false,
         dest: None,
+        game: None,
         force: false,
         out: None,
         base: None,
@@ -103,6 +109,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--games" => o.games = it.next().ok_or("--games needs a directory")?.into(),
             "--imports" => o.imports = true,
             "--dest" => o.dest = Some(it.next().ok_or("--dest needs a directory")?.into()),
+            "--game" => o.game = Some(it.next().ok_or("--game needs a game id")?.clone()),
             "--force" => o.force = true,
             "--out" => o.out = Some(it.next().ok_or("--out needs a directory")?.into()),
             "--base" => o.base = Some(parse_u32(it.next().ok_or("--base needs an address")?)?),
@@ -132,7 +139,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         "extract" => {
             let o = parse_opts(rest)?;
-            media::extract(&o.games, o.dest.as_deref(), o.force, &o.paths)
+            match &o.game {
+                Some(id) => media::extract_game(&o.games, id, o.force, &o.paths),
+                None => media::extract(&o.games, o.dest.as_deref(), o.force, &o.paths),
+            }
         }
         "discover" => {
             let o = parse_opts(rest)?;

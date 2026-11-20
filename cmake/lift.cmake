@@ -13,6 +13,9 @@
 # - the installs that are lifted are <ID>_GAME_DIRS (a list, e.g. CULTURES1_GAME_DIRS); empty
 #   means orig/<id>/gog-en, else the first folder in orig/<id>/. Each lifted binary is about
 #   40 MB of C, so more variants cost compile time;
+# - a game without a folder in orig/<id>/ is unpacked while configuring from its installer,
+#   CD image or zip in orig/ (`recomp extract --game`, the first variant the manifest lists
+#   whose medium is there);
 # - without lifted code (no generated/<id>/set.c) they are lifted while configuring, so that
 #   the sources are there to be found;
 # - during the build recomp is built by cargo (nothing to do when nothing changed) and the
@@ -66,10 +69,57 @@ function(rc_recomp_target)
     return()
   endif()
   add_custom_target(recomp_cli
-    COMMAND "${RC_CARGO}" build --release --quiet -p rc-cli --manifest-path "${RC_RECOMP_DIR}/Cargo.toml"
+    # Without Make's jobserver variables, which cargo cannot use from a recipe (it warns).
+    COMMAND "${CMAKE_COMMAND}" -E env --unset=MAKEFLAGS --unset=MFLAGS
+            "${RC_CARGO}" build --release --quiet -p rc-cli --manifest-path "${RC_RECOMP_DIR}/Cargo.toml"
     BYPRODUCTS "${RC_RECOMP}"
     COMMENT "Building recomp (cargo)"
     USES_TERMINAL)
+endfunction()
+
+# Build recomp while configuring (once per run); `ok` says whether it is there.
+function(rc_recomp_now ok)
+  get_property(state GLOBAL PROPERTY RC_RECOMP_NOW)
+  if(NOT state)
+    execute_process(
+      COMMAND "${RC_CARGO}" build --release --quiet -p rc-cli --manifest-path "${RC_RECOMP_DIR}/Cargo.toml"
+      RESULT_VARIABLE failed)
+    if(failed)
+      set(state FAILED)
+    else()
+      set(state OK)
+    endif()
+    set_property(GLOBAL PROPERTY RC_RECOMP_NOW ${state})
+  endif()
+  if(state STREQUAL "OK")
+    set(${ok} ON PARENT_SCOPE)
+  else()
+    set(${ok} OFF PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Unpack game `id` while configuring when orig/<id>/ holds no install yet but orig/ holds one of
+# its media.
+function(rc_extract_now id)
+  file(GLOB unpacked LIST_DIRECTORIES true "${PROJECT_SOURCE_DIR}/orig/${id}/*")
+  if(unpacked OR NOT IS_DIRECTORY "${PROJECT_SOURCE_DIR}/orig")
+    return()
+  endif()
+  rc_recomp_now(ok)
+  if(NOT ok)
+    return()
+  endif()
+  # Without the game's media this fails quietly: the shell then builds without lifted code.
+  execute_process(
+    COMMAND "${RC_RECOMP}" extract --game ${id} "${PROJECT_SOURCE_DIR}/orig"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    OUTPUT_VARIABLE out ERROR_VARIABLE err
+    RESULT_VARIABLE failed)
+  if(NOT failed)
+    message(STATUS "cultures-${id}: unpacked its medium from orig/ into orig/${id}/")
+  elseif(NOT err MATCHES "none of the media")
+    message(WARNING "cultures-${id}: unpacking failed: ${err}")
+  endif()
 endfunction()
 
 # Lift while configuring, when the game has no lifted code yet.
@@ -78,10 +128,9 @@ function(rc_lift_now id dirs gen_dir)
     return()
   endif()
   message(STATUS "cultures-${id}: lifting ${dirs} (no lifted code yet)")
-  execute_process(
-    COMMAND "${RC_CARGO}" build --release --quiet -p rc-cli --manifest-path "${RC_RECOMP_DIR}/Cargo.toml"
-    RESULT_VARIABLE failed)
-  if(NOT failed)
+  rc_recomp_now(ok)
+  set(failed 1)
+  if(ok)
     execute_process(
       COMMAND "${RC_RECOMP}" lift ${dirs}
       WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -138,6 +187,7 @@ function(rc_add_game id)
   set(gen_dir "${RC_GENERATED_DIR}/${id}")
   set(can_lift OFF)
   if(RC_AUTO_LIFT AND RC_CARGO AND NOT CMAKE_CROSSCOMPILING)
+    rc_extract_now(${id})
     rc_game_dirs(${id} game_dirs)
     if(game_dirs)
       set(can_lift ON)

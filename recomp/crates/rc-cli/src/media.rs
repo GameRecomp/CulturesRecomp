@@ -75,6 +75,67 @@ pub(crate) fn write_installer_registry(media: &Path, dest: &Path) -> Result<(), 
     write_registry(ar.as_ref(), dest)
 }
 
+/// `recomp extract --game ID FOLDER`: unpack game `id` from one of its media in `folder` (the
+/// variants in manifest order), unless `orig/<id>/` already holds an unpacked variant. Files are
+/// matched by size first, so only likely candidates are hashed.
+pub fn extract_game(
+    games: &Path,
+    id: &str,
+    force: bool,
+    paths: &[PathBuf],
+) -> Result<ExitCode, String> {
+    let [folder] = paths else {
+        return Err("extract --game needs exactly one FOLDER".into());
+    };
+    let ms = rc_manifest::load_dir(games).map_err(|e| e.to_string())?;
+    let m = ms
+        .iter()
+        .find(|m| m.game.id == id)
+        .ok_or_else(|| format!("no game {id:?} in {}", games.display()))?;
+    let orig = games
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("orig")
+        .join(id);
+    if !force {
+        if let Some(v) = m
+            .variants
+            .iter()
+            .find(|v| orig.join(&v.id).is_dir() && !is_empty_dir(&orig.join(&v.id)))
+        {
+            println!("{id}: already unpacked in {}", orig.join(&v.id).display());
+            return Ok(ExitCode::SUCCESS);
+        }
+    }
+    let mut files: Vec<(PathBuf, u64)> = fs::read_dir(folder)
+        .map_err(|e| format!("{}: {e}", folder.display()))?
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let meta = e.metadata().ok()?;
+            meta.is_file().then(|| (e.path(), meta.len()))
+        })
+        .collect();
+    files.sort();
+    for v in &m.variants {
+        // One medium per variant (every manifest so far); a set of several is unpacked by hand.
+        let [medium] = v.media.as_slice() else {
+            continue;
+        };
+        for (path, _) in files.iter().filter(|(_, size)| *size == medium.size) {
+            let sha =
+                rc_manifest::sha256_file(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            if sha == medium.sha256 {
+                return extract(games, None, true, std::slice::from_ref(path));
+            }
+        }
+    }
+    Err(format!(
+        "{}: none of the media of {} ({id})",
+        folder.display(),
+        m.game.title
+    ))
+}
+
 pub fn extract(
     games: &Path,
     dest: Option<&Path>,
@@ -105,10 +166,17 @@ pub fn extract(
         }
     };
     if !force && dest.exists() && !is_empty_dir(&dest) {
-        return Err(format!(
-            "{} is not empty (use --force to extract into it anyway)",
-            dest.display()
-        ));
+        // Unpacked before: add what newer versions write besides the files (the installer's
+        // registry entries, e.g. Cultures 2's serial), but leave the files alone.
+        let had = dest.join("registry-install.txt").exists();
+        write_installer_registry(media, &dest)?;
+        if had || !dest.join("registry-install.txt").exists() {
+            println!(
+                "{}: already unpacked, nothing to add (--force unpacks again)",
+                dest.display()
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
     }
     fs::create_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
 

@@ -29,10 +29,12 @@ $recomp extract orig/setup_cultures_2.1.0.12.exe           # → orig/cultures1/
 $recomp extract "orig/Cultures (Gold Edition).iso"         # → orig/cultures1/gold-de/
 $recomp extract "orig/Cultures Saga.zip"                   # → orig/saga/retail-de/
 $recomp extract --dest /some/dir orig/setup_northland_2.1.0.9.exe
+$recomp extract --game eighthwonder orig/                 # the game from whichever of its media orig/ holds
 $recomp list orig/setup_cultures2_2.1.0.10.exe              # just list the files
 ```
 
-An unknown medium needs `--dest`, and a non-empty destination needs `--force`. A GOG installer takes 10–20 s.
+An unknown medium needs `--dest`. A destination that is already unpacked is left alone (only a missing
+`registry-install.txt` is added); `--force` unpacks into it again. A GOG installer takes 10–20 s.
 
 `tools/dev-extract.sh` (innoextract, unshield, unzip) stays as an independent reference for comparisons.
 
@@ -88,7 +90,9 @@ Only files whose content changed are written, so a build compiles only those aga
 The build lifts by itself (`cmake/lift.cmake`, as in TropicoRecomp): with the game in `orig/` and cargo there,
 configuring lifts a game that has no `generated/<game>/set.c` yet, and building `cultures-<game>` (an IDE's debug
 action too) builds `recomp` and lifts again whenever `games/<game>/game.toml` or the lifter changed since the last
-lift. It lifts `orig/<game>/gog-en`, else the first folder in `orig/<game>/`; `-D<GAME>_GAME_DIRS` (e.g.
+lift. A game with no folder in `orig/<game>/` yet is first unpacked from its installer, CD image or zip in
+`orig/` (`recomp extract --game`, the first variant in the manifest whose medium is there), so putting the media into
+`orig/` and building is enough. It lifts `orig/<game>/gog-en`, else the first folder in `orig/<game>/`; `-D<GAME>_GAME_DIRS` (e.g.
 `-DCULTURES1_GAME_DIRS="orig/cultures1/gog-en;orig/cultures1/gold-de"`) names the installs instead; each lifted
 executable is about 40 MB of C to compile. `-DRC_AUTO_LIFT=OFF` turns it off.
 
@@ -117,7 +121,7 @@ lifts, builds the game's program with the CMake preset `release` (`--preset dev`
 with a launcher into `out/<game>/`. Both stay on your machine: they contain code derived from your copy. The build
 runs one compile job per CPU, but no more than one per 1.5 GB of available memory (about 0.6 GB per file of
 generated code); `CMAKE_BUILD_PARALLEL_LEVEL=N` sets the number instead. Unpacking an Inno installer also writes its registry entries
-to `registry-install.txt` in the unpacked folder (for an install unpacked before, `convert` adds it), which the
+to `registry-install.txt` in the unpacked folder (for an install unpacked before, `recomp extract` of the same installer adds it and leaves the files alone, and so does `convert`), which the
 runtime loads before the player's own `registry.txt`.
 
 ## Running a game
