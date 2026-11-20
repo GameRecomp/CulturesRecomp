@@ -28,7 +28,7 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static int frame_w = 640, frame_h = 480;
-static rc_display display = {0, false, false, 0, 0, 0};
+static rc_display display = {0, false, false, 0, 0, 0, 10, true};
 static char title_buf[128] = "recomp";
 static char title_suffix[64];
 
@@ -186,6 +186,14 @@ EM_JS(int, page_size, (int which), {
     return Math.floor((which ? window.innerHeight : window.innerWidth) * dpr);
 });
 #endif
+
+void rc_plat_screen_size(int *width, int *height)
+{
+    SDL_DisplayID id = window ? SDL_GetDisplayForWindow(window) : SDL_GetPrimaryDisplay();
+    const SDL_DisplayMode *m = SDL_GetDesktopDisplayMode(id ? id : SDL_GetPrimaryDisplay());
+    *width = m && m->w > 0 ? m->w : 1024;
+    *height = m && m->h > 0 ? m->h : 768;
+}
 
 void rc_plat_area(int *width, int *height)
 {

@@ -251,6 +251,9 @@ static void setup(void)
         rc_fatal("no display");
     }
     rc_hle_all();
+    if (the_game->patches) {
+        the_game->patches();
+    }
 }
 
 static void show_fatal(const char *message) { rc_plat_error(the_game->title, message); }
@@ -367,6 +370,10 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     if (!rc_host_exists(user_dir, NULL, NULL)) {
         rc_host_mkdir(user_dir);
     }
+
+    /* How the game is shown and what resolution it plays at (settings.ini in the user
+     * directory, created with the defaults). */
+    rc_plat_display_load(user_dir);
 
     rc_set_fatal_hook(show_fatal);
     static rc_config cfg;

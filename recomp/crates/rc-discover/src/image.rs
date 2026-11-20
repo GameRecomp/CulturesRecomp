@@ -184,4 +184,27 @@ impl Image {
         let t = self.tail(va)?;
         Some(u32::from_le_bytes(t.get(..4)?.try_into().ok()?))
     }
+
+    /// Replace the bytes `from` at `va` by `to` (same length; a game project's code patch,
+    /// applied before discovery). An error if the image does not hold `from` there.
+    pub fn patch(&mut self, va: u32, from: &[u8], to: &[u8]) -> Result<(), String> {
+        if from.len() != to.len() {
+            return Err(format!("patch at {va:#010x}: lengths differ"));
+        }
+        let s = self
+            .sections
+            .iter_mut()
+            .find(|s| va >= s.va && va - s.va < s.data.len() as u32)
+            .ok_or_else(|| format!("patch at {va:#010x}: outside the image"))?;
+        let at = (va - s.va) as usize;
+        let here = s
+            .data
+            .get_mut(at..at + from.len())
+            .ok_or_else(|| format!("patch at {va:#010x}: outside its section"))?;
+        if here != from {
+            return Err(format!("patch at {va:#010x}: the image holds other bytes"));
+        }
+        here.copy_from_slice(to);
+        Ok(())
+    }
 }

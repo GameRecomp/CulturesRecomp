@@ -38,6 +38,11 @@ size = 1393664
 sha256 = "e3ba0b2216f75fa2dd53e70974cab8c43dac52212462d89f0e22043bdcab4fde"
 variants = ["gog-en", "gog-de"]
 
+[binary.patch]
+points = [
+    0x00401259, # resolution: game.ini was read (games/c2engine/patch_resolution.c)
+]
+
 [[binary]]
 name = "Cultures2MP.exe"
 role = "multiplayer"

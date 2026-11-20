@@ -46,6 +46,11 @@ size = 1122304
 sha256 = "538fce0d3c60c981f8237c40a9fd8aa0572324416a93076e71ad30541973b56d"
 variants = ["gog-en", "gog-de", "gog-es"]
 
+[binary.patch]
+points = [
+    0x00401261, # resolution: game.ini was read (games/c2engine/patch_resolution.c)
+]
+
 [[binary]]
 name = "GameMp.exe"
 role = "multiplayer"

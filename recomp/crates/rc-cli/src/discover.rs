@@ -84,7 +84,15 @@ pub(crate) fn load(
     let known = find(&manifests, &sha256, file);
     let pe = rc_pe::parse(&data).map_err(|e| format!("{}: {e}", file.display()))?;
     let base = base.or(known.as_ref().and_then(|k| k.binary.base));
-    let image = Image::load(&data, &pe, base).map_err(|e| format!("{}: {e}", file.display()))?;
+    let mut image =
+        Image::load(&data, &pe, base).map_err(|e| format!("{}: {e}", file.display()))?;
+    // The game project's code patches change the bytes before anything looks at them.
+    if let Some(k) = &known {
+        for c in &k.binary.patch.code {
+            let (from, to) = c.bytes()?;
+            image.patch(c.at, &from, &to)?;
+        }
+    }
     let name = file
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());

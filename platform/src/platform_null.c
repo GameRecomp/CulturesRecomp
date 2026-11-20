@@ -20,6 +20,12 @@ static rc_display display;
 void rc_plat_display(const rc_display *d) { display = *d; }
 rc_display rc_plat_display_get(void) { return display; }
 static int area_w = 1024, area_h = 768;
+void rc_plat_screen_size(int *width, int *height)
+{
+    *width = 1024;
+    *height = 768;
+}
+
 void rc_plat_area(int *width, int *height)
 {
     *width = area_w;
@@ -31,6 +37,12 @@ void rc_plat_area_set(int width, int height)
     area_h = height;
 }
 void rc_plat_display_load(const char *user_dir) { (void)user_dir; }
+bool rc_plat_game_size(int *width, int *height)
+{
+    (void)width;
+    (void)height;
+    return false; /* no window, no settings: the game's own */
+}
 void rc_plat_display_store(void) {}
 
 void rc_plat_show(bool show) { (void)show; }

@@ -96,6 +96,9 @@ pub struct Binary {
     /// Hints for code discovery: what analysis cannot find by itself (from M2 on).
     #[serde(default)]
     pub discover: Option<DiscoverHints>,
+    /// The game project's patches to this binary.
+    #[serde(default)]
+    pub patch: Patch,
 }
 
 impl Binary {
@@ -105,6 +108,74 @@ impl Binary {
     pub fn output_dir_name(&self) -> String {
         let v = self.variants.first().map_or("any", String::as_str);
         format!("{}-{v}", self.name.to_ascii_lowercase())
+    }
+}
+
+/// Where the game project changes what the game does (`[binary.patch]`, as in TropicoRecomp).
+/// Its code is in `games/<id>/patches.c` (and the files that includes); everything here is
+/// applied when the binary is lifted, to the IR or to the image.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Patch {
+    /// Functions the game project wraps: calls and jumps to them are lifted
+    /// as transfers through the runtime's dispatch, where the wrapper is
+    /// registered (rc_hook); it calls the lifted original itself.
+    #[serde(default)]
+    pub hooks: Vec<u32>,
+    /// Instructions before which the runtime calls the game project's code
+    /// with the whole CPU state (rc_point), which may change it.
+    #[serde(default)]
+    pub points: Vec<u32>,
+    /// Constants of instructions that are read from guest memory instead,
+    /// where the game project puts the value it wants.
+    #[serde(default)]
+    pub operands: Vec<Operand>,
+    /// Instruction bytes replaced, length for length, before discovery.
+    #[serde(default)]
+    pub code: Vec<CodePatch>,
+}
+
+/// In the instruction at `at`, the 32-bit constant `value` becomes a load
+/// of the dword at `load`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Operand {
+    pub at: u32,
+    pub value: u32,
+    pub load: u32,
+}
+
+/// The bytes `from` at `at` become `to` (hex, spaces allowed).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CodePatch {
+    pub at: u32,
+    pub from: String,
+    pub to: String,
+}
+
+impl CodePatch {
+    /// `from` and `to` as bytes; an error if they are not hex or differ in
+    /// length.
+    pub fn bytes(&self) -> Result<(Vec<u8>, Vec<u8>), String> {
+        let hex = |s: &str| -> Result<Vec<u8>, String> {
+            let t: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+            if t.len() % 2 != 0 {
+                return Err(format!("{s:?}: odd number of hex digits"));
+            }
+            (0..t.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&t[i..i + 2], 16).map_err(|e| format!("{s:?}: {e}")))
+                .collect()
+        };
+        let (a, b) = (hex(&self.from)?, hex(&self.to)?);
+        if a.len() != b.len() || a.is_empty() {
+            return Err(format!(
+                "code patch at {:#010x}: from and to differ in length",
+                self.at
+            ));
+        }
+        Ok((a, b))
     }
 }
 

@@ -286,6 +286,54 @@ fn expand(games: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     Ok(files)
 }
 
+/// The game project's patches on the lifted program (`[binary.patch]` hooks, points and
+/// operands; see rc_manifest::Patch), as TropicoRecomp applies them.
+pub fn apply_patches(
+    functions: &mut [rc_ir::Function],
+    p: &rc_manifest::Patch,
+) -> Result<(), String> {
+    let hooks: BTreeSet<u32> = p.hooks.iter().copied().collect();
+    for h in &hooks {
+        if functions.binary_search_by_key(h, |f| f.addr).is_err() {
+            return Err(format!("[patch] hook {h:#010x} is not a function entry"));
+        }
+    }
+    if !hooks.is_empty() {
+        for f in functions.iter_mut() {
+            if let Some(at) = rc_ir::route_through_dispatch(f, &hooks).first() {
+                return Err(format!(
+                    "[patch] conditional jump to a hooked function at {at:#010x}"
+                ));
+            }
+        }
+    }
+    for &at in &p.points {
+        let n = functions
+            .iter_mut()
+            .filter(|f| f.insns.first().is_some_and(|i| i.addr <= at))
+            .map(|f| usize::from(rc_ir::insert_point(f, at)))
+            .sum::<usize>();
+        if n == 0 {
+            return Err(format!(
+                "[patch] point {at:#010x} is not a lifted instruction"
+            ));
+        }
+    }
+    for o in &p.operands {
+        let n: usize = functions
+            .iter_mut()
+            .map(|f| rc_ir::load_operand(f, o.at, o.value, o.load))
+            .sum();
+        if n == 0 {
+            return Err(format!(
+                "[patch] operand {:#x} not found in the instruction at {:#010x}",
+                o.value, o.at
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn lift(o: &LiftOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
     if paths.is_empty() {
         return Err("lift needs at least one FILE".into());
@@ -323,7 +371,11 @@ pub fn lift(o: &LiftOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
             .unwrap_or("binary")
             .to_string();
         let sym = symbol(&dir_name);
-        let lifted = lift_map(&l);
+        let mut lifted = lift_map(&l);
+        if let Some(k) = &l.known {
+            apply_patches(&mut lifted.functions, &k.binary.patch)
+                .map_err(|e| format!("{}: {e}", file.display()))?;
+        }
         let entries: BTreeSet<u32> = lifted.functions.iter().map(|f| f.addr).collect();
         let names = rc_emit_c::Entries {
             prefix: format!("{sym}_"),

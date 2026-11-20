@@ -1269,6 +1269,13 @@ static void k_SetDisplayMode(rc_cpu *c)
     RC_RETURN(c, DD_OK, 6);
 }
 
+/* FlipToGDISurface: the primary is what is shown anyway. */
+static void k_FlipToGDISurface(rc_cpu *c)
+{
+    self(c, O_DDRAW);
+    RC_RETURN(c, DD_OK, 1);
+}
+
 static void k_RestoreDisplayMode(rc_cpu *c)
 {
     self(c, O_DDRAW);
@@ -1292,10 +1299,19 @@ static void mode_desc(uint32_t d, uint32_t size, uint32_t w, uint32_t h, uint32_
 static void enum_modes(rc_cpu *c, uint32_t size)
 {
     uint32_t ctx = RC_ARG(c, 3), fn = RC_ARG(c, 4);
-    static const uint32_t sizes[][2] = {{640, 480}, {800, 600}, {1024, 768}, {1280, 1024}, {1600, 1200}};
+    /* The usual 4:3 and 5:4 modes, and widescreen ones (16:9, 16:10, 21:9) as today's screens have them. */
+    static const uint32_t sizes[][2] = {{640, 480},   {800, 600},   {1024, 768},  {1280, 1024}, {1600, 1200},
+                                        {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {2560, 1440},
+                                        {3840, 2160}, {1280, 800},  {1440, 900},  {1680, 1050}, {1920, 1200},
+                                        {2560, 1600}, {2560, 1080}, {3440, 1440}};
     static const uint32_t depths[] = {8, 16, 32};
     uint32_t d = rc_heap_alloc(size, true);
     unsigned n = sizeof sizes / sizeof sizes[0];
+    /* The resolution the settings choose (rc_plat_game_size), whatever its size. */
+    int gw, gh;
+    if (rc_plat_game_size(&gw, &gh)) {
+        rc_ddraw_add_mode((uint32_t)gw, (uint32_t)gh);
+    }
     for (unsigned i = 0; i <= n + n_added; i++) {
         uint32_t w = i < n ? sizes[i][0] : i == n ? extra_w : added[i - n - 1][0];
         uint32_t h = i < n ? sizes[i][1] : i == n ? extra_h : added[i - n - 1][1];
@@ -1467,6 +1483,7 @@ const rc_import_def rc_ddraw_defs[] = {
     M("IDirectDraw", "GetDisplayMode", k_GetDisplayMode),
     M("IDirectDraw4", "GetDisplayMode", k_GetDisplayMode4),
     M("IDirectDraw", "RestoreDisplayMode", k_RestoreDisplayMode),
+    M("IDirectDraw", "FlipToGDISurface", k_FlipToGDISurface),
     M("IDirectDraw", "SetCooperativeLevel", k_SetCooperativeLevel),
     M("IDirectDraw1", "SetDisplayMode", k_SetDisplayMode1),
     M("IDirectDraw", "SetDisplayMode", k_SetDisplayMode),

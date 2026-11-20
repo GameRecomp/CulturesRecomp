@@ -66,14 +66,31 @@ typedef struct rc_display {
                       * in a browser the page's full screen) */
     /* A resolution of the user's choosing for the game, beyond those it
      * knows (the game project's patch decides whether it can have it);
-     * 0 x 0 for none, -1 x -1 for the size of the window (rc_plat_area)
-     * divided by the scale, following it. */
+     * 0 x 0 for none, -1 x -1 for the size of the window (rc_plat_area),
+     * -2 x -2 for the size of the screen; the last two divided by
+     * game_scale (rc_plat_game_size). */
     int game_w, game_h;
     /* At most this many frames a second (the program waits, and the
      * processor rests, for the rest of a frame's time); 0 for as many as
      * the display shows. */
     int max_fps;
+    /* The window's or the screen's size is divided by this, in tenths (10:
+     * as large, 15, 20, 30: a game screen 1.5, 2 or 3 times smaller, shown
+     * that much larger); 0 is 10. */
+    int game_scale;
+    /* The mouse pointer is the system's, not one the game draws, where a
+     * game project's patch can choose (a game's own setting otherwise). */
+    bool hardware_cursor;
 } rc_display;
+
+/* The size of the screen the window is on, in host pixels. */
+void rc_plat_screen_size(int *width, int *height);
+
+/* The resolution a game should play at by the settings: an explicit size, or
+ * the window's or the screen's divided by game_scale (the width a multiple
+ * of 8, the height of 2, at least 800 x 600 in its shape). False for "off":
+ * the game's own. */
+bool rc_plat_game_size(int *width, int *height);
 
 /* Apply display settings, at any time (before the window exists too). */
 void rc_plat_display(const rc_display *d);

@@ -46,6 +46,11 @@ size = 1146880
 sha256 = "7ea1ff9d9cac9a2df1155379a0b314586a538cc5433430d48c34aa3b0188edb4"
 variants = ["gog-en", "gog-de"]
 
+[binary.patch]
+points = [
+    0x00401255, # resolution: game.ini was read (games/c2engine/patch_resolution.c)
+]
+
 [[binary]]
 name = "Game.exe"
 role = "main"
@@ -54,6 +59,11 @@ notes = "Older build (2003-06-19) than EN/DE."
 size = 1138688
 sha256 = "5d0c5751ab2a8f18ad2a9c428e08301d8ad965b5217bee854751b3a1fc7f49fc"
 variants = ["gog-es"]
+
+[binary.patch]
+points = [
+    0x0040125d, # resolution: game.ini was read (games/c2engine/patch_resolution.c)
+]
 
 [[binary]]
 name = "GameMp.exe"

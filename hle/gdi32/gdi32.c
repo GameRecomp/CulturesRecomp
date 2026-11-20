@@ -8,6 +8,7 @@
 
 #include "gdi32.h"
 #include "rc/hle.h"
+#include "rc/platform.h"
 
 #define G32 "GDI32.dll"
 
@@ -20,6 +21,18 @@ static void k_GdiSetBatchLimit(rc_cpu *c)
     RC_RETURN(c, old, 1);
 }
 
+/* The desktop: 2048 x 1536, or larger for a larger resolution of the settings (games offer
+ * only modes up to the desktop's size). */
+static uint32_t desktop_size(bool width)
+{
+    int w = 2048, h = 1536, gw, gh;
+    if (rc_plat_game_size(&gw, &gh)) {
+        w = gw > w ? gw : w;
+        h = gh > h ? gh : h;
+    }
+    return (uint32_t)(width ? w : h);
+}
+
 static void k_GetDeviceCaps(rc_cpu *c)
 {
     uint32_t v;
@@ -30,8 +43,8 @@ static void k_GetDeviceCaps(rc_cpu *c)
     /* A desktop larger than every resolution the game knows: Tropico offers
      * only the resolutions narrower than the desktop, and the host window
      * shows any of them at any size (rc/platform.h, rc_display). */
-    case 8: v = 2048; break;   /* HORZRES */
-    case 10: v = 1536; break;  /* VERTRES */
+    case 8: v = desktop_size(true); break;   /* HORZRES */
+    case 10: v = desktop_size(false); break; /* VERTRES */
     case 12: v = 32; break;    /* BITSPIXEL */
     case 14: v = 1; break;     /* PLANES */
     case 24: v = 0xffffffffu; break; /* NUMCOLORS: more than 8 bits */

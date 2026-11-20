@@ -5,12 +5,14 @@
 #include <stddef.h>
 
 static const char *const exe_names[] = {@RC_GAME_EXES@NULL};
+@RC_GAME_PATCHES_DECL@
 
 static const rc_game_info game = {
     "@RC_GAME_ID@",
     "@RC_GAME_TITLE@",
     exe_names,
     "@RC_GAME_GUEST_DIR@",
+    @RC_GAME_PATCHES_FN@,
 };
 
 #ifdef RC_HAVE_GENERATED

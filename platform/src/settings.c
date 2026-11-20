@@ -32,14 +32,21 @@ static const char DEFAULTS[] =
     "# yes or no. Alt+Enter switches while playing.\n"
     "fullscreen = no\n"
     "\n"
-    "# A resolution for the game besides its own (640x480 to 1600x1200), for\n"
-    "# example 1920x1080. The game's options page offers common ones too, and\n"
-    "# what is chosen there is written here.\n"
-    "# window (the default): the size of the window (divided by the scale),\n"
-    "# following it when the window changes size; the game then always plays\n"
-    "# at it.\n"
-    "# off: only the game's own.\n"
+    "# The resolution the game plays at (its menus may keep their own).\n"
+    "# window (the default): the size of the window, or of the screen when\n"
+    "# full screen. screen: the size of the screen. A size such as 1920x1080 or\n"
+    "# 2560x1080 (any shape; the game offers common widescreen ones too).\n"
+    "# off: only the game's own resolutions and its own setting.\n"
     "resolution = window\n"
+    "\n"
+    "# With window or screen: the game screen is that size divided by this,\n"
+    "# shown as large as fits: 1 (as large), 1.5, 2 or 3 (larger interface and\n"
+    "# figures). The game screen is at least 800x600.\n"
+    "game_scale = 1\n"
+    "\n"
+    "# yes (the default): the mouse pointer is the system's (smooth, at the\n"
+    "# screen's rate). no: the game's own setting.\n"
+    "hardware_cursor = yes\n"
     "\n"
     "# At most this many frames a second, so that the processor rests between\n"
     "# frames (cooler and quieter; fewer are less smooth): for example 30.\n"
@@ -62,10 +69,17 @@ static void set(rc_display *d, const char *key, const char *value)
         if (d->max_fps < 0 || d->max_fps > 1000) {
             d->max_fps = 0;
         }
+    } else if (!strcmp(key, "game_scale")) {
+        double v = atof(value);
+        d->game_scale = v >= 1.0 && v <= 8.0 ? (int)(v * 10.0 + 0.5) : 10;
+    } else if (!strcmp(key, "hardware_cursor")) {
+        d->hardware_cursor = !strcmp(value, "yes") || !strcmp(value, "1") || !strcmp(value, "true");
     } else if (!strcmp(key, "resolution")) {
         int w = 0, h = 0;
         if (!strcmp(value, "window")) {
             d->game_w = d->game_h = -1;
+        } else if (!strcmp(value, "screen")) {
+            d->game_w = d->game_h = -2;
         } else if (sscanf(value, "%dx%d", &w, &h) == 2 && w > 0 && h > 0 && w <= 8192 && h <= 8192) {
             d->game_w = w;
             d->game_h = h;
@@ -121,7 +135,9 @@ void rc_plat_display_store(void)
     rc_display d = rc_plat_display_get();
     char lines[2][64];
     snprintf(lines[0], sizeof lines[0], "fullscreen = %s\n", d.fullscreen ? "yes" : "no");
-    if (d.game_w < 0) {
+    if (d.game_w == -2) {
+        snprintf(lines[1], sizeof lines[1], "resolution = screen\n");
+    } else if (d.game_w < 0) {
         snprintf(lines[1], sizeof lines[1], "resolution = window\n");
     } else if (d.game_w > 0 && d.game_h > 0) {
         snprintf(lines[1], sizeof lines[1], "resolution = %dx%d\n", d.game_w, d.game_h);
@@ -171,8 +187,10 @@ void rc_plat_display_store(void)
 
 void rc_plat_display_load(const char *user_dir)
 {
-    rc_display d = {0, false, false, 0, 0, 0};
+    rc_display d = {0};
     d.max_fps = DEFAULT_FPS;
+    d.game_scale = 10;
+    d.hardware_cursor = true;
 #if !defined(__EMSCRIPTEN__)
     /* (A browser's page decides for itself. On Android the file keeps the
      * resolution too; full screen is always on there, whatever it says.) */
@@ -199,7 +217,8 @@ void rc_plat_display_load(const char *user_dir)
     (void)user_dir;
 #endif
     static const char *const env[][2] = {{"RC_SCALE", "scale"}, {"RC_PIXELS", "pixels"}, {"RC_FULLSCREEN", "fullscreen"},
-                                         {"RC_RESOLUTION", "resolution"}, {"RC_FPS", "fps"}};
+                                         {"RC_RESOLUTION", "resolution"}, {"RC_FPS", "fps"},
+                                         {"RC_GAME_SCALE", "game_scale"}, {"RC_HARDWARE_CURSOR", "hardware_cursor"}};
     for (size_t i = 0; i < sizeof env / sizeof env[0]; i++) {
         const char *v = getenv(env[i][0]);
         if (v && *v) {
@@ -212,4 +231,37 @@ void rc_plat_display_load(const char *user_dir)
         }
     }
     rc_plat_display(&d);
+}
+
+bool rc_plat_game_size(int *width, int *height)
+{
+    rc_display d = rc_plat_display_get();
+    int w = d.game_w, h = d.game_h;
+    if (w == 0 || h == 0) {
+        return false;
+    }
+    if (w < 0) {
+        if (w == -2) {
+            rc_plat_screen_size(&w, &h);
+        } else {
+            rc_plat_area(&w, &h);
+        }
+        int scale = d.game_scale >= 10 ? d.game_scale : 10;
+        w = w * 10 / scale;
+        h = h * 10 / scale;
+    }
+    /* At least 800x600 in its shape: the games' interfaces need that much. */
+    if (w < 800 || h < 600) {
+        double k = w * 600.0 > h * 800.0 ? 600.0 / h : 800.0 / w;
+        w = (int)(w * k + 0.5);
+        h = (int)(h * k + 0.5);
+    }
+    w &= ~7;
+    h &= ~1;
+    if (w > 8192 || h > 8192 || w <= 0 || h <= 0) {
+        return false;
+    }
+    *width = w;
+    *height = h;
+    return true;
 }

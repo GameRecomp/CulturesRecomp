@@ -181,7 +181,7 @@ endfunction()
 
 # The game's shell: an executable that links the lifted binaries of `set_file`.
 function(rc_add_shell id target main_c set_file)
-  add_executable(${target} "${main_c}")
+  add_executable(${target} "${main_c}" ${G_PATCHES})  # G_PATCHES: rc_add_game's
   target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
   rc_set_dirs("${set_file}" dirs)
   if(dirs)
@@ -254,7 +254,9 @@ endfunction()
 # debugging another build. Without lifting (RC_AUTO_LIFT off, no cargo: CI) cultures-<id> compiles
 # whatever `recomp lift` put into generated/<id>/.
 function(rc_add_game id)
-  cmake_parse_arguments(G "" "TITLE;GUEST_DIR" "EXES" ${ARGN})
+  # PATCHES: the game project's patch sources (games/<id>/patches.c and what it uses); they
+  # define <id>_patches(), which the shell calls at start (rc_game_info.patches).
+  cmake_parse_arguments(G "" "TITLE;GUEST_DIR" "EXES;PATCHES" ${ARGN})
   if(NOT G_TITLE OR NOT G_EXES)
     message(FATAL_ERROR "rc_add_game(${id}): TITLE and EXES are required")
   endif()
@@ -269,6 +271,14 @@ function(rc_add_game id)
   foreach(exe IN LISTS G_EXES)
     string(APPEND RC_GAME_EXES "\"${exe}\", ")
   endforeach()
+  if(G_PATCHES)
+    set(RC_GAME_PATCHES_DECL "void ${id}_patches(void);")
+    set(RC_GAME_PATCHES_FN "${id}_patches")
+    list(TRANSFORM G_PATCHES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/" REGEX "^[^/]")
+  else()
+    set(RC_GAME_PATCHES_DECL "")
+    set(RC_GAME_PATCHES_FN "NULL")
+  endif()
   set(main_c "${CMAKE_CURRENT_BINARY_DIR}/main_${id}.c")
   configure_file("${PROJECT_SOURCE_DIR}/cmake/game_main.c.in" "${main_c}" @ONLY)
 
@@ -314,7 +324,7 @@ function(rc_add_game id)
     endif()
     set(gen_sources ${${target}_LIFTED})
   else()
-    add_executable(${target} "${main_c}")
+    add_executable(${target} "${main_c}" ${G_PATCHES})
     target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
     file(GLOB_RECURSE gen_sources CONFIGURE_DEPENDS "${gen_dir}/*.c")
     if(gen_sources)

@@ -91,6 +91,7 @@ void rc_point(rc_cpu *c, uint32_t addr)
 {
     for (uint32_t i = 0; i < npoints; i++) {
         if (points[i].addr == addr) {
+            c->eip = addr; /* which point: one function may serve the builds of a game */
             points[i].fn(c);
             return;
         }

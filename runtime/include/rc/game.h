@@ -18,6 +18,9 @@ typedef struct rc_game_info {
     const char *title;
     const char *const *exe_names;  /* NULL-terminated; looked up case-insensitively */
     const char *guest_dir;         /* where the game believes it is installed, e.g. "C:\\Cultures" */
+    /* The game project's patches (games/<id>/patches.c, rc_add_game's PATCHES): registers its
+     * hooks and points once the HLE modules are there; NULL for none. */
+    void (*patches)(void);
 } rc_game_info;
 
 /* One lifted binary, emitted by `recomp lift` (`binary.c` in its directory below

@@ -50,6 +50,12 @@ variants = ["gog-en"]
 no_return = [0x49cd22]   # CRT _exit: returns only for other callers of the shared doexit
 returns = [0x49d8f5]     # CRT x87 argument load: returns; a second entry follows each call to it
 
+[binary.patch]
+points = [
+    0x00466b44, # cursor: the "Hardware Mouse" value was read (patch_cursor.c)
+    0x00466c24, # resolution: the settings were read, before the mode check (patch_resolution.c)
+]
+
 [[binary]]
 name = "Cultures.exe"
 role = "main"
@@ -60,6 +66,12 @@ variants = ["gog-de"]
 [binary.discover]
 no_return = [0x49cd22]   # CRT _exit: returns only for other callers of the shared doexit
 returns = [0x49d8f5]     # CRT x87 argument load: returns; a second entry follows each call to it
+
+[binary.patch]
+points = [
+    0x00466b44, # cursor: the "Hardware Mouse" value was read (patch_cursor.c)
+    0x00466c24, # resolution: the settings were read, before the mode check (patch_resolution.c)
+]
 
 [[binary]]
 name = "Cultures.exe"
@@ -73,6 +85,12 @@ no_return = [0x49dc82]   # CRT _exit: returns only for other callers of the shar
 returns = [0x49e855]     # CRT x87 argument load: returns; a second entry follows each call to it
 
 # --- libraries ---------------------------------------------------------------
+
+[binary.patch]
+points = [
+    0x00467632, # cursor: the "Hardware Mouse" value was read (patch_cursor.c)
+    0x00467712, # resolution: the settings were read, before the mode check (patch_resolution.c)
+]
 
 [[binary]]
 name = "binkw32.dll"
