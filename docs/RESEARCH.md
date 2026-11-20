@@ -361,6 +361,15 @@ Our wire protocol is our own (two recompiled programs talk to each other, not to
 port 47624 (broadcast, 127.0.0.1, `$RC_DPLAY_HOST`, the typed address) answered with the session, and one TCP
 connection per client to the host, which relays.
 
+## GameMp.exe (M12)
+
+Northland, 8th Wonder and the Saga ship `GameMp.exe` next to `Game.exe`: the same game with TriNodE's network
+library ("Flownet", 1996–1999, on Winsock; `WS2_32` and `WSOCK32`) for the publisher's internet lobby. A
+`lobby.exe` started it; it reads `lobby\flownet.ini`, `lobby\internet.ini` and `lobby\lobby_config.ini`, logs on to a
+game server ("LOGMEON", "RegisterGame") and relays chat. No install here contains the lobby or those files, the
+binary holds no server address, and the service has been shut down. Multiplayer without it is `Game.exe`'s
+DirectPlay 8 (LAN and direct IP), which runs on our network. `GameMp.exe` lifts and all 190 imports are covered.
+
 ## Editors (M13)
 
 - Northland's `Editor.exe` is MFC 4.2 linked statically (window classes `AfxWnd42s`, `AfxFrameOrView42s`, …). It
@@ -403,7 +412,9 @@ connection per client to the host, which relays.
 4. Does `gedx8musicdrv.dll` use the DirectMusic *synth* (DLS) or only segment playback, and which interfaces?
 5. ~~How much code differs between the three C1 executables?~~ Answered in M2: EN/DE differ in 2 functions, Gold in about 80 (see "Code discovery").
 6. What do the `D3D8.DLL` references do?
-7. Do the `*MP.exe` builds differ in more than networking? (Single-player builds also contain `CDPNet`.)
+7. Do the `*MP.exe` builds differ in more than networking? (Single-player builds also contain `CDPNet`.) For
+   Northland, 8th Wonder and the Saga: they add the internet lobby's library, nothing else that matters ("GameMp.exe").
+   `Cultures2MP.exe` **(open)**.
 8. Saga: is the extra code in `Game.exe` a disc check, and where does `GameSaga.exe` (2005) come from?
 9. Where is the Drachenland campaign stored: in `data0001.lib`, and is it selectable from the main menu?
 10. Are the MMX paths of `Cultures.exe` and `binkw32.dll` dead when `cpuid` reports no MMX? (See "Lifting".) Cultures 1 ran

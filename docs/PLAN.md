@@ -285,8 +285,12 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       creates a game, a second program finds it on the LAN, joins the lobby, the host puts it into a slot and starts,
       and both play the mission
 - [x] 8th Wonder and the Saga host a game the same way (same `CDPNet` code as Northland)
-- [ ] `GameMp.exe` (Winsock: what is it for?)
-- [ ] `*MP.exe`: lift them if they are required for multiplayer (research question 7)
+- [x] `GameMp.exe` answered: the game build for the internet lobby (`lobby.exe`, TriNodE's "Flownet" library on
+      Winsock, a log-on to the publisher's game server). Neither the lobby nor its `lobby\*.ini` is in any install
+      and the server is gone, so it is not needed: LAN and direct-IP games run in `Game.exe` (DirectPlay 8). It
+      lifts and every import is covered, should a lobby ever be rebuilt (RESEARCH "GameMp.exe")
+- [ ] `Cultures2MP.exe`: needed for Cultures 2's multiplayer? (research question 7; the C2-engine games' `GameMp.exe`
+      is not)
 - [ ] Determinism check: two recompiled builds stay in lockstep for one hour (a few minutes checked so far)
 
 ### M13 – Editors
