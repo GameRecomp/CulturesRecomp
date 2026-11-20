@@ -294,7 +294,10 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [x] `Cultures2MP.exe` is not needed for multiplayer: it is `Cultures2.exe` without the copy protection (research
       questions 1 and 7); Cultures 2's own lobby (`Lobby.exe`) served a server that is gone
 - [ ] Cultures 2 multiplayer through its DirectPlay 8 (after the serial prompt)
-- [ ] Determinism check: two recompiled builds stay in lockstep for one hour (a few minutes checked so far)
+- [x] Determinism check: two recompiled Cultures 1 programs stay in lockstep for an hour on the real clock (65 min,
+      about 30,000 messages each way, still in contact at the end, no desync message; the game ran on by itself,
+      neither side gave commands). The virtual clock cannot test this (RESEARCH "DirectPlay")
+- [ ] The same with both players giving commands, and for the C2-engine games (DirectPlay 8)
 
 ### M13 – Editors
 

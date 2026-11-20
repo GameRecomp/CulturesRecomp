@@ -361,6 +361,11 @@ Our wire protocol is our own (two recompiled programs talk to each other, not to
 port 47624 (broadcast, 127.0.0.1, `$RC_DPLAY_HOST`, the typed address) answered with the session, and one TCP
 connection per client to the host, which relays.
 
+- Lockstep and the clock: with `RC_CLOCK=virtual` a frame takes no real time, but the turns of a network game wait
+  for the other side's messages in real time (`net_ms`). Two programs then render hundreds of thousands of frames
+  while the game advances only a few minutes (216,000 frames: about 2,500 messages). Long network tests therefore run
+  on the real clock: an hour gave about 30,000 messages each way, roughly 8 per second.
+
 ## GameMp.exe (M12)
 
 Northland, 8th Wonder and the Saga ship `GameMp.exe` next to `Game.exe`: the same game with TriNodE's network

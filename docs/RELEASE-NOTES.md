@@ -29,7 +29,8 @@ Shown in scripted runs on Linux (input from a script, screenshots compared by ey
 - Game speed against the original has not been measured.
 - Only Linux has been built and tested. CI is set up for Windows and macOS, but they have never been built.
 - The Gold edition's `Intro2` and `Extro2` movies: when the game plays them is not known yet.
-- Network games have run for minutes in lockstep; a full hour on the real clock is being checked.
+- Network games stay in lockstep for an hour (checked with the game running on by itself); a long game with both
+  players giving commands has not been tested.
 - Network games only between copies of this project, not with the original Windows game (our network replaces
   DirectPlay's own protocol).
 - Without a desktop (headless runs) message boxes are answered automatically.
