@@ -382,6 +382,10 @@ connection per client to the host, which relays.
 - The map view keeps one window DC for its whole life. Its visible region has to follow the windows (a dialog
   over the view and gone again), so window DCs recompute origin and region when the window tree has changed.
 - A new map is all "EDGE" texture, which is black; terrain shows once it is painted.
+- The editor saves `<name>.c2e` (its own format) and exports `<name>.c2m` next to it. The game lists `.c2m` files
+  of `UserMaps\` in the installation folder under Free Play → "User Maps"; a map without a title is shown as
+  "currentusermap" with its size in the game's units (a 100x100 editor map is "50 * 50"). Without units of the
+  player, all of the map stays unexplored (black).
 - `IsDialogMessage` has to translate the keys it passes on (it replaces `TranslateMessage` in dialog loops),
   or edit fields in dialogs get no characters.
 - The Saga's `Editor.exe`: a data value that points into the middle of an instruction (0x434470) decoded as a

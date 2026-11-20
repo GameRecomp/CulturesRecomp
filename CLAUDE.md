@@ -18,7 +18,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M8 In game | **in progress** | an hour of scripted play in a scenario (216,000 frames) without trap; save and load work; open: a whole mission played by hand, timing |
 | M11 Northland, 8th Wonder, Saga | **in progress** | all lift, play their movies (dshow + pl_mpeg), sound (DirectSound 8) and music (dmusic player + DLS synth), and start their first missions; open: a mission played through |
 | M12 Multiplayer | **in progress** | own network (`hle/dplay/net.c`: UDP discovery, host relay over TCP) under DirectPlay 4 (C1) and 8 (Northland): two programs find each other, join and play a match; open: the other C2-engine games, an hour in lockstep |
-| M13 Editors | **in progress** | a Windows desktop for programs without DirectDraw (`user32` windows, menus, dialogs, controls; `gdi32`; `comctl32`; `comdlg32`); the editors of Northland, 8th Wonder and the Saga create, paint, save and open maps; open: a map of ours played in the game, the other tools by hand |
+| M13 Editors | **in progress** | a Windows desktop for programs without DirectDraw (`user32` windows, menus, dialogs, controls; `gdi32`; `comctl32`; `comdlg32`); the editors of Northland, 8th Wonder and the Saga create, paint, save and open maps, and Northland plays a map made in its editor; open: the other tools by hand |
 | M14 Converter | **in progress** | `recomp convert`: installer, CD, zip or folder → unpacked, lifted, built, `out/<game>/play.sh`; open: no-compiler packages, browser |
 | M10 Cultures 2 | **in progress** | boots to its serial prompt; needs the player's serial once; MMX and music done |
 

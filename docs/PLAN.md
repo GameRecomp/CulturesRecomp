@@ -300,8 +300,9 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [x] `comdlg32`: open and save dialogs of our own inside the installation folder, `GetFileTitleA`
 - [x] The editors of Northland, 8th Wonder and the Saga: a new map created, players set, terrain painted, saved
       as `.c2e` (with the exported `.c2m`) and opened again (scripted runs)
-- [ ] A map made in the editor played in the game; the editors' other tools (buildings, units, scripts, goals)
-      tried by hand
+- [x] A map made in the editor played in the game: Northland, terrain painted and two builders placed, exported
+      `.c2m` in `UserMaps`, started from Free Play (scripted)
+- [ ] The editors' other tools (buildings, vehicles, scripts, goals, AI) tried by hand
 - [ ] Tree and list views, if a dialog of the editors needs them
 
 ### M14 – Converter

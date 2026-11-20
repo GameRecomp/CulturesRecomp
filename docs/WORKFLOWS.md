@@ -142,7 +142,8 @@ programs are lined up with `FRAME wait PATH` (the script pauses until the file e
 `cultures-northland --exe Editor.exe` (lift it first; `--check --exe Editor.exe` lists what it imports). Such programs (no DirectDraw) get a desktop of
 `RC_DESKTOP=WxH` pixels (default 1024x768) in the game window. The map editors of Northland, 8th Wonder and
 the Saga run this way (`recomp lift <install>/Editor.exe` first, then build); their file dialogs show the
-installation folder, and maps are saved into the user directory.
+installation folder, and maps are saved into the user directory. To play one, copy its exported `.c2m` into
+`UserMaps/` of the game's user directory: it appears under Single Player → Free Play → User Maps.
 
 ## Inspecting a binary
 
