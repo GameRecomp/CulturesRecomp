@@ -268,6 +268,17 @@ static void k_CreateDIBSection(rc_cpu *c)
     RC_RETURN(c, hb, 6);
 }
 
+/* A 32-bit bitmap with the picture of a DIB (resources, LoadBitmap). */
+uint32_t rc_gdi_bitmap_from_dib(uint32_t bmi, uint32_t bits)
+{
+    int32_t w = (int32_t)rc_ld32(bmi + 4), h = (int32_t)rc_ld32(bmi + 8);
+    uint32_t hb = new_bitmap((uint32_t)w, (uint32_t)(h < 0 ? -h : h), 32, 0);
+    if (hb) {
+        rc_gdi_draw_dib_into(hb, bits, bmi, 0);
+    }
+    return hb;
+}
+
 /* CreateDIBitmap(dc, header, init, bits, bmi, usage): a 32-bit bitmap, filled from the DIB with
  * CBM_INIT (4). */
 static void k_CreateDIBitmap(rc_cpu *c)

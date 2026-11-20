@@ -24,6 +24,12 @@ add_library(rc_hle STATIC
     kernel32/ole32.c
     user32/user32.c
     user32/window.c
+    user32/input.c
+    user32/uidraw.c
+    user32/menu.c
+    user32/controls.c
+    user32/dialog.c
+    comctl32/comctl32.c
     gdi32/gdi32.c
     gdi32/dc.c
     gdi32/text.c

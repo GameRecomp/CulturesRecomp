@@ -22,49 +22,179 @@
 #define U32 "USER32.dll"
 
 /* ---- window classes ---- */
-#define CLASSES 32
-typedef struct wclass {
-    char name[64];
-    uint32_t wndproc, style, extra;
-} wclass;
-static wclass classes[CLASSES];
+#define CLASSES 128
+static rc_wclass classes[CLASSES];
 static uint32_t nclasses;
 
-const rc_wclass_info *rc_find_class(const char *name, uint32_t *wndproc, uint32_t *style)
+static int ieq(const char *a, const char *b)
 {
+    for (; *a && *b; a++, b++) {
+        char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a, y = *b >= 'A' && *b <= 'Z' ? (char)(*b + 32) : *b;
+        if (x != y) {
+            return 0;
+        }
+    }
+    return *a == *b;
+}
+
+rc_wclass *rc_class_find(const char *name)
+{
+    if (!name) {
+        return NULL;
+    }
+    if (name[0] == '#') { /* by atom */
+        uint32_t atom = (uint32_t)strtoul(name + 1, NULL, 10);
+        for (uint32_t i = 0; i < nclasses; i++) {
+            if (classes[i].atom == atom) {
+                return &classes[i];
+            }
+        }
+    }
     for (uint32_t i = 0; i < nclasses; i++) {
-        if (name && strcmp(classes[i].name, name) == 0) {
-            *wndproc = classes[i].wndproc;
-            *style = classes[i].style;
-            return (const rc_wclass_info *)&classes[i];
+        if (ieq(classes[i].name, name)) {
+            return &classes[i];
         }
     }
     return NULL;
 }
 
-/* WNDCLASSA, or WNDCLASSEXA from its second field on (`p` past cbSize). */
-static uint32_t register_class(uint32_t p)
+const rc_wclass_info *rc_find_class(const char *name, uint32_t *wndproc, uint32_t *style)
 {
-    if (nclasses == CLASSES) {
-        return 0;
+    rc_wclass *k = rc_class_find(name);
+    if (k) {
+        *wndproc = k->wndproc;
+        *style = k->style;
     }
-    wclass *w = &classes[nclasses];
-    w->style = rc_ld32(p);
-    w->wndproc = rc_ld32(p + 4);
-    w->extra = rc_ld32(p + 12);
-    uint32_t name = rc_ld32(p + 36);
-    if (name < 0x10000) {
-        snprintf(w->name, sizeof w->name, "#%u", name);
-    } else {
-        snprintf(w->name, sizeof w->name, "%s", rc_str(name));
-    }
-    nclasses++;
-    return 0xc000u + nclasses - 1;
+    return k;
 }
 
-static void k_RegisterClassA(rc_cpu *c) { RC_RETURN(c, register_class(RC_ARG(c, 0)), 1); }
+static rc_wclass *class_slot(const char *name)
+{
+    rc_wclass *k = rc_class_find(name);
+    if (k) {
+        return k; /* registered again: replaced */
+    }
+    if (nclasses == CLASSES) {
+        return NULL;
+    }
+    k = &classes[nclasses];
+    memset(k, 0, sizeof *k);
+    k->atom = 0xc000u + nclasses;
+    nclasses++;
+    return k;
+}
 
-static void k_RegisterClassExA(rc_cpu *c) { RC_RETURN(c, register_class(RC_ARG(c, 0) + 4), 1); }
+void rc_class_builtin(const char *name, uint32_t style, void (*fn)(rc_cpu *c), uint32_t wnd_extra, uint32_t background,
+                      uint32_t cursor)
+{
+    char import[80];
+    snprintf(import, sizeof import, "WndProc::%s", name);
+    rc_import_def *def = malloc(sizeof *def); /* the registry keeps the pointer */
+    if (!def) {
+        return;
+    }
+    *def = (rc_import_def){"USER32_CLASS", rc_str(rc_proc_str(import)), fn};
+    rc_register_imports(def, 1);
+    rc_wclass *k = class_slot(name);
+    if (!k) {
+        return;
+    }
+    snprintf(k->name, sizeof k->name, "%s", name);
+    k->style = style;
+    k->wndproc = rc_import_address("USER32_CLASS", def->name);
+    k->wnd_extra = wnd_extra;
+    k->background = background;
+    k->cursor = cursor;
+}
+
+/* WNDCLASSA, or WNDCLASSEXA from its second field on (`p` past cbSize; `small` its icon). */
+static uint32_t register_class(uint32_t p, uint32_t small)
+{
+    uint32_t name = rc_ld32(p + 36);
+    char text[64];
+    if (name < 0x10000) {
+        snprintf(text, sizeof text, "#%u", name);
+    } else {
+        snprintf(text, sizeof text, "%s", rc_str(name));
+    }
+    rc_wclass *w = class_slot(text);
+    if (!w) {
+        return 0;
+    }
+    snprintf(w->name, sizeof w->name, "%s", text);
+    w->style = rc_ld32(p);
+    w->wndproc = rc_ld32(p + 4);
+    w->cls_extra = rc_ld32(p + 8);
+    w->wnd_extra = rc_ld32(p + 12);
+    w->instance = rc_ld32(p + 16);
+    w->icon = rc_ld32(p + 20);
+    w->cursor = rc_ld32(p + 24);
+    w->background = rc_ld32(p + 28);
+    w->menu_name = rc_ld32(p + 32);
+    w->icon_small = small;
+    return w->atom;
+}
+
+static void k_RegisterClassA(rc_cpu *c) { RC_RETURN(c, register_class(RC_ARG(c, 0), 0), 1); }
+
+static void k_RegisterClassExA(rc_cpu *c)
+{
+    RC_RETURN(c, register_class(RC_ARG(c, 0) + 4, rc_ld32(RC_ARG(c, 0) + 44)), 1);
+}
+
+static rc_wclass *class_arg(uint32_t name)
+{
+    char text[64];
+    if (name < 0x10000) {
+        snprintf(text, sizeof text, "#%u", name);
+    } else {
+        snprintf(text, sizeof text, "%s", rc_str(name));
+    }
+    return rc_class_find(text);
+}
+
+/* GetClassInfoA(instance, name, WNDCLASSA) */
+static void k_GetClassInfoA(rc_cpu *c)
+{
+    rc_wclass *k = class_arg(RC_ARG(c, 1));
+    uint32_t p = RC_ARG(c, 2);
+    if (!k) {
+        rc_last_error = 1411; /* ERROR_CLASS_DOES_NOT_EXIST */
+        RC_RETURN(c, 0, 3);
+    }
+    uint32_t v[9] = {k->style, k->wndproc, k->cls_extra, k->wnd_extra, k->instance, k->icon, k->cursor, k->background, k->menu_name};
+    for (int i = 0; i < 9; i++) {
+        rc_st32(p + 4 * (uint32_t)i, v[i]);
+    }
+    rc_st32(p + 36, RC_ARG(c, 1));
+    RC_RETURN(c, k->atom, 3);
+}
+
+/* GetClassInfoExA(instance, name, WNDCLASSEXA) */
+static void k_GetClassInfoExA(rc_cpu *c)
+{
+    rc_wclass *k = class_arg(RC_ARG(c, 1));
+    uint32_t p = RC_ARG(c, 2);
+    if (!k) {
+        RC_RETURN(c, 0, 3);
+    }
+    uint32_t v[11] = {48, k->style, k->wndproc, k->cls_extra, k->wnd_extra, k->instance, k->icon, k->cursor, k->background, k->menu_name, RC_ARG(c, 1)};
+    for (int i = 0; i < 11; i++) {
+        rc_st32(p + 4 * (uint32_t)i, v[i]);
+    }
+    rc_st32(p + 44, k->icon_small);
+    RC_RETURN(c, k->atom, 3);
+}
+
+static void k_UnregisterClassA(rc_cpu *c)
+{
+    rc_wclass *k = class_arg(RC_ARG(c, 0));
+    if (k) {
+        k->name[0] = 0; /* the slot stays: windows may still point at it */
+        k->atom = 0;
+    }
+    RC_RETURN(c, k != NULL, 2);
+}
 
 /* ---- resources: handles only, for now ---- */
 static uint32_t next_resource = 0x00010100u;
@@ -284,6 +414,21 @@ static void k_LoadCursorA(rc_cpu *c)
     RC_RETURN(c, h, 2);
 }
 
+/* LoadImageA for icons (1) and cursors (2). */
+uint32_t rc_load_icon_or_cursor(rc_cpu *c, uint32_t inst, uint32_t name, uint32_t type)
+{
+    (void)c;
+    if (type == 2) {
+        uint32_t own = inst ? own_cursor(inst, name) : 0;
+        if (own) {
+            return own;
+        }
+        return rc_arrow_cursor();
+    }
+    next_resource += 4;
+    return next_resource;
+}
+
 /* The first image of a .cur file in memory (an icon directory: type 2, one 16-byte entry
  * per image with its hot spot, size and offset), or of an animated cursor (.ani: a RIFF
  * "ACON" whose LIST "fram" holds .cur files as "icon" chunks); a cursor made from it. */
@@ -363,10 +508,9 @@ static void k_CloseClipboard(rc_cpu *c) { RC_RETURN(c, 1, 0); }
 /* wsprintfA(buffer, format, ...): cdecl, so the caller removes the arguments. The
  * conversions Windows has: %c %d %i %u %x %X %s and %%, with the flags '-', '0' and '#',
  * a width, a precision, and 'l' or 'h'; at most 1024 characters. */
-static void k_wsprintfA(rc_cpu *c)
+/* wsprintfA's work: the arguments from the stack (va == 0) or from an argument list. */
+static uint32_t format(rc_cpu *c, uint32_t out, const char *f, uint32_t va)
 {
-    uint32_t out = RC_ARG(c, 0);
-    const char *f = rc_str(RC_ARG(c, 1));
     uint32_t arg = 2;
     char buf[1025];
     size_t n = 0;
@@ -399,7 +543,7 @@ static void k_wsprintfA(rc_cpu *c)
         }
         char conv = *f ? *f++ : 0;
         char piece[1100];
-        uint32_t v = RC_ARG(c, arg);
+        uint32_t v = va ? rc_ld32(va + 4 * (arg - 2)) : RC_ARG(c, arg);
         switch (conv) {
         case 'd':
         case 'i':
@@ -434,8 +578,11 @@ static void k_wsprintfA(rc_cpu *c)
     }
     buf[n] = 0;
     memcpy(rc_ptr(out), buf, n + 1);
-    RC_RETURN(c, (uint32_t)n, 0);
+    return (uint32_t)n;
 }
+
+static void k_wsprintfA(rc_cpu *c) { RC_RETURN(c, format(c, RC_ARG(c, 0), rc_str(RC_ARG(c, 1)), 0), 0); }
+static void k_wvsprintfA(rc_cpu *c) { RC_RETURN(c, format(c, RC_ARG(c, 0), rc_str(RC_ARG(c, 1)), RC_ARG(c, 2)), 3); }
 
 /* The pixels of an icon's masks (ICONINFO): a monochrome cursor has an AND
  * mask over an XOR mask in one bitmap twice its height; a colour one has
@@ -542,16 +689,37 @@ static void cursor_update(void)
     }
 }
 
-static void k_SetCursor(rc_cpu *c)
+void rc_set_cursor(uint32_t h)
 {
     uint32_t old = cursor;
-    cursor = RC_ARG(c, 0);
+    cursor = h;
     bool changed = cursor != old || !cursor_set;
     cursor_set = true;
     if (changed) {
         cursor_update();
     }
+}
+
+static void k_SetCursor(rc_cpu *c)
+{
+    uint32_t old = cursor;
+    rc_set_cursor(RC_ARG(c, 0));
     RC_RETURN(c, old, 1);
+}
+
+/* The system's arrow (as LoadCursorA(0, IDC_ARROW) gives it). */
+uint32_t rc_arrow_cursor(void)
+{
+    for (uint32_t i = 1; i < CURSORS; i++) {
+        if (cursors[i].used && !cursors[i].argb && cursors[i].system == RC_CURSOR_ARROW) {
+            return CURSOR_HANDLE + 4 * i;
+        }
+    }
+    uint32_t h = cursor_new();
+    if (h) {
+        cursor_get(h)->system = RC_CURSOR_ARROW;
+    }
+    return h;
 }
 
 static void k_ShowCursor(rc_cpu *c)
@@ -559,30 +727,6 @@ static void k_ShowCursor(rc_cpu *c)
     cursor_count += RC_ARG(c, 0) ? 1 : -1;
     cursor_update();
     RC_RETURN(c, (uint32_t)cursor_count, 1);
-}
-
-/* Device contexts: a handle per window (0 is the screen). */
-#define DC_BASE 0x01000000u
-
-uint32_t rc_window_dc(uint32_t hwnd) { return DC_BASE + (hwnd & 0xffffu); }
-
-static void k_GetDC(rc_cpu *c) { RC_RETURN(c, rc_window_dc(RC_ARG(c, 0)), 1); }
-static void k_ReleaseDC(rc_cpu *c) { RC_RETURN(c, 1, 2); }
-
-/* FillRect with a system colour brush (COLOR_* + 1), as these games use. */
-static void k_FillRect(rc_cpu *c)
-{
-    uint32_t hdc = RC_ARG(c, 0), r = RC_ARG(c, 1), brush = RC_ARG(c, 2);
-    static const uint32_t sys[31] = {
-        0xc8d0d4, 0xa56e3a, 0x6a240a, 0x808080, 0xc8d0d4, 0xffffff, 0x000000, 0x000000,
-        0x000000, 0xffffff, 0xc8d0d4, 0xc8d0d4, 0x808080, 0x6a240a, 0xffffff, 0xc8d0d4,
-        0x808080, 0x808080, 0x000000, 0xc8d0d4, 0xffffff, 0x404040, 0xc8d0d4, 0x000000,
-        0xe1ffff, 0xb5b5b5, 0x800000, 0xf0caa6, 0xc0c0c0, 0xc8d0d4, 0xc8d0d4,
-    };
-    uint32_t color = brush >= 1 && brush <= 31 ? sys[brush - 1] : 0;
-    rc_gdi_fill(hdc, (int32_t)rc_ld32(r), (int32_t)rc_ld32(r + 4), (int32_t)rc_ld32(r + 8),
-                (int32_t)rc_ld32(r + 12), color);
-    RC_RETURN(c, 1, 3);
 }
 
 /* Strings come in blocks of 16, each a length and that many UTF-16 units. */
@@ -769,9 +913,13 @@ static void k_AdjustWindowRectEx(rc_cpu *c)
 const rc_import_def rc_user32_setup[] = {
     {U32, "RegisterClassA", k_RegisterClassA},
     {U32, "RegisterClassExA", k_RegisterClassExA},
+    {U32, "GetClassInfoA", k_GetClassInfoA},
+    {U32, "GetClassInfoExA", k_GetClassInfoExA},
+    {U32, "UnregisterClassA", k_UnregisterClassA},
     {U32, "LoadCursorA", k_LoadCursorA},
     {U32, "LoadCursorFromFileA", k_LoadCursorFromFileA},
     {U32, "wsprintfA", k_wsprintfA},
+    {U32, "wvsprintfA", k_wvsprintfA},
     {U32, "OpenClipboard", k_OpenClipboard},
     {U32, "GetClipboardData", k_GetClipboardData},
     {U32, "CloseClipboard", k_CloseClipboard},
@@ -783,10 +931,7 @@ const rc_import_def rc_user32_setup[] = {
     {U32, "DestroyCursor", k_DestroyCursor},
     {U32, "DestroyIcon", k_DestroyCursor},
     {U32, "RegisterWindowMessageA", k_RegisterWindowMessageA},
-    {U32, "GetDC", k_GetDC},
-    {U32, "ReleaseDC", k_ReleaseDC},
     {U32, "LoadStringA", k_LoadStringA},
-    {U32, "FillRect", k_FillRect},
     {U32, "SetRect", k_SetRect},
     {U32, "OffsetRect", k_OffsetRect},
     {U32, "AdjustWindowRect", k_AdjustWindowRect},

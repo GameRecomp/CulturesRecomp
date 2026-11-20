@@ -431,6 +431,8 @@ static void remember_shown(const surface *s, const palette *p)
     }
 }
 
+bool rc_ddraw_has_primary(void) { return display.primary != 0; }
+
 /* The primary surface onto the window. */
 static void draw(void)
 {

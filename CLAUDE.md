@@ -3,7 +3,7 @@
 Static recompilation of the *Cultures* games (Funatics) into portable C on an SDL3 runtime, modelled on
 TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, decision log).
 
-## State (2026-11-19)
+## State (2026-11-20)
 
 | Milestone | State | What exists |
 |-----------|-------|-------------|
@@ -18,6 +18,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M8 In game | **in progress** | an hour of scripted play in a scenario (216,000 frames) without trap; save and load work; open: a whole mission played by hand, timing |
 | M11 Northland, 8th Wonder, Saga | **in progress** | all lift, play their movies (dshow + pl_mpeg), sound (DirectSound 8) and music (dmusic player + DLS synth), and start their first missions; open: a mission played through |
 | M12 Multiplayer | **in progress** | own network (`hle/dplay/net.c`: UDP discovery, host relay over TCP) under DirectPlay 4 (C1) and 8 (Northland): two programs find each other, join and play a match; open: the other C2-engine games, an hour in lockstep |
+| M13 Editors | **in progress** | a Windows desktop for programs without DirectDraw (`user32` windows, menus, dialogs, controls; `gdi32`; `comctl32`); Northland's `Editor.exe` shows its frame window; open: `comdlg32`, a map edited and saved |
 | M14 Converter | **in progress** | `recomp convert`: installer, CD, zip or folder → unpacked, lifted, built, `out/<game>/play.sh`; open: no-compiler packages, browser |
 | M10 Cultures 2 | **in progress** | boots to its serial prompt; needs the player's serial once; MMX and music done |
 
@@ -62,7 +63,7 @@ recomp/crates/rc-cli       `recomp`: identify, info, list, extract, discover, co
 runtime/                   TropicoRecomp's runtime: memory/vm/heap, CPU, x87, dispatch (+ one table per lifted binary),
                            imports, process (loader + DLL relocation), threads, clock, host files; rc_shell = game.c
 hle/                       TropicoRecomp's kernel32/user32/gdi32/ddraw/mss32/winmm + advapi32, dinput, dsound, dmusic, dplay,
-                           shell32, winmm/mci.c; frames.c = scripted input and screenshots
+                           shell32, comctl32, winmm/mci.c; user32 also runs a desktop for the editors; frames.c = scripted input and screenshots
 platform/                  SDL3 (+ttf, mixer) and null backends
 games/<id>/                game.toml + CMakeLists.txt (rc_add_game → cultures-<id>)
 cmake/                     lift.cmake, game_main.c.in

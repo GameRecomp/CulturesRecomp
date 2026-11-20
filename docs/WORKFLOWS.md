@@ -139,7 +139,8 @@ programs are lined up with `FRAME wait PATH` (the script pauses until the file e
 
 `RC_RECORD=input.txt` writes what the player does as such a script; replayed with `RC_INPUT` and `RC_CLOCK=virtual`
 (set both times) it repeats the run. `--exe NAME` runs another program of the install, e.g.
-`cultures-northland --exe Editor.exe` (lift it first; `--check --exe Editor.exe` lists what it imports).
+`cultures-northland --exe Editor.exe` (lift it first; `--check --exe Editor.exe` lists what it imports). Such programs (no DirectDraw) get a desktop of
+`RC_DESKTOP=WxH` pixels (default 1024x768) in the game window.
 
 ## Inspecting a binary
 

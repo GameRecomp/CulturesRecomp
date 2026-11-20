@@ -45,6 +45,8 @@ uint32_t rc_gdi_select(uint32_t hdc, uint32_t h);
 uint32_t rc_gdi_solid_brush(uint32_t colorref);
 /* Copy a DIB (bits, BITMAPINFO, DIB_RGB_COLORS 0 / DIB_PAL_COLORS 1) into a bitmap of the same size. */
 void rc_gdi_draw_dib_into(uint32_t hbitmap, uint32_t bits, uint32_t bmi, uint32_t usage);
+/* A 32-bit bitmap with the picture of a DIB. */
+uint32_t rc_gdi_bitmap_from_dib(uint32_t bmi, uint32_t bits);
 
 /* Text (text.c) for the drawing core and user32's controls. */
 struct rc_font;

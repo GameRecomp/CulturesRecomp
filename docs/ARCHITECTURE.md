@@ -86,8 +86,8 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | Module      | Backed by                      | Needed by | Notes |
 |-------------|--------------------------------|-----------|-------|
 | `kernel32`  | libc / POSIX / Win32           | all       | VFS (case-insensitive, `\` → `/`, save redirection), heap, time, threads, TLS, `GetPrivateProfile*` |
-| `user32`    | platform (SDL3)                | all       | window, message queue from host input, cursors (`.cur`), `MessageBox` |
-| `gdi32`     | platform + SDL3_ttf            | all       | palette functions, `TextOut`/`SetPixel`, enough for the editors later |
+| `user32`    | platform (SDL3)                | all       | games: one window, message queue from host input, cursors (`.cur`), `MessageBox`; programs without DirectDraw (editors): a desktop framebuffer (`RC_DESKTOP=WxH`) with a window tree, per-thread queues, hooks, menus, dialogs and the standard controls |
+| `gdi32`     | platform + SDL3_ttf            | all       | object table (brushes, pens, fonts, bitmaps, DIB sections, palettes, regions), DCs with clipping, ROP3 blits, lines and shapes, text |
 | `advapi32`  | per-user registry file         | all       | `Reg*` on the program's own registry (`registry.txt` in the user directory) |
 | `ole32`     | runtime                        | all       | `CoInitialize`/`CoCreateInstance` → the COM classes HLE modules register (`rc_com_register`), `CoCreateGuid` |
 | `version`, `shell32` | runtime               | all       | version info of our own modules, `ShellExecute` → host browser or no-op (now: no-op, reports success) |
@@ -101,7 +101,8 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `dplay`     | sockets (TCP + UDP discovery)  | c1 (DirectPlay 4 under `DPlayDLL.dll`) | TCP/IP provider, host-relayed sessions, the lobby's address functions; `net.c` is the network both use |
 | `dpnet`     | the same network (`net.c`)     | c2 engine (DirectPlay 8) | peer and address objects; everything reaches the game as handler messages at the message pump |
 | `wsock32`, `ws2_32` | host sockets           | c2 engine | by ordinal (now: offline, `WSAStartup` works, no sockets) |
-| `comctl32`, `comdlg32`, `winspool` | platform    | editors only | M13 |
+| `comctl32`  | user32 controls                | editors   | tool bar, status bar, progress bar, track bar, tool tips |
+| `comdlg32`, `winspool` | platform        | editors   | M13 (open) |
 
 Lifted instead of reimplemented: `binkw32.dll` (Bink 1 video), `DPlayDLL.dll` and `gedx8musicdrv.dll`.
 These are game-side code with a narrow API below them, so lifting them is less work and more faithful than

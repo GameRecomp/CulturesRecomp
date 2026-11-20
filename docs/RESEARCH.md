@@ -361,6 +361,21 @@ Our wire protocol is our own (two recompiled programs talk to each other, not to
 port 47624 (broadcast, 127.0.0.1, `$RC_DPLAY_HOST`, the typed address) answered with the session, and one TCP
 connection per client to the host, which relays.
 
+## Editors (M13)
+
+- Northland's `Editor.exe` is MFC 4.2 linked statically (window classes `AfxWnd42s`, `AfxFrameOrView42s`, …). It
+  does not import `ddraw.dll`; that is how the runtime tells an editor from a game and starts the desktop instead of
+  the game window.
+- The loading dialog runs on an MFC UI thread, while the main thread sends it messages. So `SendMessage` to a
+  window of another thread must be handled by the owner thread at its next message call. Message queues are per
+  thread, and so are timers and hooks; a hook installed for one thread must not see another thread's windows
+  (MFC subclasses every new window from its CBT hook, and the other thread's state is null there).
+- MFC asks `DllGetVersion` of `comctl32` (4.71 is enough).
+- The map view ("XWinG") paints through a DIB section on a window DC and moves its scroll bars from `WM_PAINT`.
+  `SetScrollPos` must only redraw the frame there; invalidating the client again paints for ever.
+- Windows that are not visible with all their parents receive no `WM_PAINT`: the view of a hidden frame paints
+  before its document exists otherwise.
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed?

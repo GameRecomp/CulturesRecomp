@@ -49,6 +49,8 @@ int rc_input_source(void);
 
 /* DirectDraw's display mode (0 x 0 before one is set). */
 void rc_ddraw_mode(uint32_t *w, uint32_t *h);
+/* Whether a DirectDraw primary surface exists (the program shows itself through DirectDraw). */
+bool rc_ddraw_has_primary(void);
 
 /* A display mode DirectDraw offers besides its own list (a game project's
  * resolution patch); 0 x 0 for none. */

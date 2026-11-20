@@ -25,7 +25,7 @@
 #define MODULE_BASE 0x7a000000u
 static const char *const known_modules[] = {
     "KERNEL32", "USER32", "GDI32", "DDRAW", "MSS32", "BINKW32", "ADVAPI32", "WINMM", "OLE32", "VERSION",
-    "DINPUT", "DSOUND", "SHELL32", "WSOCK32", "WS2_32", "DPLAYX", "DPNET",
+    "DINPUT", "DSOUND", "SHELL32", "WSOCK32", "WS2_32", "DPLAYX", "DPNET", "COMCTL32", "COMDLG32", "WINSPOOL",
 };
 #define NMODULES (sizeof known_modules / sizeof known_modules[0])
 

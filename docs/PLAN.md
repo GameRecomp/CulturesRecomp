@@ -55,7 +55,7 @@ Status: ✅ done · 🔶 in progress · ⬜ not started
 | M10 | **Cultures 2** (C2 engine)                 | 🔶 | `Cultures2.exe` discovered, lifted and booted. The `.cms_*` question is answered. DirectMusic music plays through the lifted `gedx8musicdrv.dll`. Campaign mission 1 is played through. Release v0.2. |
 | M11 | **Northland, 8th Wonder and Saga**         | 🔶 | Both `Game.exe` builds (+ 8th Wonder ES) and the Saga run. DirectSound 8 works. MPEG-1 movies play. A campaign mission each (Saga: Drachenland and one community campaign) is played through. Release v0.3. |
 | M12 | Multiplayer                                | 🔶 | DirectPlay 4 (C1) and DirectPlay 8 (C2 engine) over UDP/LAN between two recompiled builds. `*MP.exe` builds lifted where they are needed. |
-| M13 | Editors                                    | ⬜ | Northland and 8th Wonder `Editor.exe` run: GDI, common controls, file dialogs. |
+| M13 | Editors                                    | 🟨 | Northland and 8th Wonder `Editor.exe` run: GDI, common controls, file dialogs. |
 | M14 | Converter                                  | 🔶 | `recomp convert <installer|iso>` produces a runnable build in one step. Later the browser page (the toolchain is built for wasm32). |
 | M15 | Polish and more platforms                  | ⬜ | Opt-in high resolutions and widescreen, integer scaling, settings UI, performance work, then Android and WebAssembly. |
 
@@ -290,7 +290,15 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 
 ### M13 – Editors
 
-- [ ] `Editor.exe` for Northland, 8th Wonder and the Saga: `comctl32` (toolbars, trees, lists), `comdlg32` (file dialogs), more `gdi32`
+- [x] A Windows desktop for programs without DirectDraw: `user32` window tree (frames, client areas, z-order,
+      update regions, visible-region clipping), per-thread message queues and cross-thread `SendMessage`, hooks,
+      menus (bars and pop-ups), dialogs from templates, the standard controls (button, static, edit, list box,
+      combo box, scroll bar), `MessageBox`; `gdi32` with brushes, pens, regions, ROPs, DIBs and text
+- [x] `comctl32`: tool bar, status bar, progress bar, track bar, tool tips, `DllGetVersion`
+- [x] Northland's `Editor.exe` (MFC 4.2, static) starts with `--exe Editor.exe` and shows its frame window,
+      menus, tool bar and status bar
+- [ ] `comdlg32` (open/save dialogs), tree and list views if a dialog needs them
+- [ ] A map opened, edited and saved in Northland's editor; then 8th Wonder and the Saga
 
 ### M14 – Converter
 
