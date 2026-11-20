@@ -196,13 +196,15 @@ The runtime, HLE and platform layers are TropicoRecomp's (decision log); Culture
 
 ### M7 – Sound, music and video 🔶
 
-Already in place: Miles' quick API and streams (TropicoRecomp's `mss32`, plus `AIL_quick_copy`) carry Bink's sound;
-CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound reports no device for now.
+Miles' quick API, samples and streams (TropicoRecomp's `mss32`, plus `AIL_quick_copy`) carry the game's sounds and
+Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 
-- [ ] `mss32`: `AIL_startup`, the digital driver, samples, streams (WAV/ADPCM/MP3), volume and pan, timers
-- [ ] `dsound` (also used by C1 directly) on our own SDL3-based mixer
-- [ ] `winmm` MCI CD audio → `MUSIC/TrackNN.{ogg,flac,wav}`; Gold ISO: no music unless the user provides the tracks
-- [ ] Bink intro and outro through the lifted `binkw32.dll` (`BinkOpenMiles` → our `mss32`)
+- [x] `mss32`: the digital driver, samples (the game's sound effects), streams, volume and pan, timers
+- [x] `dsound` on the platform's PCM streams (Cultures 1 imports only `DirectSoundCreate`, for its device check;
+      the C2-engine games play through it, M11)
+- [x] `winmm` MCI CD audio → `MUSIC/TrackNN.{ogg,flac,wav}`; Gold ISO: no music unless the user provides the tracks
+- [x] Bink intro and outro through the lifted `binkw32.dll` (`BinkOpenMiles` → our `mss32`)
+- [ ] By ear on a desktop: volume balance, music against effects, the options' volume sliders
 
 ### M8 – In game
 
@@ -245,11 +247,10 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
       finds segments and the collections bands name in its search directory (RESEARCH "DirectMusic music")
 - [ ] Next: past the serial prompt with the player's serial
 - [ ] Research question 1: is `.cms_t` executed? Compare with the untouched `Cultures2MP.exe`
-- [ ] Discovery and lifting reuse M2–M4 (new manifest seeds only)
-- [ ] `ole32` COM class registry. `dmusic`: Loader, Performance, Segment, AudioPath as far as `gedx8musicdrv.dll` uses them.
-      The DLS synth is either our own (DLS1 is small) or a permissively licensed one (to be decided in M10)
-- [ ] `dpnet`: DirectPlay 8 with zero service providers, so the menus work and single player is unaffected
-- [ ] Winsock by ordinal (only for the lobby, can be a stub)
+- [x] Discovery and lifting reuse M2–M4 (new manifest seeds only)
+- [x] `ole32` COM class registry; `dmusic` with our own DLS synthesizer (see above)
+- [x] `dpnet`: DirectPlay 8 on the shared network (M12)
+- [x] Winsock by ordinal: offline (the lobby only)
 
 ### M11 – Northland, 8th Wonder and Saga
 
@@ -267,9 +268,9 @@ CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer; DirectSound
 - [x] In game (scripted): Northland's first campaign mission ("The Plague", 8000 frames, a settler's panel),
       8th Wonder's first mission and the Saga's "Nordland" campaign start and run without a trap. DirectMusic needed
       a few more silent methods (audio-path configuration and objects, time conversions, latency)
-- [ ] Research question 2: MPEG playback path → `dshow` or MCI-MPEG HLE on top of an MPEG-1 decoder
-- [ ] `DirectSoundCreate8` and the `IDirectSound8` buffers
-- [ ] Northland `Game.exe` (one build for EN/DE/ES), 8th Wonder `Game.exe` EN/DE and ES
+- [ ] Northland `Game.exe` DE and ES (one build for all three; the German installer here is an incomplete download)
+- [x] 8th Wonder German and Spanish (GOG): converted with `recomp convert`; both start the first campaign mission
+      (scripted, 4500 frames)
 - [ ] New effects (weather, earthquake) are engine code; they should need no HLE work beyond DirectDraw
 - [ ] Saga: research questions 8 and 9. Lift `Game.exe` and `GameSaga.exe`. Patch the disc check if there is one. Load the community campaigns from `DataX/UserCampaigns/`
 

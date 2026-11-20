@@ -12,9 +12,9 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M2 Find the code (C1) | done | `rc-discover` (descent, jump tables, SEH/EH, vtables, pointer scans with trial decoding, gaps, no-return fixed point, rebasing, reloc check), `recomp discover/codediff`, per-binary manifest hints (`seeds`, `no_return`, `returns`, `data`, `jump_tables`); 100 % of every C1 binary, no leftover |
 | M3 Lifter, integer core | done | TropicoRecomp's `rc-ir`, `rc-x86`, `rc-emit-c`, `rc-difftest` adapted; `recomp lift`; runtime on Tropico's `rc_cpu` layout, `lifted.h`, `x87`; all C1 binaries lift, compile warning-free (gcc, clang) and link; difftest 18720/18720 |
 | M4 x87 and the whole game | done | x87 and MMX (both difftested); DLL rebasing in the loader |
-| M5 Boot to the main loop | done | runtime/hle/platform from TropicoRecomp + rc_shell (`runtime/src/game.c`); new HLE: advapi32, dinput, dsound (no device), dmusic (DX7 check), shell32, MCI CD audio |
+| M5 Boot to the main loop | done | runtime/hle/platform from TropicoRecomp + rc_shell (`runtime/src/game.c`); new HLE: advapi32, dinput, dsound, dmusic, shell32, MCI CD audio |
 | M6 Picture and input | done | intro, menus and a scenario (1024x768x8) render; mouse and keyboard; all three C1 builds start |
-| M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound reports no device |
+| M7 Sound, music and video | **in progress** | Miles samples and Bink sound work; CD music via MCI → MUSIC/*.ogg (needs SDL3_mixer with Vorbis); DirectSound plays (C2 engine); open: checked by ear on a desktop |
 | M8 In game | **in progress** | an hour of scripted play in a scenario (216,000 frames) without trap; save and load work; open: a whole mission played by hand, timing |
 | M11 Northland, 8th Wonder, Saga | **in progress** | all lift, play their movies (dshow + pl_mpeg), sound (DirectSound 8) and music (dmusic player + DLS synth), and start their first missions; open: a mission played through |
 | M12 Multiplayer | **in progress** | own network (`hle/dplay/net.c`: UDP discovery, host relay over TCP) under DirectPlay 4 (C1) and 8 (Northland): two programs find each other, join and play a match; open: the other C2-engine games, an hour in lockstep |
