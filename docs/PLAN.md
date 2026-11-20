@@ -124,7 +124,8 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
       run-time dispatch (RESEARCH.md). Strings that end at padding or code and aligned gap code that falls into a
       second entry are found by discovery; unreferenced x87 stubs in `binkw32.dll` are `seeds`. The ignored test
       `orig_discover` checks exactly this, with the hints applied and with and without the DLLs' relocations
-- [ ] Later (M10): GOG `Cultures2.exe` (99.68 %, one `switch` with an index table but no bound), `.cms_t`
+- [x] Later (M10): GOG `Cultures2.exe` 100 % (manifest seeds; `.cms_t` answered under M10)
+- [ ] The C2-engine games' `Game.exe` builds: one 731-byte function with a `switch` whose bound is not found (99.90–99.93 %)
 
 ### M3 – Lifter, integer core ✅
 
@@ -235,9 +236,10 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [x] DirectMusic as silent objects (`hle/dmusic`): performance, loader, segments and their states, audio paths and
       the composer answer as when music plays, without sound. Miles keeps up to 4096 samples (Cultures 2 loads about
       1100 at start; the divide by zero at `0x473199` came from samples that did not load)
-- [x] Cultures 2 shows its splash screen and then asks for the serial number, as the original does on a fresh install:
-      it keeps it in `HKCU\SOFTWARE\Funatics\Cultures2\SerialNumber` (our registry, `registry.txt`), which the player's
-      own serial fills once. GOG's CD-check patch (drive `.`) passes unchanged
+- [x] Cultures 2 asks for its serial when `HKCU\Software\Funatics\Cultures2\SerialNumber` is missing. GOG players
+      never see that: the GOG installer writes the serial into the registry. `recomp extract` now keeps the
+      installer's registry entries (`registry-install.txt` in the unpacked folder), which the runtime loads first, so
+      the GOG versions start without the prompt. GOG's CD-check patch (drive `.`) passes unchanged
 - [x] MMX in the lifter: eight 64-bit registers in `rc_cpu` (kept apart from the x87 registers, which programs
       separate with `emms`), the operations as C functions in `rc/mmx.h`; the difftest loads all eight registers from
       its window, runs the instruction and stores them back, so every MMX form is checked against the real CPU (1766
@@ -245,8 +247,11 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [x] Music: `hle/dmusic/player.c` plays the segments (tempo, band, pattern and sequence tracks) through a DLS
       synthesizer (`dls.c`: the games' own .dls files, regions, loops, envelope) into a PCM stream; the loader
       finds segments and the collections bands name in its search directory (RESEARCH "DirectMusic music")
-- [x] German GOG version ("Die Tore Asgards"): converts with `recomp convert` and reaches its serial prompt too
-- [ ] Next: past the serial prompt with the player's serial
+- [x] German GOG version ("Die Tore Asgards"): converts with `recomp convert`
+- [x] Past the serial prompt (installer registry, above): main menu, the campaign map, and the first mission
+      ("Greenland") starts and runs (scripted, 12,000 frames). Discovery needed three seeds and a narrower
+      `int3` rule (RESEARCH "Code discovery")
+- [ ] The campaign's first mission played through
 - [x] Research question 1: `.cms_t` does not run up to the serial prompt; `Cultures2MP.exe` (no protection, same
       version, also lifted) is the fallback if it does later
 - [x] Discovery and lifting reuse M2–M4 (new manifest seeds only)
@@ -293,7 +298,7 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       lifts and every import is covered, should a lobby ever be rebuilt (RESEARCH "GameMp.exe")
 - [x] `Cultures2MP.exe` is not needed for multiplayer: it is `Cultures2.exe` without the copy protection (research
       questions 1 and 7); Cultures 2's own lobby (`Lobby.exe`) served a server that is gone
-- [ ] Cultures 2 multiplayer through its DirectPlay 8 (after the serial prompt)
+- [ ] Cultures 2 multiplayer through its DirectPlay 8
 - [x] Determinism check: two recompiled Cultures 1 programs stay in lockstep for an hour on the real clock (65 min,
       about 30,000 messages each way, still in contact at the end, no desync message; the game ran on by itself,
       neither side gave commands). The virtual clock cannot test this (RESEARCH "DirectPlay")

@@ -113,6 +113,7 @@ pub fn convert(o: &ConvertOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
             let _ = media::extract(o.games, None, true, std::slice::from_ref(input))?;
         } else {
             println!("{}: already unpacked", dir.display());
+            media::write_installer_registry(input, &dir)?;
         }
         (m, v.to_string(), dir)
     };

@@ -37,6 +37,7 @@ Shown in scripted runs on Linux (input from a script, screenshots compared by ey
 
 ## Beyond v0.1
 
-Cultures 2 needs your serial at its first start and is not playable further yet. Northland, 8th Wonder and the
+Cultures 2 starts its first campaign mission (with the GOG serial the installer provides) but has not been played
+further yet. Northland, 8th Wonder and the
 Saga start their missions, play their movies, sound and music, and their map editors work; they are planned for later
 releases (`docs/PLAN.md`, M10 and M11).

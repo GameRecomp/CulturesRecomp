@@ -318,6 +318,8 @@ pub(crate) struct Engine<'a> {
     pub warnings: Vec<(u32, String)>,
     pub rejected: Vec<(u32, Source, String)>,
     cands: Vec<(u32, Source, u32)>,
+    /// The entry of the candidate being tried (0: none).
+    cand_entry: u32,
     vt_cands: Vec<(u32, u32)>,
     seh_cands: Vec<(u32, u32, u32)>,
     data_refs: Vec<u32>,
@@ -502,6 +504,7 @@ impl<'a> Engine<'a> {
             warnings: Vec::new(),
             rejected: Vec::new(),
             cands: Vec::new(),
+            cand_entry: 0,
             vt_cands: Vec::new(),
             seh_cands: Vec::new(),
             data_refs: Vec::new(),
@@ -698,7 +701,9 @@ impl<'a> Engine<'a> {
                     return self.conflict(va, "instruction overlaps known bytes", trusted);
                 }
             }
-            if !trusted && first && insn.mnemonic() == Mnemonic::Int3 {
+            // Padding (int3) is no function entry; a branch to an int3 inside a function is
+            // an assertion (`jcc` over or onto a breakpoint) and fine.
+            if !trusted && first && va == self.cand_entry && insn.mnemonic() == Mnemonic::Int3 {
                 return Err(format!("starts with int3 at {va:#x}"));
             }
             self.set_state(va, INSN);
@@ -1233,11 +1238,13 @@ impl<'a> Engine<'a> {
                 self.tried.insert(t);
                 self.begin();
                 self.add_func(t, src);
+                self.cand_entry = t;
                 self.strict = src == Source::Gap;
                 self.aligned_gap = self.strict && self.after_padding(t);
                 let r = self.drain(false);
                 self.strict = false;
                 self.aligned_gap = false;
+                self.cand_entry = 0;
                 match r {
                     Ok(()) => {
                         self.commit();

@@ -8,7 +8,9 @@
  * strings, DWORDs or binary. A key that was never created does not exist, as on a clean
  * install, so a game falls back to its defaults (or creates it).
  *
- * The file is plain text, one line per value:  KEY<TAB>NAME<TAB>TYPE<TAB>HEX.
+ * The file is plain text, one line per value:  KEY<TAB>NAME<TAB>TYPE<TAB>HEX. What the game's
+ * installer wrote comes first, from registry-install.txt in the game directory (`recomp extract`
+ * makes it), as the registry would be after installing.
  */
 #include "advapi32.h"
 
@@ -126,14 +128,11 @@ static bool file_path(char *out)
     return rc_cfg && rc_cfg->user_dir && rc_host_resolve(rc_cfg->user_dir, "registry.txt", true, out);
 }
 
-static void load(void)
+/* One registry file. `install`: the installer's entries, whose strings may hold `{app}`, the
+ * installation directory as the program sees it. */
+static void load_file(const char *path, bool install)
 {
-    if (loaded) {
-        return;
-    }
-    loaded = true;
-    char path[RC_PATH_MAX];
-    FILE *f = file_path(path) ? fopen(path, "r") : NULL;
+    FILE *f = fopen(path, "r");
     if (!f) {
         return;
     }
@@ -165,9 +164,46 @@ static void load(void)
             data[size++] = (uint8_t)b;
             h += 2;
         }
-        set_value(key, n, (uint32_t)strtoul(t, NULL, 10), data, size);
+        uint32_t type = (uint32_t)strtoul(t, NULL, 10);
+        if (install && (type == 1 || type == 2) && size && rc_cfg && rc_cfg->guest_dir) {
+            /* {app} → the installation directory (strings only; the data ends with its NUL) */
+            char text[2048], out[2048];
+            memcpy(text, data, size);
+            text[size - 1] = 0;
+            size_t o = 0;
+            for (const char *p = text; *p && o + 1 < sizeof out;) {
+                if (!strncmp(p, "{app}", 5)) {
+                    o += (size_t)snprintf(out + o, sizeof out - o, "%s", rc_cfg->guest_dir);
+                    o = o < sizeof out ? o : sizeof out - 1;
+                    p += 5;
+                } else {
+                    out[o++] = *p++;
+                }
+            }
+            out[o] = 0;
+            size = (uint32_t)o + 1;
+            memcpy(data, out, size);
+        }
+        set_value(key, n, type, data, size);
     }
     fclose(f);
+}
+
+/* The installer's entries (registry-install.txt in the game directory, written when it was
+ * unpacked), then what the program wrote before (registry.txt in the user directory). */
+static void load(void)
+{
+    if (loaded) {
+        return;
+    }
+    loaded = true;
+    char path[RC_PATH_MAX];
+    if (rc_cfg && rc_cfg->game_dir && rc_host_resolve(rc_cfg->game_dir, "registry-install.txt", false, path)) {
+        load_file(path, true);
+    }
+    if (file_path(path)) {
+        load_file(path, false);
+    }
 }
 
 static void save(void)

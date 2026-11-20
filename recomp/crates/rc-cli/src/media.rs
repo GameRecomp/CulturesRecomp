@@ -53,6 +53,28 @@ fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
     None
 }
 
+/// What the installer writes into the registry (GOG: settings, Cultures 2's serial), as
+/// `registry-install.txt` in the unpacked folder, where the runtime reads it before the player's
+/// own registry.
+fn write_registry(ar: &dyn rc_media::Archive, dest: &Path) -> Result<(), String> {
+    let reg = rc_media::registry_file(ar.registry());
+    if !reg.is_empty() {
+        let path = dest.join("registry-install.txt");
+        fs::write(&path, reg).map_err(|e| format!("{}: {e}", path.display()))?;
+        println!("installer registry entries → {}", path.display());
+    }
+    Ok(())
+}
+
+/// The same for a folder unpacked before (only the setup header is read).
+pub(crate) fn write_installer_registry(media: &Path, dest: &Path) -> Result<(), String> {
+    if dest.join("registry-install.txt").exists() {
+        return Ok(());
+    }
+    let (_, ar) = rc_media::open(media).map_err(|e| format!("{}: {e}", media.display()))?;
+    write_registry(ar.as_ref(), dest)
+}
+
 pub fn extract(
     games: &Path,
     dest: Option<&Path>,
@@ -100,6 +122,7 @@ pub fn extract(
         .extract(&dest, &|_| true)
         .map_err(|e| format!("extracting {}: {e}", media.display()))?;
     println!("{n} files written in {:.1}s", t0.elapsed().as_secs_f64());
+    write_registry(ar.as_ref(), &dest)?;
 
     let Some((m, v)) = variant else {
         return Ok(ExitCode::SUCCESS);

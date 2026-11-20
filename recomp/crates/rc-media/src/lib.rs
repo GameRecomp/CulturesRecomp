@@ -81,6 +81,72 @@ pub trait Archive {
     /// Extract every entry for which `select` returns true below `dest`.
     /// Returns the number of files written.
     fn extract(&mut self, dest: &Path, select: &dyn Fn(&Entry) -> bool) -> Result<usize>;
+
+    /// The registry entries the installer writes (only Inno installers have them).
+    fn registry(&self) -> &[inno::RegistryEntry] {
+        &[]
+    }
+}
+
+/// The installer's registry entries as the runtime keeps a registry (`registry.txt`: one line per
+/// value, `KEY<TAB>NAME<TAB>TYPE<TAB>HEX`, an empty key as `KEY<TAB><TAB>-<TAB>`), for
+/// `registry-install.txt` next to the unpacked game. Entries a `Check:` function guards and entries
+/// that delete are left out; Inno constants such as `{app}` stay for the runtime to fill in.
+pub fn registry_file(entries: &[inno::RegistryEntry]) -> String {
+    use inno::RegistryValue as V;
+    let mut out = String::new();
+    for e in entries.iter().filter(|e| !e.has_check && !e.deletes) {
+        let key = format!("{}\\{}", e.root, e.key);
+        let ansi = |s: &str| -> Vec<u8> {
+            let mut b: Vec<u8> = s
+                .chars()
+                .map(|c| if (c as u32) < 256 { c as u8 } else { b'?' })
+                .collect();
+            b.push(0);
+            b
+        };
+        let number = |s: &str| -> Option<u64> {
+            let s = s.trim();
+            match s.strip_prefix('$') {
+                Some(h) => u64::from_str_radix(h, 16).ok(),
+                None => s.parse().ok(),
+            }
+        };
+        let (kind, data): (u32, Vec<u8>) = match e.kind {
+            V::None => {
+                out.push_str(&format!("{key}\t\t-\t\n"));
+                continue;
+            }
+            V::String => (1, ansi(&e.value)),
+            V::ExpandString => (2, ansi(&e.value)),
+            V::Dword => match number(&e.value) {
+                Some(n) => (4, (n as u32).to_le_bytes().to_vec()),
+                None => continue, // a constant ({code:…}) that only the installer could work out
+            },
+            V::Qword => match number(&e.value) {
+                Some(n) => (11, n.to_le_bytes().to_vec()),
+                None => continue,
+            },
+            V::Binary => (
+                3,
+                e.value
+                    .split_whitespace()
+                    .filter_map(|b| u8::from_str_radix(b, 16).ok())
+                    .collect(),
+            ),
+            V::MultiString => {
+                let mut b = Vec::new();
+                for part in e.value.split("{break}") {
+                    b.extend(ansi(part));
+                }
+                b.push(0);
+                (7, b)
+            }
+        };
+        let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
+        out.push_str(&format!("{key}\t{}\t{kind}\t{hex}\n", e.name));
+    }
+    out
 }
 
 /// Turn an archive path into a safe relative path: splits on `/` and `\`, drops empty

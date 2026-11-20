@@ -38,6 +38,12 @@ size = 1393664
 sha256 = "e3ba0b2216f75fa2dd53e70974cab8c43dac52212462d89f0e22043bdcab4fde"
 variants = ["gog-en", "gog-de"]
 
+[binary.discover]
+# A constant that looks like a code address (0x42b9a0, inside the instruction at 0x42b99f) decodes
+# as a function before the code around it is found, and blocks it and the functions it leads to:
+# these entries come first. (0x4a8298 is a message handler reached through a function pointer.)
+seeds = [0x42b19e, 0x4a8298, 0x4a8a6d]
+
 [[binary]]
 name = "Cultures2MP.exe"
 role = "multiplayer"

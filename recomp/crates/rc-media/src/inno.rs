@@ -68,6 +68,36 @@ pub struct Installer {
     /// Data entry index of each entry in `entries`.
     location: Vec<usize>,
     data: Vec<DataEntry>,
+    registry: Vec<RegistryEntry>,
+}
+
+/// A value the installer writes into the registry (`[Registry]` in the setup script).
+#[derive(Debug, Clone)]
+pub struct RegistryEntry {
+    /// `HKCR`, `HKCU`, `HKLM`, `HKU` or `HKCC`.
+    pub root: &'static str,
+    pub key: String,
+    /// Empty for the key's default value.
+    pub name: String,
+    pub kind: RegistryValue,
+    /// Inno constants (`{app}`, …) are left in place.
+    pub value: String,
+    /// A `Check:` function decides at install time whether the entry is written.
+    pub has_check: bool,
+    /// `deletekey` or `deletevalue`: the entry removes rather than writes.
+    pub deletes: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistryValue {
+    /// Only the key is created.
+    None,
+    String,
+    ExpandString,
+    Dword,
+    Binary,
+    MultiString,
+    Qword,
 }
 
 /// Little-endian cursor over a decompressed block.
@@ -141,6 +171,9 @@ struct Counts {
     directory: u32,
     file: u32,
     data_entry: u32,
+    icon: u32,
+    ini: u32,
+    registry: u32,
 }
 
 impl Installer {
@@ -181,6 +214,12 @@ impl Installer {
             files.push(parse_file_entry(&mut p)?);
         }
 
+        skip_icons_and_ini(&mut p, &counts)?;
+        let mut registry = Vec::with_capacity(counts.registry as usize);
+        for _ in 0..counts.registry {
+            registry.push(parse_registry_entry(&mut p)?);
+        }
+
         let mut q = P { b: &block2, o: 0 };
         let mut data = Vec::with_capacity(counts.data_entry as usize);
         for _ in 0..counts.data_entry {
@@ -217,10 +256,16 @@ impl Installer {
                 ..info
             },
             entries,
+            registry,
             directories,
             location,
             data,
         })
+    }
+
+    /// The installer's registry entries, in the order it writes them.
+    pub fn registry(&self) -> &[RegistryEntry] {
+        &self.registry
     }
 
     pub fn info(&self) -> &SetupInfo {
@@ -316,6 +361,10 @@ impl Installer {
 }
 
 impl Archive for Installer {
+    fn registry(&self) -> &[RegistryEntry] {
+        &self.registry
+    }
+
     fn entries(&self) -> &[Entry] {
         &self.entries
     }
@@ -598,6 +647,9 @@ fn parse_header(p: &mut P<'_>) -> Result<(SetupInfo, Counts, u8)> {
         directory: c[6],
         file: c[7],
         data_entry: c[8],
+        icon: c[9],
+        ini: c[10],
+        registry: c[11],
     };
     p.skip(WINVER_RANGE)?;
     p.skip(4 * 3)?; // back colour, back colour 2, image back colour
@@ -671,6 +723,70 @@ fn parse_file_entry(p: &mut P<'_>) -> Result<(String, u32)> {
     Ok((dest, location))
 }
 
+/// Icons (shortcuts) and INI entries: skipped.
+fn skip_icons_and_ini(p: &mut P<'_>, c: &Counts) -> Result<()> {
+    for _ in 0..c.icon {
+        // name, file, parameters, working dir, icon file, comment; conditions; app user model id
+        p.skip_strings(6 + ITEM_CONDITIONS + 1)?;
+        p.skip(WINVER_RANGE)?;
+        p.skip(4 + 4 + 1 + 2 + 1)?; // icon index, show command, close on exit, hot key, flags
+    }
+    for _ in 0..c.ini {
+        p.skip_strings(4 + ITEM_CONDITIONS)?; // file, section, key, value; conditions
+        p.skip(WINVER_RANGE + 1)?; // flags
+    }
+    Ok(())
+}
+
+fn parse_registry_entry(p: &mut P<'_>) -> Result<RegistryEntry> {
+    let key = p.wstr()?;
+    let name = p.wstr()?;
+    let value = p.bytes()?;
+    p.skip_strings(3)?; // components, tasks, languages
+    let check = p.bytes()?;
+    p.skip_strings(2)?; // after install, before install
+    p.skip(WINVER_RANGE)?;
+    let hive = p.u32()?;
+    p.skip(2)?; // permission index
+    let kind = p.u8()?;
+    let flags = p.u16()?;
+    let root = match hive & !0x8000_0000 {
+        0 => "HKCR",
+        1 => "HKCU",
+        2 => "HKLM",
+        3 => "HKU",
+        5 => "HKCC",
+        h => return format_err(format!("registry entry with unknown root {h} (misparsed?)")),
+    };
+    let kind = match kind {
+        0 => RegistryValue::None,
+        1 => RegistryValue::String,
+        2 => RegistryValue::ExpandString,
+        3 => RegistryValue::Dword,
+        4 => RegistryValue::Binary,
+        5 => RegistryValue::MultiString,
+        6 => RegistryValue::Qword,
+        k => return format_err(format!("registry entry of unknown type {k} (misparsed?)")),
+    };
+    // The value is UTF-16 for strings; numbers and binary data are written as text too.
+    let units: Vec<u16> = value
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    Ok(RegistryEntry {
+        root,
+        key,
+        name,
+        kind,
+        value: String::from_utf16_lossy(&units),
+        has_check: !check.is_empty(),
+        // flags: create value if missing, uninstall delete value, uninstall clear value,
+        // uninstall delete key, uninstall delete key if empty, preserve string type,
+        // delete key, delete value, …
+        deletes: flags & (1 << 6 | 1 << 7) != 0,
+    })
+}
+
 fn parse_data_entry(p: &mut P<'_>) -> Result<DataEntry> {
     let first_slice = p.u32()?;
     let _last_slice = p.u32()?;
@@ -742,5 +858,59 @@ mod tests {
         assert_eq!(strip_app("{APP}\\Game.exe"), Some("Game.exe"));
         assert_eq!(strip_app("{tmp}\\x.dll"), None);
         assert_eq!(strip_app("{app}\\"), None);
+    }
+}
+
+/// The registry entries of every Inno installer in `orig/` parse into plausible entries.
+#[cfg(test)]
+mod orig_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "needs the installers in orig/"]
+    fn registry_entries_of_the_installers() {
+        let orig = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../orig");
+        let mut seen = 0;
+        for e in std::fs::read_dir(&orig).expect("orig/") {
+            let path = e.expect("entry").path();
+            if path.extension().is_none_or(|x| x != "exe") {
+                continue;
+            }
+            let inst = Installer::open(&path).expect("installer");
+            for r in inst.registry() {
+                assert!(
+                    r.key.chars().all(|c| !c.is_control()),
+                    "{}: key {:?}",
+                    path.display(),
+                    r.key
+                );
+                assert!(
+                    r.name.chars().all(|c| !c.is_control()),
+                    "{}: name {:?}",
+                    path.display(),
+                    r.name
+                );
+                if std::env::var_os("RC_SHOW_REGISTRY").is_some() {
+                    let v: String = r
+                        .value
+                        .chars()
+                        .map(|c| if c.is_ascii_alphanumeric() { 'x' } else { c })
+                        .collect();
+                    println!(
+                        "{} {}\\{} [{}] {:?} {} chk={} del={}",
+                        path.file_name().unwrap().to_string_lossy(),
+                        r.root,
+                        r.key,
+                        r.name,
+                        r.kind,
+                        v,
+                        r.has_check,
+                        r.deletes
+                    );
+                }
+            }
+            seen += 1;
+        }
+        assert!(seen > 0);
     }
 }

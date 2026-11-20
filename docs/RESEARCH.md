@@ -269,6 +269,16 @@ Facts that the lifter (M3/M4) depends on:
   No path from the discovered `.text` code leaves `.text` (so none enters `.cms_t`), which supports the
   hypothesis that `.cms_t` is dead (research question 1, still **(open)**).
 
+- False pointers block real code: a constant or data value that points into the middle of an instruction can decode
+  as a plausible function before the code around it is found, and then every candidate that would cover those bytes
+  is rejected ("instruction overlaps known bytes"). Seen twice: the Saga's `Editor.exe` (0x434470) and Cultures 2
+  (0x42b9a0, which hid three functions, among them a message handler the first mission calls). Both are fixed with
+  `seeds` of the real entries. **(open)** A general rule: a candidate from a pointer that later code contradicts
+  should give way.
+- `int3` as the first instruction rejects a candidate (padding is no function), but only at its entry: the C2-engine
+  builds have assertions that branch onto an `int3`, and rejecting those runs lost one or two real functions in every
+  C2-engine binary.
+
 ## Lifting (M3)
 
 `recomp lift` results for the Cultures 1 binaries (with the manifest hints):
@@ -291,6 +301,18 @@ Facts that the lifter (M3/M4) depends on:
   non-MMX paths only (**(open)**, question 10: a trap at run time would show otherwise).
 - Labels that need entries of their own are few: SEH filters and handlers and code pointers into function bodies.
   Most labels in the DLLs are relocated jump-table entries, which the lifted `switch` reaches.
+
+## Installer registry entries
+
+Inno installers write registry values as part of the installation. The GOG installers write their own bookkeeping
+(`HKLM\SOFTWARE\GOG.com\Games\<id>`) and compatibility flags; Cultures 1's writes its default settings under
+`HKLM\SOFTWARE\Funatics\Cultures` (game path, volumes, resolution, mouse, …); Cultures 2's writes the serial number
+GOG ships with the game (`HKCU\Software\Funatics\Cultures2\SerialNumber`). Without it Cultures 2 asks for a serial,
+which a GOG player has never seen. `rc-media` reads the `[Registry]` entries of an Inno 5.5.0 installer (after the
+files, icons and INI entries of the setup header), `recomp extract` writes them as `registry-install.txt` into the
+unpacked folder (entries guarded by a `Check:` function and deleting entries left out; `{app}` stays and becomes the
+guest installation folder when the runtime loads the file). The serial stays on the player's machine with the rest of
+the unpacked game.
 
 ## Start-up (M5)
 

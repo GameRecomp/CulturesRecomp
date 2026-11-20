@@ -88,7 +88,7 @@ There is one directory per Windows DLL. Every module is shared by all games.
 | `kernel32`  | libc / POSIX / Win32           | all       | VFS (case-insensitive, `\` → `/`, save redirection), heap, time, threads, TLS, `GetPrivateProfile*` |
 | `user32`    | platform (SDL3)                | all       | games: one window, message queue from host input, cursors (`.cur`), `MessageBox`; programs without DirectDraw (editors): a desktop framebuffer (`RC_DESKTOP=WxH`) with a window tree, per-thread queues, hooks, menus, dialogs and the standard controls |
 | `gdi32`     | platform + SDL3_ttf            | all       | object table (brushes, pens, fonts, bitmaps, DIB sections, palettes, regions), DCs with clipping, ROP3 blits, lines and shapes, text |
-| `advapi32`  | per-user registry file         | all       | `Reg*` on the program's own registry (`registry.txt` in the user directory) |
+| `advapi32`  | per-user registry file         | all       | `Reg*` on the program's own registry: what the installer wrote (`registry-install.txt` in the game folder, from `recomp extract`), then `registry.txt` in the user directory |
 | `ole32`     | runtime                        | all       | `CoInitialize`/`CoCreateInstance` → the COM classes HLE modules register (`rc_com_register`), `CoCreateGuid` |
 | `version`, `shell32` | runtime               | all       | version info of our own modules, `ShellExecute` → host browser or no-op (now: no-op, reports success) |
 | `ddraw`     | platform framebuffer           | all       | DirectDraw 1/2/4/7 COM, 16-bit surfaces, software blits, page flipping → SDL texture |
