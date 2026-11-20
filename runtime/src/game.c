@@ -6,7 +6,10 @@
  *
  * It finds the installed game, hashes its executable and the DLLs next to it, picks the
  * lifted binaries whose hashes match (a shell links every build lifted for its game), and
- * runs the program with rc_run.
+ * runs the program with rc_run. Without --game-dir or RC_GAME_DIR, and without the game in
+ * the working directory, it looks for orig/<id>/<variant>/ in the working directory, the
+ * program's directory and the directories above them (as TropicoRecomp does), so a build runs
+ * from any build directory and from a debugger.
  */
 #include "rc/game.h"
 
@@ -31,7 +34,8 @@ static void usage(const rc_game_info *g, FILE *f)
             "usage: cultures-%s [--game-dir DIR] [--user-dir DIR] [--exe NAME] [--check] [-- GAME_ARGS...]\n"
             "\n"
             "  --game-dir DIR   your installed copy (default: $RC_GAME_DIR, else the current\n"
-            "                   directory)\n"
+            "                   directory, else the lifted install in orig/%s/ above it or\n"
+            "                   above the program)\n"
             "  --user-dir DIR   where the game writes saves and settings (default: the\n"
             "                   platform's per-user data directory)\n"
             "  --exe NAME       run another program of the install (Editor.exe, GameMp.exe)\n"
@@ -41,7 +45,7 @@ static void usage(const rc_game_info *g, FILE *f)
             "  --help           show this help\n"
             "\n"
             "RC_TRACE=imports logs every API call.\n",
-            g->id, g->title, g->id);
+            g->id, g->title, g->id, g->id);
 }
 
 /* The main executable of the install: its file name, NULL if there is none. */
@@ -82,6 +86,81 @@ static bool same_file_name(const char *a, const char *b)
         }
     }
     return *a == *b;
+}
+
+/* Whether `generated` holds the executable `name` with SHA-256 `hash`. */
+static bool exe_lifted(const rc_generated_set *generated, const char *name, const char *hash)
+{
+    for (size_t i = 0; generated && i < generated->count; i++) {
+        const rc_generated_binary *b = generated->binaries[i];
+        if (same_file_name(b->name, name) && strcmp(b->sha256, hash) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+#define MAX_VARIANTS 32
+
+typedef struct variant_list {
+    char names[MAX_VARIANTS][64];
+    int count;
+} variant_list;
+
+static void add_variant(void *ctx, const char *name, bool is_dir, uint64_t size)
+{
+    (void)size;
+    variant_list *l = ctx;
+    if (is_dir && l->count < MAX_VARIANTS && strlen(name) < sizeof l->names[0]) {
+        snprintf(l->names[l->count++], sizeof l->names[0], "%s", name);
+    }
+}
+
+static int cmp_variant(const void *a, const void *b) { return strcmp(a, b); }
+
+/* An install below orig/<id>/ in `start` or a directory above it: the first variant (by name)
+ * whose executable was lifted into this program, else the first that has the game at all (so
+ * the refusal names its hash). `out` holds RC_PATH_MAX. */
+static bool find_up(const rc_game_info *game, const rc_generated_set *generated, const char *start,
+                    char *out)
+{
+    char base[RC_PATH_MAX - 128]; /* room for the suffixes */
+    snprintf(base, sizeof base, "%s", start);
+    for (int up = 0; up < 8; up++) {
+        char orig[RC_PATH_MAX];
+        bool is_dir = false;
+        snprintf(orig, sizeof orig, "%s%sorig/%s", base, base[strlen(base) - 1] == '/' ? "" : "/",
+                 game->id);
+        if (rc_host_exists(orig, &is_dir, NULL) && is_dir) {
+            static variant_list l;
+            l.count = 0;
+            rc_host_list(orig, add_variant, &l);
+            qsort(l.names, (size_t)l.count, sizeof l.names[0], cmp_variant);
+            bool have_any = false;
+            for (int i = 0; i < l.count; i++) {
+                char dir[RC_PATH_MAX], path[RC_PATH_MAX], hash[65];
+                snprintf(dir, sizeof dir, "%.900s/%s", orig, l.names[i]);
+                const char *exe = find_exe(game, dir, path);
+                if (!exe) {
+                    continue;
+                }
+                if (hash_file(dir, exe, hash) && exe_lifted(generated, exe, hash)) {
+                    snprintf(out, RC_PATH_MAX, "%s", dir);
+                    return true;
+                }
+                if (!have_any) {
+                    snprintf(out, RC_PATH_MAX, "%s", dir);
+                    have_any = true;
+                }
+            }
+            if (have_any) {
+                return true;
+            }
+        }
+        size_t len = strlen(base);
+        snprintf(base + len, sizeof base - len, "%s..", base[len - 1] == '/' ? "" : "/");
+    }
+    return false;
 }
 
 static uint32_t rd16(const uint8_t *b, uint32_t at) { return (uint32_t)b[at] | ((uint32_t)b[at + 1] << 8); }
@@ -213,7 +292,15 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
         }
     }
     if (!game_dir || !*game_dir) {
+        static char found[RC_PATH_MAX];
+        char path[RC_PATH_MAX];
+        const char *exe_dir = rc_plat_base_dir();
         game_dir = ".";
+        if (!find_exe(game, ".", path) &&
+            (find_up(game, generated, ".", found) || (exe_dir && find_up(game, generated, exe_dir, found)))) {
+            game_dir = found;
+            rc_log("game in %s", game_dir);
+        }
     }
     if (do_check) {
         return check(game, game_dir, exe_name);

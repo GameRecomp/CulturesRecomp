@@ -74,6 +74,7 @@ issues or commits.
 ```sh
 $recomp lift orig/cultures1/gog-en/Cultures.exe          # C in generated/cultures1/cultures.exe-gog-en/, set.c
 $recomp lift orig/cultures1/*/Cultures.exe orig/cultures1/gog-en/*.dll   # several at once
+$recomp lift orig/cultures1/gog-en                       # a folder: every binary in it the manifest lifts
 $recomp lift --comments --out build/look orig/cultures1/gog-en/Cultures.exe   # each instruction above its C
 cmake --preset ci && cmake --build --preset ci            # compiles everything below generated/<game>/
 ```
@@ -82,6 +83,14 @@ cmake --preset ci && cmake --build --preset ci            # compiles everything 
 It prints the trapping instructions by kind (`--verbose` for all). Every lifted binary of a game is listed in
 `generated/<game>/set.c` and linked into `cultures-<game>`. Delete a binary's directory and lift another one to
 drop it. Like the code map, the C is derived from the game and stays local (`--out` into `build/` for a look).
+Only files whose content changed are written, so a build compiles only those again.
+
+The build lifts by itself (`cmake/lift.cmake`, as in TropicoRecomp): with the game in `orig/` and cargo there,
+configuring lifts a game that has no `generated/<game>/set.c` yet, and building `cultures-<game>` (an IDE's debug
+action too) builds `recomp` and lifts again whenever `games/<game>/game.toml` or the lifter changed since the last
+lift. It lifts `orig/<game>/gog-en`, else the first folder in `orig/<game>/`; `-D<GAME>_GAME_DIRS` (e.g.
+`-DCULTURES1_GAME_DIRS="orig/cultures1/gog-en;orig/cultures1/gold-de"`) names the installs instead; each lifted
+executable is about 40 MB of C to compile. `-DRC_AUTO_LIFT=OFF` turns it off.
 
 ## Differential tests
 
@@ -114,10 +123,13 @@ runtime loads before the player's own `registry.txt`.
 ## Running a game
 
 ```sh
-recomp/target/release/recomp lift orig/cultures1/gog-en/*.exe orig/cultures1/gog-en/binkw32.dll orig/cultures1/gog-en/DPlayDLL.dll
-CMAKE_PREFIX_PATH=<your SDL3 prefix> cmake --preset dev && cmake --build --preset dev
+CMAKE_PREFIX_PATH=<your SDL3 prefix> cmake --preset dev && cmake --build --preset dev   # lifts orig/<game>/gog-en
 build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en      # or set RC_GAME_DIR
 ```
+
+Without `--game-dir` or `RC_GAME_DIR`, and without the game in the working directory, the shell looks for
+`orig/<game>/` in the working directory, beside the program and in the directories above, and takes the first
+install there whose executable was lifted into it, so a debugger can start it without arguments.
 
 The shell hashes `Cultures.exe` and the DLLs beside it and runs the lifted builds that match; a build that was not
 lifted is refused with its hash. Saves, settings and the registry (`registry.txt`) go to the per-user data directory
@@ -170,8 +182,8 @@ The game shells end up in `build/<preset>/games/<id>/cultures-<id>`.
 SDL3 is used when CMake finds it (`-DRC_WITH_SDL3=ON|OFF|AUTO`, default `AUTO`). Without it, the null
 platform is built. That is enough for tests.
 
-Once lifting exists (M3+), `cmake/lift.cmake` picks up `generated/<game>/**/*.c` automatically. Without
-generated code, each game shell builds and only reports that the code has not been lifted yet.
+`cmake/lift.cmake` lifts the games found in `orig/` (see "Lifting") and compiles `generated/<game>/**/*.c` into
+their shells. Without generated code, each game shell builds and only reports that the code has not been lifted yet.
 
 ## Rust toolchain
 

@@ -33,11 +33,12 @@ USAGE:
                                             the heuristics against them
     recomp codediff [--games DIR] [--verbose] FILE_A FILE_B
                                             compare two builds function by function
-    recomp lift [--games DIR] [--out DIR] [--base ADDR] [--comments] [--verbose] FILE...
+    recomp lift [--games DIR] [--out DIR] [--base ADDR] [--comments] [--verbose] FILE_OR_FOLDER...
                                             discover, lift every function and write C (default:
                                             generated/<game>/<binary>-<variant>/, plus the
-                                            game's set.c); --comments puts each instruction
-                                            above its C
+                                            game's set.c); a folder: every binary in it the
+                                            manifest lifts. Writes only files that changed;
+                                            --comments puts each instruction above its C
     recomp convert [--games DIR] [--preset NAME] [--force] MEDIA_OR_FOLDER
                                             in one step: unpack (if needed), lift every binary
                                             the manifest lifts, build the game (CMake preset,

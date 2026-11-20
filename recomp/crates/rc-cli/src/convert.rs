@@ -4,8 +4,8 @@
 //! lifts, build the game's shell with CMake, and put it with a launcher into `out/<game>/`.
 //! The program contains code derived from the user's copy: it stays on their machine.
 
-use crate::{lift, media};
-use rc_manifest::{Manifest, Treatment};
+use crate::lift::{self, identify_dir};
+use crate::media;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -14,39 +14,6 @@ pub struct ConvertOpts<'a> {
     pub games: &'a Path,
     pub preset: &'a str,
     pub force: bool,
-}
-
-/// `name` in `dir`, matched without case.
-fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
-    fs::read_dir(dir)
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .find(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.eq_ignore_ascii_case(name))
-        })
-}
-
-/// The game and variant an installed folder holds, by the hash of its main executable.
-fn identify_dir<'a>(ms: &'a [Manifest], dir: &Path) -> Option<(&'a Manifest, String)> {
-    for m in ms {
-        for b in &m.binaries {
-            let Some(p) = find_file(dir, &b.name) else {
-                continue;
-            };
-            let Ok(sha) = rc_manifest::sha256_file(&p) else {
-                continue;
-            };
-            if sha == b.sha256 {
-                if let Some(v) = b.variants.first() {
-                    return Some((m, v.clone()));
-                }
-            }
-        }
-    }
-    None
 }
 
 /// Compile jobs for the build: `CMAKE_BUILD_PARALLEL_LEVEL` if set, else one per CPU but no more than
@@ -121,38 +88,27 @@ pub fn convert(o: &ConvertOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
     println!("game        {} ({id}/{variant})", manifest.game.title);
 
     // 2. Lift what the manifest lifts and the folder has.
-    let mut lifted = Vec::new();
-    for b in manifest
-        .binaries
-        .iter()
-        .filter(|b| b.treatment == Treatment::Lift && b.variants.contains(&variant))
-    {
-        if let Some(p) = find_file(&dir, &b.name) {
-            if lifted.contains(&p) {
-                continue;
-            }
-            let _ = lift::lift(
-                &lift::LiftOpts {
-                    games: o.games,
-                    out: None,
-                    base: None,
-                    comments: false,
-                    verbose: false,
-                },
-                std::slice::from_ref(&p),
-            )?;
-            lifted.push(p);
-        }
-    }
-    if lifted.is_empty() {
-        return Err(format!("{}: nothing to lift", dir.display()));
-    }
+    let _ = lift::lift(
+        &lift::LiftOpts {
+            games: o.games,
+            out: None,
+            base: None,
+            comments: false,
+            verbose: false,
+        },
+        std::slice::from_ref(&dir),
+    )?;
 
     // 3. Build the game's program.
     let target = format!("cultures-{id}");
+    // The build lifts again when the lifter or the manifest changes (cmake/lift.cmake): from
+    // this install, not another variant in orig/. (`absolute`, not `canonicalize`: no `\\?\`
+    // prefix on Windows, which CMake does not take.)
+    let game_dir = std::path::absolute(&dir).unwrap_or_else(|_| dir.clone());
+    let dirs_var = format!("-D{}_GAME_DIRS={}", id.to_uppercase(), game_dir.display());
     run(Command::new("cmake")
         .current_dir(&root)
-        .args(["--preset", o.preset]))?;
+        .args(["--preset", o.preset, &dirs_var]))?;
     let jobs = build_jobs().to_string();
     run(Command::new("cmake").current_dir(&root).args([
         "--build",
@@ -180,7 +136,6 @@ pub fn convert(o: &ConvertOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
     fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let dest = out.join(built.file_name().unwrap_or_default());
     fs::copy(&built, &dest).map_err(|e| format!("{}: {e}", built.display()))?;
-    let game_dir = fs::canonicalize(&dir).unwrap_or(dir);
     if cfg!(windows) {
         let bat = out.join("play.bat");
         let text = format!(

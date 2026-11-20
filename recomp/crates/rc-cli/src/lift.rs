@@ -5,12 +5,15 @@
 //! `code_XXXX.c` (64 KiB of guest code each), `table.c` (the sorted dispatch table) and
 //! `binary.c` (the `rc_generated_binary` record). Then `generated/<game>/set.c` lists every
 //! binary lifted for the game so far, so the game shell links them all and picks by hash.
-//! The output depends only on the binary and the manifest.
+//! The output depends only on the binary and the manifest. A FILE may also be an installed
+//! folder: then every binary in it that the manifest lifts is lifted (what the build runs, see
+//! `cmake/lift.cmake`). Only files whose content changed are written, so a build compiles
+//! only those again.
 
 use crate::discover::{default_out, load, Loaded};
 use rc_discover::{CodeMap, Function};
 use rc_ir::Stmt;
-use rc_manifest::Treatment;
+use rc_manifest::{Manifest, Role, Treatment};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -158,35 +161,127 @@ fn write_set(game_dir: &Path, game: &str) -> Result<usize, String> {
         symbol(game),
         syms.len()
     ));
-    let path = game_dir.join("set.c");
-    fs::write(&path, s).map_err(|e| format!("{}: {e}", path.display()))?;
+    write_if_changed(&game_dir.join("set.c"), &s)?;
     Ok(syms.len())
 }
 
-/// Replace the generated C of one binary: remove the old files first, so a function that
-/// moved to another 64 KiB bucket leaves no stale file behind.
-fn write_tree(dir: &Path, tree: &BTreeMap<String, String>) -> Result<u64, String> {
+/// Write `text` to `path` unless the file already holds exactly that, so that its time stays
+/// and a build does not compile it again. Returns whether it was written.
+fn write_if_changed(path: &Path, text: &str) -> Result<bool, String> {
+    if fs::read(path).is_ok_and(|old| old == text.as_bytes()) {
+        return Ok(false);
+    }
+    fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(true)
+}
+
+/// Replace the generated C of one binary: write the files that changed and remove the ones
+/// that are no longer generated (a function that moved to another 64 KiB bucket leaves no
+/// stale file behind). Returns the bytes of C and how many files were written.
+fn write_tree(dir: &Path, tree: &BTreeMap<String, String>) -> Result<(u64, usize), String> {
     fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for e in fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
         let p = e.map_err(|e| e.to_string())?.path();
         let ext = p.extension().and_then(|x| x.to_str());
-        if matches!(ext, Some("c" | "h")) {
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        if matches!(ext, Some("c" | "h")) && !tree.contains_key(name) {
             fs::remove_file(&p).map_err(|e| format!("{}: {e}", p.display()))?;
         }
     }
     let mut bytes = 0u64;
+    let mut written = 0;
     for (name, text) in tree {
-        let p = dir.join(name);
-        fs::write(&p, text).map_err(|e| format!("{}: {e}", p.display()))?;
+        written += usize::from(write_if_changed(&dir.join(name), text)?);
         bytes += text.len() as u64;
     }
-    Ok(bytes)
+    Ok((bytes, written))
 }
 
-pub fn lift(o: &LiftOpts, files: &[PathBuf]) -> Result<ExitCode, String> {
+/// `name` in `dir`, matched without case.
+pub fn find_file(dir: &Path, name: &str) -> Option<PathBuf> {
+    fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.eq_ignore_ascii_case(name))
+        })
+}
+
+/// The game and variant an installed folder holds, by the hash of an executable (the main one
+/// first). DLLs only as a last resort: the same `binkw32.dll` ships with several games.
+pub fn identify_dir<'a>(ms: &'a [Manifest], dir: &Path) -> Option<(&'a Manifest, String)> {
+    let rank = |r: Role| match r {
+        Role::Main => 0,
+        Role::Library => 2,
+        _ => 1,
+    };
+    for pass in 0..3 {
+        for m in ms {
+            for b in m.binaries.iter().filter(|b| rank(b.role) == pass) {
+                let Some(p) = find_file(dir, &b.name) else {
+                    continue;
+                };
+                let Ok(sha) = rc_manifest::sha256_file(&p) else {
+                    continue;
+                };
+                if sha == b.sha256 {
+                    if let Some(v) = b.variants.first() {
+                        return Some((m, v.clone()));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The binaries in an installed folder that the manifest lifts for its variant.
+pub fn liftable_in(ms: &[Manifest], dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let (m, variant) = identify_dir(ms, dir)
+        .ok_or_else(|| format!("{}: no known executable in it", dir.display()))?;
+    let mut files: Vec<PathBuf> = Vec::new();
+    for b in m
+        .binaries
+        .iter()
+        .filter(|b| b.treatment == Treatment::Lift && b.variants.contains(&variant))
+    {
+        if let Some(p) = find_file(dir, &b.name) {
+            if !files.contains(&p) {
+                files.push(p);
+            }
+        }
+    }
     if files.is_empty() {
+        return Err(format!("{}: nothing to lift", dir.display()));
+    }
+    Ok(files)
+}
+
+/// The FILEs with every folder replaced by the binaries in it that the manifest lifts.
+fn expand(games: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+    if !paths.iter().any(|p| p.is_dir()) {
+        return Ok(paths.to_vec());
+    }
+    let ms = rc_manifest::load_dir(games).map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    for p in paths {
+        if p.is_dir() {
+            files.extend(liftable_in(&ms, p)?);
+        } else {
+            files.push(p.clone());
+        }
+    }
+    Ok(files)
+}
+
+pub fn lift(o: &LiftOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
+    if paths.is_empty() {
         return Err("lift needs at least one FILE".into());
     }
+    let files = expand(o.games, paths)?;
     if o.out.is_some() && files.len() > 1 {
         return Err("--out works with one FILE only".into());
     }
@@ -234,8 +329,8 @@ pub fn lift(o: &LiftOpts, files: &[PathBuf]) -> Result<ExitCode, String> {
             binary_c(&l, &sym, lifted.functions.len()),
         );
         let json = serde_json::to_string_pretty(&l.map).map_err(|e| e.to_string())?;
-        let bytes = write_tree(&dir, &tree)?;
-        fs::write(dir.join("codemap.json"), json + "\n").map_err(|e| e.to_string())?;
+        let (bytes, written) = write_tree(&dir, &tree)?;
+        write_if_changed(&dir.join("codemap.json"), &(json + "\n"))?;
 
         let traps: u32 = lifted.traps.values().sum();
         println!("binary      {} ({})", l.map.binary.name, &l.sha256[..16]);
@@ -262,7 +357,7 @@ pub fn lift(o: &LiftOpts, files: &[PathBuf]) -> Result<ExitCode, String> {
             );
         }
         println!(
-            "C           {} files, {:.1} MB in {}",
+            "C           {} files ({written} changed), {:.1} MB in {}",
             tree.len(),
             bytes as f64 / 1e6,
             dir.display()
