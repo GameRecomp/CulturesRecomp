@@ -293,7 +293,8 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [x] `dpnet` (DirectPlay 8 peer and address objects) on the same network core (`net.c`): Northland's host
       creates a game, a second program finds it on the LAN, joins the lobby, the host puts it into a slot and starts,
       and both play the mission
-- [x] 8th Wonder and the Saga host a game the same way (same `CDPNet` code as Northland)
+- [x] 8th Wonder and the Saga: two programs host, join and start a map the same way (same `CDPNet` code as
+      Northland; 8th Wonder "Land of the Dragons I", the Saga's co-op map "Schneetreiben" with computer players)
 - [x] `GameMp.exe` answered: the game build for the internet lobby (`lobby.exe`, TriNodE's "Flownet" library on
       Winsock, a log-on to the publisher's game server). Neither the lobby nor its `lobby\*.ini` is in any install
       and the server is gone, so it is not needed: LAN and direct-IP games run in `Game.exe` (DirectPlay 8). It

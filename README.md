@@ -67,7 +67,7 @@ What runs now (Linux; shown in scripted runs, not yet played through by hand):
 |------|-------|
 | Cultures 1 (GOG EN/DE, Gold DE) | intro, menus, campaigns and scenarios; sound, music, save and load; LAN games between two programs; an hour of scripted play without a fault |
 | Cultures 2 (GOG EN/DE) | menus, music, the campaign map; the first mission starts and runs |
-| Northland, 8th Wonder, Saga | movies, sound, music; first campaign missions start; Northland LAN games; the map editors make, save and open maps, and a map made in Northland's editor plays in the game |
+| Northland, 8th Wonder, Saga | movies, sound, music; first campaign missions start; LAN games in all of them; the map editors make, save and open maps, and a map made in Northland's editor plays in the game |
 
 `recomp convert` turns any of the supported installers, the Gold ISO or the Saga zip into a program in one step.
 Open: a mission played through by hand, game speed, Windows and macOS builds, packages that need no compiler.
