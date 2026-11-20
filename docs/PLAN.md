@@ -223,7 +223,7 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [ ] All three variants: GOG EN and DE and Gold DE start; Gold offers both campaigns and the add-on's first mission
       ("Der Aufbruch") starts. Open: when `Intro2`/`Extro2` play (neither the campaign start nor the Intro menu)
 - [ ] Packaging per platform. The user points the build at their install; nothing is bundled
-- [ ] Release notes with the known issues
+- [ ] Release notes with the known issues: draft in `docs/RELEASE-NOTES.md`, final once the items above are done
 
 ### M10 – Cultures 2
 

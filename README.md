@@ -59,11 +59,20 @@ the code map for the lifter goes to `generated/`. `recomp codediff` compares bui
 **M3, Lifter (integer core): done.** `recomp lift` turns every Cultures 1 binary into C (shared lifter with
 TropicoRecomp; every instruction form checked against the real CPU). The C compiles without warnings and links into
 the game shell.
-**M4/M5: done.** The runtime, HLE and platform layers come from TropicoRecomp; with the modules Cultures adds
-(registry, DirectInput, CD audio, …) the recompiled `Cultures.exe` boots, plays its intro movie and shows the main
-menu, starts a scenario and runs it (scripted runs: menus, briefing, building panels, 30,000 frames without a
-trap). **M7 (sound) and M8 (playing a mission through) are in progress.**
-Nothing is playable to the end yet. See [`docs/PLAN.md`](docs/PLAN.md) for the full roadmap.
+**M4/M5: done.** The runtime, HLE and platform layers come from TropicoRecomp, with the modules Cultures adds.
+
+What runs now (Linux; shown in scripted runs, not yet played through by hand):
+
+| Game | State |
+|------|-------|
+| Cultures 1 (GOG EN/DE, Gold DE) | intro, menus, campaigns and scenarios; sound, music, save and load; LAN games between two programs; an hour of scripted play without a fault |
+| Cultures 2 (GOG EN/DE) | boots to its serial prompt (needs your own serial once); music |
+| Northland, 8th Wonder, Saga | movies, sound, music; first campaign missions start; Northland LAN games; the map editors make, save and open maps, and a map made in Northland's editor plays in the game |
+
+`recomp convert` turns any of the supported installers, the Gold ISO or the Saga zip into a program in one step.
+Open: a mission played through by hand, game speed, Windows and macOS builds, packages that need no compiler.
+See [`docs/PLAN.md`](docs/PLAN.md) for the roadmap and [`docs/RELEASE-NOTES.md`](docs/RELEASE-NOTES.md) for the known
+issues.
 
 ## Quick start (developers)
 
@@ -107,6 +116,7 @@ Put your own game files in `orig/` (git-ignored). Read [`docs/WORKFLOWS.md`](doc
 | [`docs/TARGETS.md`](docs/TARGETS.md)           | Every supported installer and binary, with hashes       |
 | [`docs/RESEARCH.md`](docs/RESEARCH.md)         | Series history and findings from analysing the binaries |
 | [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md)       | Day-to-day commands: extract, identify, lift, build, debug |
+| [`docs/RELEASE-NOTES.md`](docs/RELEASE-NOTES.md) | What works, what does not yet (draft for the first release) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Rules, especially regarding copyrighted material        |
 | [`CLAUDE.md`](CLAUDE.md)                       | Short orientation for a new working session: state, conventions, next steps |
 
