@@ -92,6 +92,7 @@ pub fn convert(o: &ConvertOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
         &lift::LiftOpts {
             games: o.games,
             out: None,
+            set: None,
             base: None,
             comments: false,
             verbose: false,

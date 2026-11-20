@@ -37,12 +37,15 @@ USAGE:
                                             the heuristics against them
     recomp codediff [--games DIR] [--verbose] FILE_A FILE_B
                                             compare two builds function by function
-    recomp lift [--games DIR] [--out DIR] [--base ADDR] [--comments] [--verbose] FILE_OR_FOLDER...
+    recomp lift [--games DIR] [--out DIR] [--set FILE] [--base ADDR] [--comments] [--verbose]
+                FILE_OR_FOLDER...
                                             discover, lift every function and write C (default:
                                             generated/<game>/<binary>-<variant>/, plus the
                                             game's set.c); a folder: every binary in it the
                                             manifest lifts. Writes only files that changed;
-                                            --comments puts each instruction above its C
+                                            --set FILE also writes a set of just these
+                                            binaries (one build target's); --comments puts
+                                            each instruction above its C
     recomp convert [--games DIR] [--preset NAME] [--force] MEDIA_OR_FOLDER
                                             in one step: unpack (if needed), lift every binary
                                             the manifest lifts, build the game (CMake preset,
@@ -76,6 +79,7 @@ struct Opts {
     no_relocs: bool,
     comments: bool,
     preset: Option<String>,
+    set: Option<PathBuf>,
     paths: Vec<PathBuf>,
 }
 
@@ -101,6 +105,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         no_relocs: false,
         comments: false,
         preset: None,
+        set: None,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -118,6 +123,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--verbose" | "-v" => o.verbose = true,
             "--comments" => o.comments = true,
             "--preset" => o.preset = Some(it.next().ok_or("--preset needs a name")?.clone()),
+            "--set" => o.set = Some(it.next().ok_or("--set needs a file")?.into()),
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             p => o.paths.push(p.into()),
         }
@@ -164,6 +170,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 &lift::LiftOpts {
                     games: &o.games,
                     out: o.out.as_deref(),
+                    set: o.set.as_deref(),
                     base: o.base,
                     comments: o.comments,
                     verbose: o.verbose,

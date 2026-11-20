@@ -22,6 +22,8 @@ use std::process::ExitCode;
 pub struct LiftOpts<'a> {
     pub games: &'a Path,
     pub out: Option<&'a Path>,
+    /// Also write a set of just the binaries of this run (one build target's).
+    pub set: Option<&'a Path>,
     pub base: Option<u32>,
     pub comments: bool,
     pub verbose: bool,
@@ -130,22 +132,16 @@ fn binary_c(l: &Loaded, sym: &str, count: usize) -> String {
     )
 }
 
-/// `set.c` for the game: every sibling directory with a `binary.c`.
-fn write_set(game_dir: &Path, game: &str) -> Result<usize, String> {
-    let mut syms = Vec::new();
-    let mut entries: Vec<PathBuf> = fs::read_dir(game_dir)
-        .map_err(|e| format!("{}: {e}", game_dir.display()))?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.join("binary.c").is_file())
-        .collect();
-    entries.sort();
-    for p in &entries {
-        if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
-            syms.push(symbol(n));
-        }
-    }
+/// The C of a set: the binaries in the directories `dirs` (names below `generated/<game>/`), as
+/// `rc_generated_<game>`. Each directory is also named in a `/* dir: NAME */` line, which the
+/// build reads (`cmake/lift.cmake`).
+fn set_source(game: &str, dirs: &[String]) -> String {
+    let syms: Vec<String> = dirs.iter().map(|d| symbol(d)).collect();
     let mut s = format!("{HEADER}#include \"rc/game.h\"\n\n");
+    for d in dirs {
+        s.push_str(&format!("/* dir: {d} */\n"));
+    }
+    s.push('\n');
     for sym in &syms {
         s.push_str(&format!("extern const rc_generated_binary {sym}_binary;\n"));
     }
@@ -161,8 +157,21 @@ fn write_set(game_dir: &Path, game: &str) -> Result<usize, String> {
         symbol(game),
         syms.len()
     ));
-    write_if_changed(&game_dir.join("set.c"), &s)?;
-    Ok(syms.len())
+    s
+}
+
+/// `set.c` for the game: every sibling directory with a `binary.c`.
+fn write_set(game_dir: &Path, game: &str) -> Result<usize, String> {
+    let mut dirs: Vec<String> = fs::read_dir(game_dir)
+        .map_err(|e| format!("{}: {e}", game_dir.display()))?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.join("binary.c").is_file())
+        .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
+        .collect();
+    dirs.sort();
+    write_if_changed(&game_dir.join("set.c"), &set_source(game, &dirs))?;
+    Ok(dirs.len())
 }
 
 /// Write `text` to `path` unless the file already holds exactly that, so that its time stays
@@ -282,6 +291,7 @@ pub fn lift(o: &LiftOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
         return Err("lift needs at least one FILE".into());
     }
     let files = expand(o.games, paths)?;
+    let mut this_run: Vec<(String, String)> = Vec::new(); // (game, directory)
     if o.out.is_some() && files.len() > 1 {
         return Err("--out works with one FILE only".into());
     }
@@ -330,6 +340,15 @@ pub fn lift(o: &LiftOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
         );
         let json = serde_json::to_string_pretty(&l.map).map_err(|e| e.to_string())?;
         let (bytes, written) = write_tree(&dir, &tree)?;
+        if let Some(game) = dir
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+        {
+            if !this_run.iter().any(|(_, d)| *d == dir_name) {
+                this_run.push((game.to_string(), dir_name.clone()));
+            }
+        }
         write_if_changed(&dir.join("codemap.json"), &(json + "\n"))?;
 
         let traps: u32 = lifted.traps.values().sum();
@@ -376,6 +395,25 @@ pub fn lift(o: &LiftOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
                 );
             }
         }
+    }
+    if let Some(path) = o.set {
+        let Some((game, _)) = this_run.first() else {
+            return Err("--set: nothing was lifted".into());
+        };
+        if this_run.iter().any(|(g, _)| g != game) {
+            return Err("--set: the binaries belong to different games".into());
+        }
+        let mut dirs: Vec<String> = this_run.iter().map(|(_, d)| d.clone()).collect();
+        dirs.sort();
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        write_if_changed(path, &set_source(game, &dirs))?;
+        println!(
+            "set         {} binaries of this run in {}",
+            dirs.len(),
+            path.display()
+        );
     }
     Ok(ExitCode::SUCCESS)
 }

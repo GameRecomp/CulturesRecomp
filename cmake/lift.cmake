@@ -2,10 +2,10 @@
 #
 # rc_add_game(<id> TITLE <title> EXES <exe>...)
 #
-# Creates the executable `cultures-<id>` for one game. The shell's main() is generated from
-# cmake/game_main.c.in. Lifted C for the game, if present under generated/<id>/ (all variants;
-# produced by `recomp lift`, never committed), is compiled in and RC_HAVE_GENERATED is defined.
-# Without generated code the shell still builds and reports that the game has not been lifted.
+# Creates the executable `cultures-<id>` for one game (and one per other unpacked install, see
+# below). The shell's main() is generated from cmake/game_main.c.in. Lifted C (generated/<id>/,
+# produced by `recomp lift`, never committed) is compiled in and RC_HAVE_GENERATED is defined.
+# Without lifted code the shell still builds and reports that the game has not been lifted.
 #
 # Lifting as part of the build (as in TropicoRecomp), so that building a game, from an IDE's
 # debug action too, never runs code lifted by an older lifter or from older manifest hints:
@@ -16,8 +16,12 @@
 # - a game without a folder in orig/<id>/ is unpacked while configuring from its installer,
 #   CD image or zip in orig/ (`recomp extract --game`, the first variant the manifest lists
 #   whose medium is there);
-# - without lifted code (no generated/<id>/set.c) they are lifted while configuring, so that
-#   the sources are there to be found;
+# - every other folder in orig/<id>/ gets a target cultures-<id>-<folder> (outside `all`) that
+#   lifts and links only that install, e.g. cultures-cultures1-gold-de for debugging the Gold
+#   build; each target links its own set (`recomp lift --set`, in the build tree), and each
+#   lifted binary is compiled once, as an object library the targets share;
+# - a target without a set yet is lifted while configuring, so that the sources are there to be
+#   found;
 # - during the build recomp is built by cargo (nothing to do when nothing changed) and the
 #   installs are lifted again when games/<id>/game.toml or recomp is newer than the last lift.
 #   `recomp lift` rewrites only the files whose content changed, so only those are compiled
@@ -122,45 +126,133 @@ function(rc_extract_now id)
   endif()
 endfunction()
 
-# Lift while configuring, when the game has no lifted code yet.
-function(rc_lift_now id dirs gen_dir)
-  if(EXISTS "${gen_dir}/set.c")
+# Lift `dirs` while configuring when the target has no set file yet (`recomp lift --set`).
+function(rc_lift_now target dirs set_file)
+  if(EXISTS "${set_file}")
     return()
   endif()
-  message(STATUS "cultures-${id}: lifting ${dirs} (no lifted code yet)")
+  message(STATUS "${target}: lifting ${dirs}")
   rc_recomp_now(ok)
   set(failed 1)
   if(ok)
     execute_process(
-      COMMAND "${RC_RECOMP}" lift ${dirs}
+      COMMAND "${RC_RECOMP}" lift --set "${set_file}" ${dirs}
       WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
       OUTPUT_QUIET
       RESULT_VARIABLE failed)
   endif()
   if(failed)
-    message(WARNING "cultures-${id}: lifting failed; run recomp lift by hand (docs/WORKFLOWS.md)")
+    message(WARNING "${target}: lifting failed; run recomp lift by hand (docs/WORKFLOWS.md)")
   endif()
 endfunction()
 
-# Lift again during the build, before `target` compiles the lifted `sources`, when the manifest
-# or the lifter changed.
-function(rc_lift id dirs gen_dir target sources)
+# The lifted binaries a set file names (its `/* dir: NAME */` lines), in `out`.
+function(rc_set_dirs set_file out)
+  set(dirs "")
+  if(EXISTS "${set_file}")
+    file(STRINGS "${set_file}" lines REGEX "^/\\* dir: .* \\*/$")
+    foreach(l IN LISTS lines)
+      string(REGEX REPLACE "^/\\* dir: (.*) \\*/$" "\\1" d "${l}")
+      list(APPEND dirs "${d}")
+    endforeach()
+  endif()
+  set(${out} "${dirs}" PARENT_SCOPE)
+endfunction()
+
+# One lifted binary (generated/<id>/<dir>/) as an object library, shared by the targets that
+# link it; its name in `out`.
+function(rc_lifted_objects id dir out)
+  string(MAKE_C_IDENTIFIER "lifted_${id}_${dir}" lib)
+  set(${out} ${lib} PARENT_SCOPE)
+  if(TARGET ${lib})
+    return()
+  endif()
+  set(d "${RC_GENERATED_DIR}/${id}/${dir}")
+  file(GLOB sources CONFIGURE_DEPENDS "${d}/*.c")
+  add_library(${lib} OBJECT ${sources})
+  target_include_directories(${lib} PRIVATE "${d}")
+  target_link_libraries(${lib} PRIVATE rc_shell rc_warnings)
+  # Lifted code is not debugged at the C level and is slow unoptimised (as in TropicoRecomp).
+  if(NOT MSVC)
+    target_compile_options(${lib} PRIVATE -O1)
+  endif()
+  set_property(GLOBAL APPEND PROPERTY RC_LIFTED_${id} "${d}")
+endfunction()
+
+# The game's shell: an executable that links the lifted binaries of `set_file`.
+function(rc_add_shell id target main_c set_file)
+  add_executable(${target} "${main_c}")
+  target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
+  rc_set_dirs("${set_file}" dirs)
+  if(dirs)
+    # Configure again when a lift changes which binaries the set holds.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${set_file}")
+    foreach(d IN LISTS dirs)
+      rc_lifted_objects(${id} "${d}" lib)
+      target_sources(${target} PRIVATE $<TARGET_OBJECTS:${lib}>)
+      set_property(GLOBAL APPEND PROPERTY RC_LIFTED_LIBS_${id} ${lib})
+    endforeach()
+    target_sources(${target} PRIVATE "${set_file}")
+    target_compile_definitions(${target} PRIVATE RC_HAVE_GENERATED=1)
+    list(LENGTH dirs n)
+    message(STATUS "${target}: ${n} lifted binaries (${dirs})")
+    set(${target}_LIFTED ON PARENT_SCOPE)
+  else()
+    message(STATUS "${target}: no lifted code (shell only)")
+    set(${target}_LIFTED OFF PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Lift again during the build, before anything lifted of the game is compiled, when its manifest
+# or the lifter changed: every target's installs (`lifts`: "target|set_file|dir;dir..." items,
+# with ',' between dirs), in one step, since targets share lifted binaries.
+function(rc_lift_build id lifts)
   rc_recomp_target()
   set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${id}-lift.stamp")
-  file(GLOB_RECURSE headers "${gen_dir}/*.h")
+  set(commands "")
+  set(byproducts "")
+  foreach(item IN LISTS lifts)
+    string(REPLACE "|" ";" parts "${item}")
+    list(GET parts 1 set_file)
+    list(GET parts 2 dirs)
+    string(REPLACE "," ";" dirs "${dirs}")
+    list(APPEND commands COMMAND "${RC_RECOMP}" lift --set "${set_file}" ${dirs})
+    list(APPEND byproducts "${set_file}")
+  endforeach()
+  get_property(lifted_dirs GLOBAL PROPERTY RC_LIFTED_${id})
+  foreach(d IN LISTS lifted_dirs)
+    file(GLOB files "${d}/*.c" "${d}/*.h")
+    list(APPEND byproducts ${files})
+  endforeach()
   add_custom_command(
     OUTPUT "${stamp}"
-    BYPRODUCTS ${sources} ${headers}
-    COMMAND "${RC_RECOMP}" lift ${dirs}
+    BYPRODUCTS ${byproducts}
+    ${commands}
     COMMAND "${CMAKE_COMMAND}" -E touch "${stamp}"
     DEPENDS "${PROJECT_SOURCE_DIR}/games/${id}/game.toml" "${RC_RECOMP}" recomp_cli
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     COMMENT "Lifting ${id} again (its manifest or the lifter changed)"
     USES_TERMINAL)
   add_custom_target(${id}_lift DEPENDS "${stamp}")
-  add_dependencies(${target} ${id}_lift)
+  get_property(libs GLOBAL PROPERTY RC_LIFTED_LIBS_${id})
+  list(REMOVE_DUPLICATES libs)
+  foreach(lib IN LISTS libs)
+    add_dependencies(${lib} ${id}_lift)
+  endforeach()
+  foreach(item IN LISTS lifts)
+    string(REPLACE "|" ";" parts "${item}")
+    list(GET parts 0 target)
+    add_dependencies(${target} ${id}_lift)
+  endforeach()
 endfunction()
 
+# rc_add_game(<id> TITLE <title> EXES <exe>... [GUEST_DIR <dir>])
+#
+# cultures-<id> lifts and links <ID>_GAME_DIRS (default: orig/<id>/gog-en, else the first folder);
+# every other folder in orig/<id>/ gets a target cultures-<id>-<folder> of its own (e.g.
+# cultures-cultures1-gold-de), outside `all`, which lifts and links only that install, for
+# debugging another build. Without lifting (RC_AUTO_LIFT off, no cargo: CI) cultures-<id> compiles
+# whatever `recomp lift` put into generated/<id>/.
 function(rc_add_game id)
   cmake_parse_arguments(G "" "TITLE;GUEST_DIR" "EXES" ${ARGN})
   if(NOT G_TITLE OR NOT G_EXES)
@@ -181,9 +273,6 @@ function(rc_add_game id)
   configure_file("${PROJECT_SOURCE_DIR}/cmake/game_main.c.in" "${main_c}" @ONLY)
 
   set(target "cultures-${id}")
-  add_executable(${target} "${main_c}")
-  target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
-
   set(gen_dir "${RC_GENERATED_DIR}/${id}")
   set(can_lift OFF)
   if(RC_AUTO_LIFT AND RC_CARGO AND NOT CMAKE_CROSSCOMPILING)
@@ -191,26 +280,55 @@ function(rc_add_game id)
     rc_game_dirs(${id} game_dirs)
     if(game_dirs)
       set(can_lift ON)
-      rc_lift_now(${id} "${game_dirs}" "${gen_dir}")
     endif()
   endif()
 
-  file(GLOB_RECURSE gen_sources CONFIGURE_DEPENDS "${gen_dir}/*.c")
-  if(gen_sources)
-    list(LENGTH gen_sources n)
-    message(STATUS "${target}: ${n} generated source files")
-    target_sources(${target} PRIVATE ${gen_sources})
-    # Lifted code is not debugged at the C level and is slow unoptimised (as in TropicoRecomp).
-    if(NOT MSVC)
-      set_source_files_properties(${gen_sources} PROPERTIES COMPILE_OPTIONS "-O1")
+  if(can_lift)
+    # The default target, then one per other unpacked install.
+    set(lifts "")
+    set(targets "${target}")
+    set(dirs_of_${target} "${game_dirs}")
+    file(GLOB found LIST_DIRECTORIES true "${PROJECT_SOURCE_DIR}/orig/${id}/*")
+    list(SORT found)
+    foreach(d IN LISTS found)
+      if(IS_DIRECTORY "${d}" AND NOT d IN_LIST game_dirs)
+        get_filename_component(variant "${d}" NAME)
+        list(APPEND targets "${target}-${variant}")
+        set(dirs_of_${target}-${variant} "${d}")
+      endif()
+    endforeach()
+    foreach(t IN LISTS targets)
+      set(set_file "${CMAKE_CURRENT_BINARY_DIR}/${t}-set.c")
+      rc_lift_now(${t} "${dirs_of_${t}}" "${set_file}")
+      rc_add_shell(${id} ${t} "${main_c}" "${set_file}")
+      if(${t}_LIFTED)
+        string(REPLACE ";" "," dirs "${dirs_of_${t}}")
+        list(APPEND lifts "${t}|${set_file}|${dirs}")
+      endif()
+      if(NOT t STREQUAL target)
+        set_target_properties(${t} PROPERTIES EXCLUDE_FROM_ALL ON)
+      endif()
+    endforeach()
+    if(lifts)
+      rc_lift_build(${id} "${lifts}")
     endif()
-    target_include_directories(${target} PRIVATE "${gen_dir}")
-    target_compile_definitions(${target} PRIVATE RC_HAVE_GENERATED=1)
-    if(can_lift)
-      rc_lift(${id} "${game_dirs}" "${gen_dir}" ${target} "${gen_sources}")
-    endif()
+    set(gen_sources ${${target}_LIFTED})
   else()
-    message(STATUS "${target}: no generated code (shell only)")
+    add_executable(${target} "${main_c}")
+    target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
+    file(GLOB_RECURSE gen_sources CONFIGURE_DEPENDS "${gen_dir}/*.c")
+    if(gen_sources)
+      list(LENGTH gen_sources n)
+      message(STATUS "${target}: ${n} generated source files")
+      target_sources(${target} PRIVATE ${gen_sources})
+      if(NOT MSVC)
+        set_source_files_properties(${gen_sources} PROPERTIES COMPILE_OPTIONS "-O1")
+      endif()
+      target_include_directories(${target} PRIVATE "${gen_dir}")
+      target_compile_definitions(${target} PRIVATE RC_HAVE_GENERATED=1)
+    else()
+      message(STATUS "${target}: no generated code (shell only)")
+    endif()
   endif()
 
   if(RC_BUILD_TESTS)

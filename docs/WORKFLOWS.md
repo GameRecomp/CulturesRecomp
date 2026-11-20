@@ -94,7 +94,11 @@ lift. A game with no folder in `orig/<game>/` yet is first unpacked from its ins
 `orig/` (`recomp extract --game`, the first variant in the manifest whose medium is there), so putting the media into
 `orig/` and building is enough. It lifts `orig/<game>/gog-en`, else the first folder in `orig/<game>/`; `-D<GAME>_GAME_DIRS` (e.g.
 `-DCULTURES1_GAME_DIRS="orig/cultures1/gog-en;orig/cultures1/gold-de"`) names the installs instead; each lifted
-executable is about 40 MB of C to compile. `-DRC_AUTO_LIFT=OFF` turns it off.
+executable is about 40 MB of C to compile. Every other folder in `orig/<game>/` gets a target of its own,
+`cultures-<game>-<folder>` (e.g. `cultures-cultures1-gold-de`, `cultures-cultures1-gog-de`), which lifts and links
+only that install and finds it without `--game-dir`: pick it as the debug target to debug another build. These
+targets are not part of `all`; each lifted binary is compiled once and shared between the targets that link it.
+`-DRC_AUTO_LIFT=OFF` turns it off.
 
 ## Differential tests
 
