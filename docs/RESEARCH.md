@@ -370,6 +370,12 @@ game server ("LOGMEON", "RegisterGame") and relays chat. No install here contain
 binary holds no server address, and the service has been shut down. Multiplayer without it is `Game.exe`'s
 DirectPlay 8 (LAN and direct IP), which runs on our network. `GameMp.exe` lifts and all 190 imports are covered.
 
+Cultures 2 is different: its install has the lobby (`Lobby\Lobby.exe` with `Flownet.ini` and `internet.ini`, which
+names `lobby.cultures2.de`), and `Lobby.exe` starts `Cultures2.exe -TinCat`. `Cultures2.exe` and `Cultures2MP.exe`
+both contain the lobby library; they differ in the copy protection: `Cultures2.exe` has the sections `.cms_t` and
+`.cms_d` and the protection's strings (`sintf32.dll` in the system folder, `Config Manager\Enum` device keys),
+`Cultures2MP.exe` has none of them. Same version and build date (six minutes apart); both ask for the serial.
+
 ## Editors (M13)
 
 - Northland's `Editor.exe` is MFC 4.2 linked statically (window classes `AfxWnd42s`, `AfxFrameOrView42s`, …). It
@@ -405,7 +411,10 @@ DirectPlay 8 (LAN and direct IP), which runs on our network. `GameMp.exe` lifts 
 
 ## Open questions (summary)
 
-1. Is `.cms_t` in the GOG `Cultures2.exe` executed?
+1. Is `.cms_t` in the GOG `Cultures2.exe` executed? Not up to the serial prompt (the entry point is in `.text`, and a
+   jump into `.cms_t` would stop the lifted program). `Cultures2MP.exe` is the same version (built six minutes
+   later) without `.cms_t`, `.cms_d` and the protection's strings, and asks for the serial the same way: a
+   fallback should `.cms_t` turn out to run later ("GameMp.exe").
 2. ~~How do Northland and 8th Wonder play MPEG-1: DirectShow, MCI or their own decoder?~~ DirectShow: they create a
    filter graph (`CLSID_FilterGraph`, `IID_IGraphBuilder`), as does the Saga.
 3. Which DirectDraw interfaces and pixel formats does each engine use exactly?
@@ -414,7 +423,8 @@ DirectPlay 8 (LAN and direct IP), which runs on our network. `GameMp.exe` lifts 
 6. What do the `D3D8.DLL` references do?
 7. Do the `*MP.exe` builds differ in more than networking? (Single-player builds also contain `CDPNet`.) For
    Northland, 8th Wonder and the Saga: they add the internet lobby's library, nothing else that matters ("GameMp.exe").
-   `Cultures2MP.exe` **(open)**.
+   `Cultures2MP.exe` is not a multiplayer build: it is `Cultures2.exe` without the copy protection; both contain
+   the lobby library, and Cultures 2's `Lobby\Lobby.exe` starts `Cultures2.exe -TinCat` ("GameMp.exe").
 8. Saga: is the extra code in `Game.exe` a disc check, and where does `GameSaga.exe` (2005) come from?
 9. Where is the Drachenland campaign stored: in `data0001.lib`, and is it selectable from the main menu?
 10. Are the MMX paths of `Cultures.exe` and `binkw32.dll` dead when `cpuid` reports no MMX? (See "Lifting".) Cultures 1 ran

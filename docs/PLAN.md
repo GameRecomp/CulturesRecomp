@@ -246,7 +246,8 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       synthesizer (`dls.c`: the games' own .dls files, regions, loops, envelope) into a PCM stream; the loader
       finds segments and the collections bands name in its search directory (RESEARCH "DirectMusic music")
 - [ ] Next: past the serial prompt with the player's serial
-- [ ] Research question 1: is `.cms_t` executed? Compare with the untouched `Cultures2MP.exe`
+- [x] Research question 1: `.cms_t` does not run up to the serial prompt; `Cultures2MP.exe` (no protection, same
+      version, also lifted) is the fallback if it does later
 - [x] Discovery and lifting reuse M2–M4 (new manifest seeds only)
 - [x] `ole32` COM class registry; `dmusic` with our own DLS synthesizer (see above)
 - [x] `dpnet`: DirectPlay 8 on the shared network (M12)
@@ -289,8 +290,9 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       Winsock, a log-on to the publisher's game server). Neither the lobby nor its `lobby\*.ini` is in any install
       and the server is gone, so it is not needed: LAN and direct-IP games run in `Game.exe` (DirectPlay 8). It
       lifts and every import is covered, should a lobby ever be rebuilt (RESEARCH "GameMp.exe")
-- [ ] `Cultures2MP.exe`: needed for Cultures 2's multiplayer? (research question 7; the C2-engine games' `GameMp.exe`
-      is not)
+- [x] `Cultures2MP.exe` is not needed for multiplayer: it is `Cultures2.exe` without the copy protection (research
+      questions 1 and 7); Cultures 2's own lobby (`Lobby.exe`) served a server that is gone
+- [ ] Cultures 2 multiplayer through its DirectPlay 8 (after the serial prompt)
 - [ ] Determinism check: two recompiled builds stay in lockstep for one hour (a few minutes checked so far)
 
 ### M13 – Editors
