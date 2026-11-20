@@ -105,7 +105,9 @@ out/northland/play.sh                                               # starts it 
 `convert` identifies the medium by hash (or an installed folder by its executable), unpacks it into
 `orig/<game>/<variant>/` unless that is already there (`--force` unpacks again), lifts every binary the manifest
 lifts, builds the game's program with the CMake preset `release` (`--preset dev` for a debug build) and puts it
-with a launcher into `out/<game>/`. Both stay on your machine: they contain code derived from your copy.
+with a launcher into `out/<game>/`. Both stay on your machine: they contain code derived from your copy. The build
+runs one compile job per CPU, but no more than one per 1.5 GB of available memory (about 0.6 GB per file of
+generated code); `CMAKE_BUILD_PARALLEL_LEVEL=N` sets the number instead.
 
 ## Running a game
 

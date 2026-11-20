@@ -49,6 +49,30 @@ fn identify_dir<'a>(ms: &'a [Manifest], dir: &Path) -> Option<(&'a Manifest, Str
     None
 }
 
+/// Compile jobs for the build: `CMAKE_BUILD_PARALLEL_LEVEL` if set, else one per CPU but no more than
+/// one per 1.5 GB of available memory. (`--parallel` without a number lets Make start every file of the
+/// generated code at once, which takes tens of gigabytes.)
+fn build_jobs() -> usize {
+    if let Some(n) = std::env::var("CMAKE_BUILD_PARALLEL_LEVEL")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|&n| n > 0)
+    {
+        return n;
+    }
+    let cpus = std::thread::available_parallelism().map_or(2, |n| n.get());
+    let by_memory = available_memory_mb().map_or(cpus, |mb| (mb / 1536) as usize);
+    cpus.min(by_memory).max(1)
+}
+
+/// MemAvailable from /proc/meminfo, in megabytes (Linux only; None elsewhere).
+fn available_memory_mb() -> Option<u64> {
+    let info = fs::read_to_string("/proc/meminfo").ok()?;
+    let line = info.lines().find(|l| l.starts_with("MemAvailable:"))?;
+    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+    Some(kb / 1024)
+}
+
 fn run(cmd: &mut Command) -> Result<(), String> {
     println!("+ {cmd:?}");
     let st = cmd
@@ -128,9 +152,16 @@ pub fn convert(o: &ConvertOpts, paths: &[PathBuf]) -> Result<ExitCode, String> {
     run(Command::new("cmake")
         .current_dir(&root)
         .args(["--preset", o.preset]))?;
-    run(Command::new("cmake")
-        .current_dir(&root)
-        .args(["--build", "--preset", o.preset, "--parallel", "--target", &target]))?;
+    let jobs = build_jobs().to_string();
+    run(Command::new("cmake").current_dir(&root).args([
+        "--build",
+        "--preset",
+        o.preset,
+        "--parallel",
+        &jobs,
+        "--target",
+        &target,
+    ]))?;
     let built = root
         .join("build")
         .join(o.preset)
