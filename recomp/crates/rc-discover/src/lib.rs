@@ -39,22 +39,50 @@ use std::collections::{BTreeSet, HashSet};
 
 /// Run discovery on a mapped (and, for DLLs, possibly rebased) image.
 ///
+/// A pointer into the middle of real code can decode as a plausible function before the code
+/// around it is found, and then blocks that code. When the first pass shows such pointers
+/// (functions found only through a pointer whose bytes made other candidates fail), a second
+/// pass leaves them out; its result is kept only if it classifies more of the code sections.
+pub fn discover(img: &Image, opts: &Options, name: &str, sha256: &str) -> CodeMap {
+    let (map, suspects) = discover_with(img, opts, name, sha256, &HashSet::new());
+    if suspects.is_empty() {
+        return map;
+    }
+    let (second, _) = discover_with(img, opts, name, sha256, &suspects);
+    let unknown = |m: &CodeMap| m.coverage.iter().map(|c| u64::from(c.unknown)).sum::<u64>();
+    if unknown(&second) < unknown(&map) {
+        second
+    } else {
+        map
+    }
+}
+
 /// Rounds repeat until neither the no-return set nor the cross-jump entries change: a
 /// round decodes without falling through calls to the no-return functions known so far,
 /// and starts the joins found by the previous round's partition as entries.
-pub fn discover(img: &Image, opts: &Options, name: &str, sha256: &str) -> CodeMap {
+fn discover_with(
+    img: &Image,
+    opts: &Options,
+    name: &str,
+    sha256: &str,
+    deny: &HashSet<u32>,
+) -> (CodeMap, HashSet<u32>) {
     let mut no_return: HashSet<u32> = opts.no_return.iter().copied().collect();
     let mut joins = BTreeSet::new();
     let mut rounds = 0u32;
     loop {
         rounds += 1;
-        let mut e = engine::Engine::new(img, opts, no_return.clone(), &joins);
+        let mut e = engine::Engine::new(img, opts, no_return.clone(), &joins, deny);
         e.run_all();
         let part = e.partition();
         let grown = part.no_return.iter().any(|f| !no_return.contains(f));
         let new_joins = !part.joins.is_subset(&joins);
         if (!grown && !new_joins) || rounds >= 16 {
-            return codemap::build(&e, &part, name, sha256, rounds, opts.use_relocs);
+            let suspects = e.blocking_pointers();
+            return (
+                codemap::build(&e, &part, name, sha256, rounds, opts.use_relocs),
+                suspects,
+            );
         }
         no_return.extend(part.no_return.iter().copied());
         let found = part.joins.clone();

@@ -124,8 +124,10 @@ Test material: the three `Cultures.exe` builds plus `binkw32.dll` and `DPlayDLL.
       run-time dispatch (RESEARCH.md). Strings that end at padding or code and aligned gap code that falls into a
       second entry are found by discovery; unreferenced x87 stubs in `binkw32.dll` are `seeds`. The ignored test
       `orig_discover` checks exactly this, with the hints applied and with and without the DLLs' relocations
-- [x] Later (M10): GOG `Cultures2.exe` 100 % (manifest seeds; `.cms_t` answered under M10)
-- [ ] The C2-engine games' `Game.exe` builds: one 731-byte function with a `switch` whose bound is not found (99.90–99.93 %)
+- [x] Later (M10): GOG `Cultures2.exe` 100 % (`.cms_t` answered under M10)
+- [x] The C2-engine games: a `switch` bound through a register constant, assertions onto `int3`, and false pointers
+      into real code are handled by general rules; every lifted binary is classified to 100 % except dead code (an
+      unreferenced CRT helper in Northland, the CD check GOG patched out of the Spanish 8th Wonder)
 
 ### M3 – Lifter, integer core ✅
 
@@ -249,7 +251,7 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       finds segments and the collections bands name in its search directory (RESEARCH "DirectMusic music")
 - [x] German GOG version ("Die Tore Asgards"): converts with `recomp convert`
 - [x] Past the serial prompt (installer registry, above): main menu, the campaign map, and the first mission
-      ("Greenland") starts and runs (scripted, 12,000 frames). Discovery needed three seeds and a narrower
+      ("Greenland") starts and runs (scripted, 12,000 frames). Discovery needed the false-pointer rule and a narrower
       `int3` rule (RESEARCH "Code discovery")
 - [ ] The campaign's first mission played through
 - [x] Research question 1: `.cms_t` does not run up to the serial prompt; `Cultures2MP.exe` (no protection, same

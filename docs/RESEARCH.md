@@ -271,13 +271,21 @@ Facts that the lifter (M3/M4) depends on:
 
 - False pointers block real code: a constant or data value that points into the middle of an instruction can decode
   as a plausible function before the code around it is found, and then every candidate that would cover those bytes
-  is rejected ("instruction overlaps known bytes"). Seen twice: the Saga's `Editor.exe` (0x434470) and Cultures 2
-  (0x42b9a0, which hid three functions, among them a message handler the first mission calls). Both are fixed with
-  `seeds` of the real entries. **(open)** A general rule: a candidate from a pointer that later code contradicts
-  should give way.
+  is rejected ("instruction overlaps known bytes"). Seen in the Saga's `Editor.exe` (0x434470), the German 8th Wonder
+  `Editor.exe` (0x43464d, 0x49206c; 1.4 % of its code) and Cultures 2 (0x42b9a0, which hid a message handler the first
+  mission calls). The general rule: when a pass rejects candidates because of a function that only a pointer led to
+  and that begins inside, or covers, the failing instruction, discovery runs again with those pointers left out, and
+  keeps the second result only if it classifies more of the code. All three reach 100 % without hints; no other
+  binary changes.
 - `int3` as the first instruction rejects a candidate (padding is no function), but only at its entry: the C2-engine
   builds have assertions that branch onto an `int3`, and rejecting those runs lost one or two real functions in every
   C2-engine binary.
+- A `switch` bound may be compared through a register that holds a constant: `push 14; pop esi; cmp eax, esi; ja …`
+  before a byte index table. Bound detection now follows `mov reg, n` and `push n; pop reg`; this found a 731-byte
+  function in every C2-engine `Game.exe`/`GameMp.exe`/`GameSaga.exe`.
+- What stays unknown in the C2-engine games is dead code: an unreferenced CRT x87 helper (Northland `Game.exe`, 51
+  bytes) and, in the Spanish 8th Wonder, the body of the CD check behind GOG's patch (`xor eax, eax; inc eax; ret`
+  written over its first bytes).
 
 ## Lifting (M3)
 

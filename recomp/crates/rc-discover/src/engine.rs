@@ -320,6 +320,8 @@ pub(crate) struct Engine<'a> {
     cands: Vec<(u32, Source, u32)>,
     /// The entry of the candidate being tried (0: none).
     cand_entry: u32,
+    /// Pointer candidates a first pass found to block real code (see `discover`).
+    deny: &'a HashSet<u32>,
     vt_cands: Vec<(u32, u32)>,
     seh_cands: Vec<(u32, u32, u32)>,
     data_refs: Vec<u32>,
@@ -486,6 +488,7 @@ impl<'a> Engine<'a> {
         opts: &'a Options,
         no_return: HashSet<u32>,
         joins: &'a BTreeSet<u32>,
+        deny: &'a HashSet<u32>,
     ) -> Self {
         let (exec_lo, exec_hi) = exec_range(img);
         Engine {
@@ -505,6 +508,7 @@ impl<'a> Engine<'a> {
             rejected: Vec::new(),
             cands: Vec::new(),
             cand_entry: 0,
+            deny,
             vt_cands: Vec::new(),
             seh_cands: Vec::new(),
             data_refs: Vec::new(),
@@ -942,9 +946,21 @@ impl<'a> Engine<'a> {
                             && i.op0_kind() == OpKind::Memory
                             && i.memory_size() == MemorySize::UInt32
                             && Some(mem_of(&i)) == slot))
-                        && matches!(i.op1_kind(), OpKind::Immediate32 | OpKind::Immediate8to32) =>
+                        && (matches!(
+                            i.op1_kind(),
+                            OpKind::Immediate32 | OpKind::Immediate8to32
+                        ) || (i.op1_kind() == OpKind::Register
+                            && self
+                                .reg_const(i.op1_register().full_register32(), p)
+                                .is_some())) =>
                 {
-                    let n = i.immediate(1) as u32;
+                    // `cmp reg, n`, or `cmp reg, reg2` with a constant in reg2 (`push n; pop reg2`).
+                    let n = if i.op1_kind() == OpKind::Register {
+                        self.reg_const(i.op1_register().full_register32(), p)
+                            .unwrap_or(0)
+                    } else {
+                        i.immediate(1) as u32
+                    };
                     // The first conditional branch after the compare, with no flag writes
                     // in between.
                     let mut cc = None;
@@ -1024,6 +1040,41 @@ impl<'a> Engine<'a> {
             cur = p;
         }
         (None, index_table)
+    }
+
+    /// The constant a 32-bit register holds before the instruction at `at`: set by `mov reg, n`
+    /// or by `push n; pop reg` shortly before, with no other write to it in between.
+    fn reg_const(&self, reg: Register, at: u32) -> Option<u32> {
+        let mut cur = at;
+        for _ in 0..8 {
+            let p = self.prev(cur)?;
+            let i = decode_at(self.img, p)?;
+            let writes =
+                i.op0_kind() == OpKind::Register && i.op0_register().full_register32() == reg;
+            match i.mnemonic() {
+                Mnemonic::Mov
+                    if writes
+                        && matches!(i.op1_kind(), OpKind::Immediate32 | OpKind::Immediate8to32) =>
+                {
+                    return Some(i.immediate(1) as u32);
+                }
+                Mnemonic::Pop if writes => {
+                    let q = self.prev(p)?;
+                    let push = decode_at(self.img, q)?;
+                    return (push.mnemonic() == Mnemonic::Push
+                        && matches!(
+                            push.op0_kind(),
+                            OpKind::Immediate8to32 | OpKind::Immediate32
+                        ))
+                    .then(|| push.immediate(0) as u32);
+                }
+                Mnemonic::Cmp | Mnemonic::Test => {}
+                _ if writes || i.flow_control() != FlowControl::Next => return None,
+                _ => {}
+            }
+            cur = p;
+        }
+        None
     }
 
     fn jump_table(&mut self, i: &Instruction, va: u32, trusted: bool) -> Result<Flow, String> {
@@ -1234,6 +1285,19 @@ impl<'a> Engine<'a> {
                 }
                 false
             }
+            Some(UNK)
+                if self.deny.contains(&t)
+                    && matches!(src, Source::DataPointer | Source::CodePointer)
+                    && !self.tried.contains(&t) =>
+            {
+                self.tried.insert(t);
+                self.rejected.push((
+                    t,
+                    src,
+                    "pointer that blocked real code in a first pass".into(),
+                ));
+                false
+            }
             Some(UNK) if !self.tried.contains(&t) => {
                 self.tried.insert(t);
                 self.begin();
@@ -1259,6 +1323,70 @@ impl<'a> Engine<'a> {
             }
             _ => false,
         }
+    }
+
+    /// Functions found only through a pointer (data or a code immediate) whose bytes made other
+    /// candidates fail ("… at X" in a rejection, X inside them): their entry is likely a false
+    /// pointer into the middle of real code.
+    pub fn blocking_pointers(&self) -> HashSet<u32> {
+        let weak = Source::DataPointer.bit() | Source::CodePointer.bit();
+        let mut out = HashSet::new();
+        for (_, _, why) in &self.rejected {
+            if !(why.contains("overlaps known bytes") || why.contains("enters an instruction")) {
+                continue;
+            }
+            let Some(x) = why
+                .rsplit("at 0x")
+                .next()
+                .and_then(|h| u32::from_str_radix(h.trim(), 16).ok())
+            else {
+                continue;
+            };
+            // `x` is where the failing instruction starts. A pointer-only function that begins
+            // inside that instruction (within 15 bytes), or whose code covers `x`.
+            for (&f, &bits) in self
+                .funcs
+                .range(x.saturating_sub(0x1000)..=x.saturating_add(15))
+            {
+                if bits & !weak != 0 {
+                    continue;
+                }
+                if (f > x) || self.reaches(f, x) {
+                    out.insert(f);
+                }
+            }
+        }
+        out
+    }
+
+    /// The code reached from `f` without leaving it includes the byte `x`.
+    fn reaches(&self, f: u32, x: u32) -> bool {
+        let mut seen = HashSet::new();
+        let mut stack = vec![f];
+        while let Some(a) = stack.pop() {
+            if !seen.insert(a) {
+                continue;
+            }
+            let Some(ins) = self.ins.get(&a) else {
+                continue;
+            };
+            if (a..a + u32::from(ins.len)).contains(&x) {
+                return true;
+            }
+            let next = a + u32::from(ins.len);
+            match ins.flow {
+                Flow::Jcc(t) => {
+                    stack.push(t);
+                    stack.push(next);
+                }
+                Flow::Jmp(t) => stack.push(t),
+                Flow::Next | Flow::Call(_) | Flow::CallInd | Flow::CallImp { .. } => {
+                    stack.push(next)
+                }
+                _ => {}
+            }
+        }
+        false
     }
 
     /// `va` is 16-byte aligned and follows padding or a `ret`.

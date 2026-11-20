@@ -10,6 +10,7 @@
 use crate::discover::{default_out, load, Loaded};
 use rc_discover::{CodeMap, Function};
 use rc_ir::Stmt;
+use rc_manifest::Treatment;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -194,6 +195,20 @@ pub fn lift(o: &LiftOpts, files: &[PathBuf]) -> Result<ExitCode, String> {
             println!();
         }
         let l = load(file, o.games, o.base, true)?;
+        if let Some(k) = l
+            .known
+            .as_ref()
+            .filter(|k| k.binary.treatment == Treatment::Ignore)
+        {
+            // Not part of the recompiled game (installer helpers, GOG's own wrappers): a lifted
+            // copy would join the game's set and replace what the runtime provides.
+            println!(
+                "{}: skipped, the manifest does not lift {} (treatment \"ignore\")",
+                file.display(),
+                k.binary.name
+            );
+            continue;
+        }
         let dir = o
             .out
             .map_or_else(|| default_out(o.games, &l), Path::to_path_buf);
