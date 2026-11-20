@@ -1,7 +1,10 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * kernel32: heaps and virtual memory, on the runtime's guest allocator.
- * All heaps share one allocator; a heap handle only has to be recognised.
+ * Every HeapCreate gets a heap of its own (rc_heap_alloc_in), which reuses
+ * only its own freed blocks, as on Windows: the C runtimes of the program
+ * and of each DLL do not get each other's freed (and filled) blocks. Handles
+ * the program did not create (the process heap) use heap 0.
  */
 #include <string.h>
 
@@ -15,12 +18,25 @@
 #define MEM_DECOMMIT 0x4000u
 #define MEM_RELEASE 0x8000u
 
-static uint32_t heaps = 0x00500000u; /* handles; never dereferenced by the game */
+/* Handles, never dereferenced by the game: HEAP_HANDLES + 0x10 * index. */
+#define HEAP_HANDLES 0x00500000u
+static uint32_t heaps_made;
+
+/* The runtime's heap for a handle (the last one serves every heap after
+ * RC_HEAPS - 1 of them). */
+static uint32_t heap_of(uint32_t handle)
+{
+    if (handle <= HEAP_HANDLES || handle > HEAP_HANDLES + 0x10u * heaps_made || (handle & 0xfu)) {
+        return 0;
+    }
+    uint32_t i = (handle - HEAP_HANDLES) / 0x10u;
+    return i < RC_HEAPS ? i : RC_HEAPS - 1;
+}
 
 static void k_HeapCreate(rc_cpu *c)
 {
-    heaps += 0x10;
-    RC_RETURN(c, heaps, 3);
+    heaps_made++;
+    RC_RETURN(c, HEAP_HANDLES + 0x10u * heaps_made, 3);
 }
 
 static void k_HeapDestroy(rc_cpu *c) { RC_RETURN(c, 1, 1); }
@@ -28,7 +44,7 @@ static void k_HeapDestroy(rc_cpu *c) { RC_RETURN(c, 1, 1); }
 static void k_HeapAlloc(rc_cpu *c)
 {
     uint32_t flags = RC_ARG(c, 1), size = RC_ARG(c, 2);
-    uint32_t p = rc_heap_alloc(size, (flags & HEAP_ZERO_MEMORY) != 0);
+    uint32_t p = rc_heap_alloc_in(heap_of(RC_ARG(c, 0)), size, (flags & HEAP_ZERO_MEMORY) != 0);
     if (!p) {
         rc_last_error = ERROR_NOT_ENOUGH_MEMORY;
     }

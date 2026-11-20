@@ -163,9 +163,16 @@ bool rc_vm_committed(uint32_t addr, uint32_t size)
 }
 
 /* ---- heap ---------------------------------------------------------------
- * A block is an 8-byte header (requested size, class) and the payload.
- * Classes 0..63 hold up to 16 * (k + 1) bytes, 64..126 up to 1024 * (k - 62);
- * larger blocks are reservations of their own (class 127). */
+ * A block is an 8-byte header (requested size; class and heap) and the
+ * payload. Classes 0..63 hold up to 16 * (k + 1) bytes, 64..126 up to
+ * 1024 * (k - 62); larger blocks are reservations of their own (class 127).
+ *
+ * Every heap (rc_heap_alloc_in; 0 is the process heap) reuses only its own
+ * freed blocks, as Windows' heaps do: a DLL with its own C runtime then never
+ * gets a block the program filled and freed. (Northland's music driver reads
+ * a field of a new object that its constructor leaves unset when it fails;
+ * from a heap of its own that is zero, from the program's freed blocks it was
+ * the program's 0xED fill.) Fresh memory is zero. */
 
 #define CHUNK 0x100000u
 #define SMALL_STEP 16u
@@ -174,7 +181,7 @@ bool rc_vm_committed(uint32_t addr, uint32_t size)
 #define LARGE_CLASS 127u
 #define HEADER 8u
 
-static uint32_t free_list[LARGE_CLASS];
+static uint32_t free_list[RC_HEAPS][LARGE_CLASS];
 static uint32_t chunk_next, chunk_end;
 
 static uint32_t class_of(uint32_t size)
@@ -194,8 +201,13 @@ static uint32_t class_bytes(uint32_t k)
     return k < SMALL_CLASSES ? SMALL_STEP * (k + 1) : MID_STEP * (k - SMALL_CLASSES + 2);
 }
 
-uint32_t rc_heap_alloc(uint32_t size, bool zero)
+uint32_t rc_heap_alloc(uint32_t size, bool zero) { return rc_heap_alloc_in(0, size, zero); }
+
+uint32_t rc_heap_alloc_in(uint32_t heap, uint32_t size, bool zero)
 {
+    if (heap >= RC_HEAPS) {
+        heap = 0;
+    }
     uint32_t k = class_of(size);
     uint32_t block;
     if (k == LARGE_CLASS) {
@@ -203,9 +215,9 @@ uint32_t rc_heap_alloc(uint32_t size, bool zero)
         if (block == 0) {
             return 0;
         }
-    } else if (free_list[k]) {
-        block = free_list[k];
-        free_list[k] = rc_ld32(block + HEADER);
+    } else if (free_list[heap][k]) {
+        block = free_list[heap][k];
+        free_list[heap][k] = rc_ld32(block + HEADER);
     } else {
         uint32_t n = class_bytes(k);
         if (chunk_next + n > chunk_end) {
@@ -220,7 +232,7 @@ uint32_t rc_heap_alloc(uint32_t size, bool zero)
         chunk_next += n;
     }
     rc_st32(block, size);
-    rc_st32(block + 4, k | 0x48500000u); /* 'HP': a live block */
+    rc_st32(block + 4, k | heap << 8 | 0x48500000u); /* 'HP': a live block */
     if (zero) {
         memset(rc_ptr(block + HEADER), 0, size);
     }
@@ -242,12 +254,13 @@ void rc_heap_free(uint32_t p)
     }
     uint32_t block = p - HEADER;
     uint32_t k = rc_ld32(block + 4) & 0xff;
+    uint32_t heap = (rc_ld32(block + 4) >> 8) & 0xff;
     rc_st32(block + 4, k); /* no longer live */
     if (k == LARGE_CLASS) {
         rc_vm_release(block);
     } else {
-        rc_st32(p, free_list[k]);
-        free_list[k] = block;
+        rc_st32(p, free_list[heap][k]);
+        free_list[heap][k] = block;
     }
 }
 
@@ -282,7 +295,7 @@ uint32_t rc_heap_realloc(uint32_t p, uint32_t size, bool zero, bool in_place)
     if (in_place) {
         return 0;
     }
-    uint32_t q = rc_heap_alloc(size, zero);
+    uint32_t q = rc_heap_alloc_in((rc_ld32(p - 4) >> 8) & 0xff, size, zero);
     if (q) {
         memcpy(rc_ptr(q), rc_ptr(p), old < size ? old : size);
         rc_heap_free(p);

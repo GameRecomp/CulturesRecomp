@@ -368,6 +368,16 @@ file (`012.dls`, ...). Measured on all segments of Cultures 2, Northland and the
   need the General MIDI set, which is not shipped (they stay silent).
 - The DLS files are level 1 with simple articulation (volume envelope only); wave attenuation is in 1/655360 dB.
 
+The driver plays a segment through an object (0x1C8 bytes, from its own C runtime's heap) that it first builds on
+the segment's own audio path: `IDirectMusicSegment8::GetAudioPathConfig`, then `CreateAudioPath`. None of the
+games' segments has an audio path configuration (no `DMAP` chunk; checked on all 32 of Northland), so that fails, as
+on Windows, and the driver falls back to `CreateStandardAudioPath`. On the failing path its cleanup releases the
+audio path field at offset 0x1C0, which the constructor never set: it relies on the block being zero or holding a
+pointer it released before. That holds on Windows, where the driver's C runtime has a heap of its own. With one
+allocator for every heap it once got a block the game had filled with 0xED before freeing it (`Game.exe` scrubs some
+buffers that way) and crashed on `0xedededed`. The runtime therefore keeps the freed blocks of each `HeapCreate`
+heap apart (`rc_heap_alloc_in`); HLE DirectMusic objects are never freed, so a stale pointer's `Release` is harmless.
+
 ## DirectPlay (M12)
 
 Cultures 1 plays its network games through `DPlayDLL.dll` (Funatics' wrapper, lifted) on DirectPlay 4 (ANSI

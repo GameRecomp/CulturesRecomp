@@ -11,6 +11,8 @@
  *       FRAME wheel N          the wheel turns N notches (positive away
  *                              from the user) where the pointer is
  *       FRAME key|keyup VK     a key, by Windows virtual-key code
+ *       FRAME focus 0|1        the window loses (0) or gains (1) the focus,
+ *                              as when the player switches to another program
  *       FRAME area W H         the window becomes W x H (rc_plat_area_set)
  *       FRAME touch|pen|mouse  what the pointer events from here on come
  *                              from (a finger, a pen; at first the mouse)
@@ -130,6 +132,9 @@ static void run_script(unsigned frame)
             e.type = RC_EV_KEY;
             e.vk = (int)a;
             e.down = !strcmp(what, "key");
+        } else if (!strcmp(what, "focus")) {
+            e.type = RC_EV_FOCUS;
+            e.down = a != 0;
         } else if (!strcmp(what, "area") || !strcmp(what, "touch") || !strcmp(what, "pen") ||
                    !strcmp(what, "mouse") || !strcmp(what, "wait") || !strcmp(what, "shot")) {
             if (what[0] == 's' && what[1] == 'h') {
@@ -151,7 +156,7 @@ static void run_script(unsigned frame)
         } else {
             rc_log("RC_INPUT: cannot read \"%s\"", next_line);
         }
-        if (e.type != RC_EV_KEY) {
+        if (e.type != RC_EV_KEY && e.type != RC_EV_FOCUS) {
             e.source = source;
         }
         rc_inject_event(&e);
@@ -213,6 +218,9 @@ void rc_record_event(const rc_event *e)
         if (!e->repeat) {
             fprintf(record, "%u %s %d\n", f, e->down ? "key" : "keyup", e->vk);
         }
+        break;
+    case RC_EV_FOCUS:
+        fprintf(record, "%u focus %d\n", f, e->down ? 1 : 0);
         break;
     default:
         return;

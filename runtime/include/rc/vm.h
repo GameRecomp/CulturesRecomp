@@ -37,8 +37,12 @@ bool rc_vm_region(uint32_t addr, uint32_t *base, uint32_t *size);
 
 /* The heap. Blocks are 8-byte aligned; rc_heap_size gives the size asked
  * for. rc_heap_realloc returns 0 if `in_place` and the block cannot grow
- * where it is. */
+ * where it is. There are RC_HEAPS heaps (Windows' HeapCreate): each reuses
+ * only its own freed blocks; rc_heap_alloc uses heap 0, and rc_heap_free and
+ * rc_heap_realloc keep a block in its heap. */
+#define RC_HEAPS 32u
 uint32_t rc_heap_alloc(uint32_t size, bool zero);
+uint32_t rc_heap_alloc_in(uint32_t heap, uint32_t size, bool zero);
 void rc_heap_free(uint32_t p);
 uint32_t rc_heap_size(uint32_t p);
 uint32_t rc_heap_realloc(uint32_t p, uint32_t size, bool zero, bool in_place);

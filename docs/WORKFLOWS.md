@@ -147,7 +147,7 @@ RC_TRACE=check …   # … and the missing ones by name;   RC_TRACE=imports: eve
 ```
 
 Scripted runs (`hle/frames.c`): `RC_INPUT=script.txt` (lines `FRAME move X Y`, `FRAME down|up BUTTON`,
-`FRAME key|keyup VK`, …), `RC_SCREENSHOT=N:path.bmp,…`, `RC_FRAMES=N` to end after frame N, and `RC_CLOCK=virtual`
+`FRAME key|keyup VK`, `FRAME focus 0|1` for the window losing or gaining the focus, …), `RC_SCREENSHOT=N:path.bmp,…`, `RC_FRAMES=N` to end after frame N, and `RC_CLOCK=virtual`
 so a run repeats exactly. `SDL_VIDEO_DRIVER=dummy` runs them without a display. Screenshots are of the game, so they
 stay local like everything else derived from it.
 

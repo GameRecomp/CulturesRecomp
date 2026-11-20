@@ -46,5 +46,22 @@ void test_vm(void)
     rc_heap_free(big);
     CHECK(!rc_heap_owns(big));
 
+    /* Heaps reuse only their own blocks (a DLL's C runtime never gets the
+     * program's freed ones), and a block stays in its heap. */
+    uint32_t h1 = rc_heap_alloc_in(1, 400, false);
+    rc_st32(h1 + 0x100, 0xededededu);
+    rc_heap_free(h1);
+    uint32_t h2 = rc_heap_alloc_in(2, 400, false);
+    CHECK(h2 != h1);
+    CHECK_EQ(rc_ld32(h2 + 0x100), 0); /* fresh memory */
+    CHECK_EQ(rc_heap_alloc_in(1, 400, false), h1);
+    uint32_t moved = rc_heap_realloc(h2, 3000, false, false);
+    CHECK(moved != 0 && moved != h2);
+    CHECK_EQ(rc_heap_alloc_in(2, 400, false), h2); /* freed into heap 2 */
+    rc_heap_free(moved);
+    CHECK(rc_heap_alloc_in(1, 3000, false) != moved);
+    CHECK_EQ(rc_heap_alloc_in(2, 3000, false), moved); /* realloc kept heap 2 */
+    CHECK(rc_heap_alloc_in(RC_HEAPS + 5, 16, false) != 0); /* unknown heap: heap 0 */
+
     rc_mem_release();
 }
