@@ -74,11 +74,21 @@ The copy we have is the German retail release, as a zip of an installed director
   - `Game.exe`, built on Nov 5 2003. `Autorun.exe` starts it (registry key `SOFTWARE\Funatics\Saga`). It imports
     ten functions that `GameSaga.exe` does not: `IsBadCodePtr`, `IsBadReadPtr`, `IsBadWritePtr`,
     `SetUnhandledExceptionFilter`, `SetErrorMode`, `QueryPerformanceCounter`/`Frequency`, `GetTickCount`, `GetFileSize`
-    and `GetForegroundWindow`. It also references `datax\extro.dat`, which is not installed. This looks like a
-    disc check **(open)**.
+    and `GetForegroundWindow`. It also references `datax\extro.dat`, which is not installed. It is a disc check:
+    run, it walks the drive letters with `GetDriveTypeA` looking for a CD drive and then shows "Bitte legen Sie die
+    'Cultures Saga' CD in Ihr CD-Rom ein!" with OK, "Netzwerkspiel beitreten" and "Beenden". It is not patched
+    (no licence or copy check is bypassed); `--exe Game.exe` shows that screen.
   - `GameSaga.exe`, built on Jul 18 2005. It has an intact MSVC Rich header, so it is a genuine Funatics build, probably from a later re-release
     or patch **(open)**. It lacks the extra imports above.
-  - Plan: lift both. `GameSaga.exe` is the preferred first target if `Game.exe` turns out to need the CD.
+  - Both are lifted. `GameSaga.exe` is the manifest's `main` and what the shell runs; `Game.exe` is `alternate`.
+- **Menus (`GameSaga.exe`):** "Einzelspieler" offers Tutorial, Freies Spiel, the "Nordland", "Weltwunder" and
+  "Saga" campaigns, "Kunden Kampagnen" and loading a save. The "Saga" campaign is Drachenland: a map of the
+  land with one mission to choose, then the difficulty. Its maps lie in `DataX/Libs/data0001.lib`
+  (`data\maps\campaign_02_*` and `campaign_03_*`, 8 each, German briefings). "Kunden Kampagnen" reads
+  `DataX/UserCampaigns/` and lists them as "'Yogi00' Kampagne" and "'Yogi01' Kampagne", with every map by name
+  (umlauts included).
+- **In game (scripted, 8000 frames each):** Drachenland's first mission ("Abenteuer im Drachenland": its opening
+  scene, then the briefing) and Yogi00's first map ("Ein neuer Anfang") start and run without a trap.
 
 ## What the GOG Cultures 1 contains
 
@@ -504,8 +514,10 @@ both contain the lobby library; they differ in the copy protection: `Cultures2.e
    Northland, 8th Wonder and the Saga: they add the internet lobby's library, nothing else that matters ("GameMp.exe").
    `Cultures2MP.exe` is not a multiplayer build: it is `Cultures2.exe` without the copy protection; both contain
    the lobby library, and Cultures 2's `Lobby\Lobby.exe` starts `Cultures2.exe -TinCat` ("GameMp.exe").
-8. Saga: is the extra code in `Game.exe` a disc check, and where does `GameSaga.exe` (2005) come from?
-9. Where is the Drachenland campaign stored: in `data0001.lib`, and is it selectable from the main menu?
+8. Saga: ~~is the extra code in `Game.exe` a disc check~~ yes (it looks for a CD drive and asks for the disc; not
+   patched, `GameSaga.exe` runs instead). Where `GameSaga.exe` (2005) comes from is still **(open)**.
+9. ~~Where is the Drachenland campaign stored, and is it selectable from the main menu?~~ In `data0001.lib`
+   (`data\maps\campaign_0[23]_*`); the menu offers it as "'Saga' Kampagne" ("Die Saga").
 10. Are the MMX paths of `Cultures.exe` and `binkw32.dll` dead when `cpuid` reports no MMX? (See "Lifting".) Cultures 1 ran
     its menus and a scenario without reaching one. The C2 engine executes MMX without asking (`emms` at `0x45c2e9`), so
     M10 needs MMX in the lifter, which it now has (all forms difftested), so the question no longer blocks anything.

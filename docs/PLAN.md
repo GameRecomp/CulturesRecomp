@@ -282,7 +282,11 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 - [x] 8th Wonder German and Spanish (GOG): converted with `recomp convert`; both start the first campaign mission
       (scripted, 4500 frames)
 - [ ] New effects (weather, earthquake) are engine code; they should need no HLE work beyond DirectDraw
-- [ ] Saga: research questions 8 and 9. Lift `Game.exe` and `GameSaga.exe`. Patch the disc check if there is one. Load the community campaigns from `DataX/UserCampaigns/`
+- [x] Saga: research questions 8 and 9. Both builds lift; `Game.exe` has a disc check (it asks for the CD), which
+      stays unpatched, so `GameSaga.exe` is the program the shell runs. Drachenland ("'Saga' Kampagne") and the
+      community campaigns from `DataX/UserCampaigns/` ("Kunden Kampagnen") are listed; the first mission of each
+      starts and runs (scripted, 8000 frames)
+- [ ] Saga: a Drachenland mission and a community campaign map played through by hand
 
 ### M12 – Multiplayer
 
