@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cultures Converter</title>
-<meta name="description" content="Turn your own GOG copy of a Cultures game into a native build for Windows, Linux or Android, or play it right in your browser.">
+<meta name="description" content="Turn your own copy of a Cultures game into a native build for Windows, Linux or Android, or play it right in your browser.">
 <link rel="icon" href="cultures1.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -15,7 +15,7 @@
     <img class="game-icon" src="cultures1.svg" alt="" width="56" height="56">
     <div>
       <h1>Cultures Converter</h1>
-      <p class="lede">Turns your own GOG copy of <em id="game-name">Cultures</em> into a build that runs natively on Windows, Linux or Android, or that you play right here in your browser.</p>
+      <p class="lede">Turns your own copy of <em id="game-name">Cultures</em> into a build that runs natively on Windows, Linux or Android, or that you play right here in your browser.</p>
     </div>
   </header>
 
@@ -24,17 +24,19 @@
     <button type="button" role="tab" data-game="cultures2">Cultures 2</button>
     <button type="button" role="tab" data-game="northland">Northland</button>
     <button type="button" role="tab" data-game="eighthwonder">8th Wonder</button>
+    <button type="button" role="tab" data-game="saga">Saga</button>
   </nav>
 
-  <p class="local">Everything happens in this browser tab. Your installer is not uploaded anywhere; this site only serves the converter itself.</p>
+  <p class="local">Everything happens in this browser tab. Your files are not uploaded anywhere; this site only serves the converter itself.</p>
 
   <section class="card" id="step-file">
-    <h2><span class="step">1</span> Your installer</h2>
+    <h2><span class="step">1</span> Your game</h2>
     <div id="drop" class="drop">
-      <p>The GOG installer, <code id="installer">setup_cultures_2.1.0.12.exe</code> (<span id="installer-size">about 190 MiB</span>), English, German or Spanish.</p>
+      <p id="source-gog">The GOG installer, <code id="installer">setup_cultures_2.1.0.12.exe</code> (<span id="installer-size">about 190 MiB</span>), English, German or Spanish.</p>
+      <p id="source-zip" hidden>A zip of the game installed from its German CD (<span id="zip-size">about 280 MiB</span>): zip the folder the game was installed to, with <code>Game.exe</code> and <code>DataX</code> in it.</p>
       <button id="choose" type="button">Choose file…</button>
       <span id="file-name" class="file-name">No file chosen</span>
-      <input id="file" type="file" accept=".exe" hidden>
+      <input id="file" type="file" accept=".exe,.zip" hidden>
       <p class="hint">Or drop it here.</p>
     </div>
   </section>
@@ -59,7 +61,7 @@
       <button id="reconvert" type="button">Convert again</button>
       <button id="remove" type="button">Remove it from this browser</button>
     </div>
-    <p class="warn">The installer is needed only once. When a newer version of this site makes the game code differently, the player updates it from the stored game.</p>
+    <p class="warn">The installer (or zip) is needed only once. When a newer version of this site makes the game code differently, the player updates it from the stored game.</p>
   </section>
 
   <section class="card" id="step-convert">

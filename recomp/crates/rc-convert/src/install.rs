@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-//! A GOG installer as the converter reads it, from any reader (in a browser: the chosen file in
-//! pieces): which game it installs, its lifted programs, and its files, streamed to a sink.
+//! A GOG installer or a zip of an installed copy (the Saga) as the converter reads it, from any
+//! reader (in a browser: the chosen file in pieces): which game it holds, its lifted programs, and
+//! its files, streamed to a sink.
 
 use std::collections::BTreeMap;
 
 use rc_manifest::Manifest;
-use rc_media::inno::Installer;
 use rc_media::{Archive, Entry, ReadSeek, Sink};
 
 use crate::Error;
@@ -15,7 +15,7 @@ use crate::lift::Program;
 pub const REGISTRY_FILE: &str = "registry-install.txt";
 
 pub struct Install {
-    pub installer: Installer,
+    pub installer: Box<dyn Archive>,
     pub manifest: Manifest,
     pub variant: String,
     /// The manifest's binaries found in the installer, by lower-case name.
@@ -51,10 +51,10 @@ impl Sink for MemSink<'_> {
 }
 
 impl Install {
-    /// Read the installer and identify its game: the manifests' binaries are unpacked into memory
-    /// and hashed.
+    /// Read the installer (or zip) and identify its game: the manifests' binaries are unpacked into
+    /// memory and hashed.
     pub fn open(reader: Box<dyn ReadSeek>, ms: &[Manifest]) -> Result<Install, Error> {
-        let mut installer = Installer::from_reader(reader).map_err(|e| e.to_string())?;
+        let (_, mut installer) = rc_media::open_reader(reader).map_err(|e| e.to_string())?;
         let names: std::collections::BTreeSet<String> = ms
             .iter()
             .flat_map(|m| m.binaries.iter().map(|b| b.name.to_ascii_lowercase()))

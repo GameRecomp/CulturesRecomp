@@ -220,7 +220,7 @@ pub struct JumpTableHint {
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Main,
-    /// Another single-player build shipped next to `main` (e.g. the Saga's `GameSaga.exe`).
+    /// Another single-player build shipped next to `main` (e.g. the Saga's `Game.exe`).
     Alternate,
     Multiplayer,
     Editor,

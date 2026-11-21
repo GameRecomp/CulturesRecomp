@@ -481,6 +481,11 @@ both contain the lobby library; they differ in the copy protection: `Cultures2.e
 - The static data of the shell (HLE tables, the DLS synth) needs more than 64 MB of initial memory: 128 MB.
 - Speed: Cultures 1's scripted 3000 frames take 34 s in headless Chrome (about 90 frames a second with the
   virtual clock); converting an installer in the page takes 27–45 s.
+- The Saga, which only exists on CD, is converted from a zip of its installed copy: `rc_media::open_reader` takes a
+  zip or an Inno installer from any reader, and the zip reader streams to a sink like the installer. The browser's
+  module holds one program, the manifest's `main`; for the Saga that had been `Game.exe` while the shell runs
+  `GameSaga.exe` (first in `EXES`), and the game stopped at `GameSaga.exe`'s entry point (0x4e687e, "not a lifted
+  function"). `GameSaga.exe` is now `main`.
 - **(open)** Touch input on Android and in mobile browsers; audio latency of the ScriptProcessor path.
 
 ## Open questions (summary)

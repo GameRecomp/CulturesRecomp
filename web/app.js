@@ -390,6 +390,9 @@ function showGame() {
   $('game-name').textContent = game.full || game.name;
   $('installer').textContent = game.installer;
   $('installer-size').textContent = game.installerSize;
+  $('zip-size').textContent = game.installerSize;
+  $('source-gog').hidden = game.source === 'zip';
+  $('source-zip').hidden = game.source !== 'zip';
   for (const t of document.querySelectorAll('.tabs button')) {
     const on = t.dataset.game === game.id;
     t.classList.toggle('on', on);

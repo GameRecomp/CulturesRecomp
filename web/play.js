@@ -309,7 +309,7 @@ async function main() {
   try {
     game = await findGame();
   } catch (_) {
-    $('status').textContent = 'The game is not in this browser yet. Convert your GOG installer for '
+    $('status').textContent = 'The game is not in this browser yet. Convert your installer (or the Saga zip) for '
       + '"Browser" on the converter page first.';
     $('convert').hidden = false;
     return;

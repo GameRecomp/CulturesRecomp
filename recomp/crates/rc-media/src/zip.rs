@@ -5,7 +5,7 @@
 //! A single top-level directory shared by every entry (e.g. `Cultures Saga/`) is stripped,
 //! so entry paths are relative to the install directory.
 
-use crate::{codepage, create_output, format_err, le16, le32, Archive, Entry, Error, Result};
+use crate::{codepage, create_output, format_err, le16, le32, Archive, Entry, Error, Result, Sink};
 use flate2::read::DeflateDecoder;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
@@ -219,6 +219,57 @@ impl<R: Read + Seek> Archive for Zip<R> {
         }
         Ok(n)
     }
+
+    fn extract_to(
+        &mut self,
+        sink: &mut dyn Sink,
+        select: &dyn Fn(&Entry) -> bool,
+    ) -> Result<usize> {
+        for d in &self.directories {
+            crate::safe_relative(d)?;
+            sink.dir(d)?;
+        }
+        let mut n = 0;
+        for k in 0..self.entries.len() {
+            if !select(&self.entries[k]) {
+                continue;
+            }
+            let Entry { path, size } = self.entries[k].clone();
+            crate::safe_relative(&path)?;
+            sink.begin(&path, size)?;
+            let mut w = SinkWriter { sink, error: None };
+            let r = self.write_file(k, &mut w);
+            if let Some(e) = w.error {
+                return Err(e);
+            }
+            r?;
+            sink.end()?;
+            n += 1;
+        }
+        Ok(n)
+    }
+}
+
+/// A sink as a writer (one file's bytes); the sink's own error is kept.
+struct SinkWriter<'a> {
+    sink: &'a mut dyn Sink,
+    error: Option<Error>,
+}
+
+impl Write for SinkWriter<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self.sink.write(buf) {
+            Ok(()) => Ok(buf.len()),
+            Err(e) => {
+                let msg = e.to_string();
+                self.error = Some(e);
+                Err(std::io::Error::other(msg))
+            }
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -296,6 +347,46 @@ mod tests {
         let mut out = Vec::new();
         zip.write_file(1, &mut out).unwrap();
         assert_eq!(out, b"deflated deflated deflated");
+    }
+
+    /// Records what a sink is given.
+    #[derive(Default)]
+    struct Log(Vec<String>);
+
+    impl Sink for Log {
+        fn dir(&mut self, p: &str) -> Result<()> {
+            self.0.push(format!("dir {p}"));
+            Ok(())
+        }
+        fn begin(&mut self, p: &str, n: u64) -> Result<()> {
+            self.0.push(format!("begin {p} {n}"));
+            Ok(())
+        }
+        fn write(&mut self, d: &[u8]) -> Result<()> {
+            self.0.push(String::from_utf8_lossy(d).into_owned());
+            Ok(())
+        }
+        fn end(&mut self) -> Result<()> {
+            self.0.push("end".into());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn extracts_to_a_sink() {
+        let z = build(
+            &[
+                (b"Game/Maps/", b"", false),
+                (b"Game/Game.exe", b"MZ", false),
+                (b"Game/a.txt", b"aaaa", true),
+            ],
+            true,
+        );
+        let mut zip = Zip::from_reader(Cursor::new(z)).unwrap();
+        let mut log = Log::default();
+        let n = zip.extract_to(&mut log, &|e| e.path != "Game.exe").unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(log.0.join("|"), "dir Maps|begin a.txt 4|aaaa|end");
     }
 
     #[test]

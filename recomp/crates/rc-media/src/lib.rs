@@ -422,3 +422,19 @@ pub fn open(path: &Path) -> Result<(MediaType, Box<dyn Archive>)> {
     }
     format_err(format!("{}: unknown media type", path.display()))
 }
+
+/// Open a medium from any reader (in a browser: the chosen file in pieces): a zip of an installed
+/// copy or an Inno Setup installer. CD images need [`open`].
+pub fn open_reader(mut r: Box<dyn ReadSeek>) -> Result<(MediaType, Box<dyn Archive>)> {
+    let mut magic = [0u8; 4];
+    r.seek(SeekFrom::Start(0))?;
+    let got = r.read(&mut magic)?;
+    r.seek(SeekFrom::Start(0))?;
+    if got >= 4 && magic == *b"PK\x03\x04" {
+        return Ok((MediaType::Zip, Box::new(zip::Zip::from_reader(r)?)));
+    }
+    if got >= 2 && magic[..2] == *b"MZ" {
+        return Ok((MediaType::Inno, Box::new(inno::Installer::from_reader(r)?)));
+    }
+    format_err("neither a GOG installer nor a zip")
+}

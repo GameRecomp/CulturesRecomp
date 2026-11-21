@@ -77,7 +77,7 @@ async function dirFor(cache, top, path) {
 function checkGame(plan, game) {
   if (game && plan.id !== game) {
     const chosen = GAMES[game] ? GAMES[game].name : game;
-    throw new Error(`this is the installer of ${plan.title}, not of ${chosen}: choose its tab above`);
+    throw new Error(`this is ${plan.title}, not ${chosen}: choose its tab above`);
   }
 }
 

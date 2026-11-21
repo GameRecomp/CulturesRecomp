@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // The games the converter makes builds of, as the page, the worker and the player name them. The
 // id is the converter's (games/<id>/game.toml) and the directory the browser stores the game in.
-// Only the games sold as GOG installers: the Saga came on CD and is converted with `recomp`.
+// `source` is what the user brings: the GOG installer, or for the Saga (a German CD, never sold by
+// GOG) a zip of the installed game.
 export const GAMES = {
   cultures1: {
     id: 'cultures1',
@@ -46,6 +47,18 @@ export const GAMES = {
     size: 'about 370 MiB',
     web: 'eighthwonder',
     icon: 'eighthwonder.svg',
+  },
+  saga: {
+    id: 'saga',
+    name: 'Saga',
+    full: 'Cultures – Die Saga',
+    stem: 'CulturesSaga',
+    source: 'zip',
+    installer: 'Cultures Saga.zip',
+    installerSize: 'about 280 MiB',
+    size: 'about 470 MiB',
+    web: 'saga',
+    icon: 'saga.svg',
   },
 };
 

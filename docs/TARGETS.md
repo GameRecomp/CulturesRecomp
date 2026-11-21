@@ -67,8 +67,8 @@ All of them are PE32 i386 GUI programs with image base `0x00400000` and stripped
 `.cms_t`/`.cms_d` sections and no Rich header. Its embedded build string still reads `Apr 11 2002`.
 See [RESEARCH.md](RESEARCH.md#cultures-2-gog-executable).
 
-² A second single-player build (role `alternate`) shipped next to `Game.exe`. See
-[RESEARCH.md](RESEARCH.md#die-saga).
+² A second single-player build shipped next to `Game.exe`, without its extra checks. It is the Saga's role `main`, the
+program the shell runs; `Game.exe` is `alternate` (`--exe Game.exe`). See [RESEARCH.md](RESEARCH.md#die-saga).
 
 Most executables are identical across languages, so the language lives in the data. That gives
 **9 distinct single-player executables** to lift: three for C1 and six for the C2 engine (including both Saga builds).

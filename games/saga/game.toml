@@ -24,9 +24,9 @@ media = [
 
 [[binary]]
 name = "Game.exe"
-role = "main"
+role = "alternate"
 treatment = "lift"
-notes = "Build Nov 5 2003; started by Autorun.exe. References datax\\extro.dat, which is not installed (CD check?)."
+notes = "Build Nov 5 2003; started by Autorun.exe. References datax\\extro.dat, which is not installed (CD check?). The shell runs GameSaga.exe instead (--exe Game.exe runs this one)."
 size = 1159168
 sha256 = "1ac4f291e80fd29fcf6a9e9222bc15435ddb87344815f0095f3491577e3cbf15"
 variants = ["retail-de"]
@@ -38,9 +38,9 @@ points = [
 
 [[binary]]
 name = "GameSaga.exe"
-role = "alternate"
+role = "main"
 treatment = "lift"
-notes = "Later official build (Jul 18 2005, MSVC Rich header intact) without the extra checks of Game.exe."
+notes = "Later official build (Jul 18 2005, MSVC Rich header intact) without the extra checks of Game.exe; the program the shell runs (games/saga/CMakeLists.txt: EXES GameSaga.exe first)."
 size = 1146880
 sha256 = "a712d51a339547b17f39c8a0a33cedffa5868a8d0ebb193b8a3093a7174c9801"
 variants = ["retail-de"]

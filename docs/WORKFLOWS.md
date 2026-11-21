@@ -172,8 +172,8 @@ a signed APK (`recomp verify-apk` checks the signature); the app unpacks its dat
 (`code-wasm.wasm`) for the web shell. `tools/build-web-shell OUT GAME` builds the shell with Emscripten (emsdk
 7.0.0, JSPI) into `OUT/<game>.js` and `.wasm` with the Liberation fonts. `tools/build-web SITE [TEMPLATES
 [WEB_SHELLS]]` assembles the converter site: `web/` (the pages), rc-web (the converter, wasm32 through
-wasm-bindgen 0.2.130), the templates and the web shells. On the site the GOG installer is converted in the
-page, without uploading anything: for "Browser" its files and code go into the browser's private storage and
+wasm-bindgen 0.2.130), the templates and the web shells. On the site the GOG installer (for the Saga: a zip of
+the folder it was installed to from the CD) is converted in the page, without uploading anything: for "Browser" its files and code go into the browser's private storage and
 `play.html` runs them; for a system, the package is saved. Serve it locally with `python3 -m http.server` in
 SITE; it needs a browser with WebAssembly stack switching (current Chrome, Edge, Firefox).
 `.github/workflows/converter.yml` builds all of it and publishes the site to GitHub Pages (manual runs; the
