@@ -728,11 +728,9 @@ static void k_Restore(rc_cpu *c)
     RC_RETURN(c, DD_OK, 1);
 }
 
-extern long st_fast, st_span, st_in, st_copy, st_slow, st_tri, st_flush;
 static void k_Flip(rc_cpu *c)
 {
     rc_d3d_flush();
-    if (getenv("D3DSTAT")) { static int fr; if (++fr % 50 == 0) fprintf(stderr, "STAT flush %ld tri %ld fast %ld copy %ld slow %ld span %ld in %ld\n", st_flush, st_tri, st_fast, st_copy, st_slow, st_span, st_in); st_flush=st_tri=st_fast=st_copy=st_slow=st_span=st_in=0; }
     object *x = self(c, O_SURFACE);
     surface *s = &x->s;
     if (s->back) {

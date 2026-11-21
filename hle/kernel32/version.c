@@ -195,7 +195,7 @@ static void k_VerQueryValueA(rc_cpu *c)
     while (*p) {
         const char *e = strchr(p, '\\');
         size_t kn = e ? (size_t)(e - p) : strlen(p);
-        node child;
+        node child = {0};
         bool found = false;
         for (uint32_t at = nd.children; at + 6 <= nd.end;) {
             read_node(at, &child);

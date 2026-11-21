@@ -288,7 +288,7 @@ static void m_EnumSessions(rc_cpu *c)
     }
     const net_session *list;
     int count = net_sessions(&list);
-    static const uint8_t zero[16];
+    static const uint8_t zero[16] = {0};
     bool any_app = memcmp(rc_ptr(desc + 24), zero, 16) == 0;
     if (rc_trace("dplay")) {
         rc_log("[dplay] EnumSessions flags 0x%x: %d sessions", flags, count);

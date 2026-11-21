@@ -831,7 +831,6 @@ static void setup(rctx *r, const device *d, rc_dd_surface *t, rc_dd_surface *z)
 
 /* floorf as an integer, without a library call (the same for the values
  * a texture coordinate times a size takes). */
-long st_fast, st_span, st_in, st_copy, st_slow, st_tri, st_flush;
 static inline int ifloor(float x)
 {
     int i = (int)x;
@@ -1114,7 +1113,6 @@ static void triangle(const rctx *r, const vtx *v0, const vtx *v1, const vtx *v2,
                                             ((g0->c2 & 0x3f) == 2 && (g0->c1 & 0x3f) <= 1)))) &&
                 (g0->aop == 1 || g0->aop == 2 || g0->aop == 4 || g0->aop == 3);
     if (copy) {
-        __atomic_add_fetch(&st_copy, 1, __ATOMIC_RELAXED);
         int tw = (int)g0->w, th = (int)g0->h;
         for (int32_t y = y0; y <= y1; y++) {
             float py = (float)y, px = (float)x0;
@@ -1174,7 +1172,6 @@ static void triangle(const rctx *r, const vtx *v0, const vtx *v1, const vtx *v2,
     bool fast = affine && rgb565 && g0->pix && g0->texels && !g0->linear && !r->st[1].on && !r->alpha_test &&
                 !r->ztest && g0->bpp == 16 && cmode >= 0 && amode >= 0 && (!r->blend || (r->sb == 5 && r->db == 6));
     if (fast) {
-        __atomic_add_fetch(&st_fast, 1, __ATOMIC_RELAXED);
         int tw = (int)g0->w, th = (int)g0->h;
         const uint32_t *texels = g0->texels;
         /* Colour steps per pixel to the right, 16.16. */
@@ -1211,7 +1208,6 @@ static void triangle(const rctx *r, const vtx *v0, const vtx *v1, const vtx *v2,
             for (int c = 0; c < 4; c++) {
                 col[c] += dcol[c] * (lo - x0);
             }
-            __atomic_add_fetch(&st_span, hi - lo + 1, __ATOMIC_RELAXED);
             for (int32_t x = lo; x <= hi; x++, w0 += d0, w1 += d1, w2 += d2, u += du[0], v += dv[0],
                          col[0] += dcol[0], col[1] += dcol[1], col[2] += dcol[2], col[3] += dcol[3]) {
                 if (w0 < 0 || w1 < 0 || w2 < 0 || (w0 == 0 && !own0) || (w1 == 0 && !own1) || (w2 == 0 && !own2)) {
@@ -1226,7 +1222,6 @@ static void triangle(const rctx *r, const vtx *v0, const vtx *v1, const vtx *v2,
                     }
                     continue; /* blended: alpha 0, no change */
                 }
-                __atomic_add_fetch(&st_in, 1, __ATOMIC_RELAXED);
                 int dr = clamp8(col[0] >> 16), dg = clamp8(col[1] >> 16), db = clamp8(col[2] >> 16),
                     da = clamp8(col[3] >> 16);
                 uint32_t tx8 = texels[raw];
@@ -1255,7 +1250,6 @@ static void triangle(const rctx *r, const vtx *v0, const vtx *v1, const vtx *v2,
         }
         return;
     }
-    __atomic_add_fetch(&st_slow, 1, __ATOMIC_RELAXED);
     if (rc_trace("d3dslow")) {
         rc_log("[d3dslow] %d blend %d %d/%d at %d st0 %u:%u,%u/%u:%u,%u bpp %u a%u lin %d st1 %d aff %d same %d col %02x%02x%02x%02x", (int)(area / 2), r->blend, r->sb, r->db, r->alpha_test, g0->cop, g0->c1, g0->c2, g0->aop, g0->a1, g0->a2, g0->bpp, g0->f.c[3].bits, g0->linear, r->st[1].on, affine, same_colour, const_colour.a, const_colour.r, const_colour.g, const_colour.b);
     }
@@ -1356,7 +1350,6 @@ void rc_d3d_flush(void)
     if (!n_draws) {
         return;
     }
-    st_flush++; st_tri += n_tris;
     int cores = rc_plat_workers();
     int32_t rows = 0;
     for (uint32_t i = 0; i < n_draws; i++) {

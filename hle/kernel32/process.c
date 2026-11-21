@@ -16,11 +16,6 @@
 #include "rc/thread.h"
 #include "rc/vm.h"
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
 /* Pseudo module handles for DLLs we answer for: high, aligned, unmapped. */
 #define MODULE_BASE 0x7a000000u
 static const char *const known_modules[] = {

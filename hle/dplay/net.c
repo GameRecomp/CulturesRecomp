@@ -507,7 +507,7 @@ void net_poll(void)
             uint8_t *all = NULL;
             uint32_t len = 0;
             for (int i = 0; i < NET_PLAYERS; i++) {
-                uint32_t rl;
+                uint32_t rl = 0;
                 uint8_t *rec = n.players[i].used ? pack_player(&n.players[i], &rl) : NULL;
                 uint8_t *grown = rec ? realloc(all, len + rl) : NULL;
                 if (grown) {

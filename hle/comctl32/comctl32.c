@@ -664,7 +664,7 @@ static void wp_toolbar(rc_cpu *c)
                     if ((b->style & 4) && !(b->state & 1)) { /* a check group: the others go off */
                         for (int k = 0; k < t->n; k++) {
                             if ((t->b[k].style & 6) == 6) {
-                                t->b[k].state &= (uint8_t)~1u;
+                                t->b[k].state &= 0xfeu;
                             }
                         }
                         b->state |= 1;
