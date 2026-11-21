@@ -54,6 +54,15 @@ returns = [0x49d8f5]     # CRT x87 argument load: returns; a second entry follow
 points = [
     0x00466b44, # cursor: the "Hardware Mouse" value was read (patch_cursor.c)
     0x00466c24, # resolution: the settings were read, before the mode check (patch_resolution.c)
+    0x00466c3d, # resolution: the settings were checked (a window entry passes)
+    0x00462f21, # resolution: the mode change starts (window entries become the window's size)
+    0x00493597, # resolution: the mode table was filled (the window entries go first)
+    0x00464522, # resolution: a label of the mission's list was written
+    0x0046d937, # resolution: a label of the main menu's list was written
+    0x0043d378, # resolution: a label of "Screen resolutions" was written
+    0x00497e4b, # resolution: the main loop, after the messages (the mode follows the window)
+    0x004643e8, # resolution: the mission's list changes the mode (the choice is stored)
+    0x00451fed, # resolution: a mission starts (the settings are read next)
 ]
 
 [[binary]]
@@ -71,6 +80,15 @@ returns = [0x49d8f5]     # CRT x87 argument load: returns; a second entry follow
 points = [
     0x00466b44, # cursor: the "Hardware Mouse" value was read (patch_cursor.c)
     0x00466c24, # resolution: the settings were read, before the mode check (patch_resolution.c)
+    0x00466c3d, # resolution: the settings were checked (a window entry passes)
+    0x00462f21, # resolution: the mode change starts (window entries become the window's size)
+    0x00493597, # resolution: the mode table was filled (the window entries go first)
+    0x00464522, # resolution: a label of the mission's list was written
+    0x0046d937, # resolution: a label of the main menu's list was written
+    0x0043d378, # resolution: a label of "Screen resolutions" was written
+    0x00497e4b, # resolution: the main loop, after the messages (the mode follows the window)
+    0x004643e8, # resolution: the mission's list changes the mode (the choice is stored)
+    0x00451fed, # resolution: a mission starts (the settings are read next)
 ]
 
 [[binary]]
@@ -90,6 +108,15 @@ returns = [0x49e855]     # CRT x87 argument load: returns; a second entry follow
 points = [
     0x00467632, # cursor: the "Hardware Mouse" value was read (patch_cursor.c)
     0x00467712, # resolution: the settings were read, before the mode check (patch_resolution.c)
+    0x0046772b, # resolution: the settings were checked (a window entry passes)
+    0x004639ff, # resolution: the mode change starts (window entries become the window's size)
+    0x004944f7, # resolution: the mode table was filled (the window entries go first)
+    0x00464fe8, # resolution: a label of the mission's list was written
+    0x0046e7bd, # resolution: a label of the main menu's list was written
+    0x0043db2b, # resolution: a label of "Screen resolutions" was written
+    0x00498dab, # resolution: the main loop, after the messages (the mode follows the window)
+    0x00464eae, # resolution: the mission's list changes the mode (the choice is stored)
+    0x004527bd, # resolution: a mission starts (the settings are read next)
 ]
 
 [[binary]]

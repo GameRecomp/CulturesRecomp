@@ -74,7 +74,8 @@ typedef struct rc_display {
      * processor rests, for the rest of a frame's time); 0 for as many as
      * the display shows. */
     int max_fps;
-    /* The window's or the screen's size is divided by this, in tenths (10:
+    /* The window's or the screen's size is divided by this, in tenths (settings.ini
+     * "window x1.5": 15; 10:
      * as large, 15, 20, 30: a game screen 1.5, 2 or 3 times smaller, shown
      * that much larger); 0 is 10. */
     int game_scale;

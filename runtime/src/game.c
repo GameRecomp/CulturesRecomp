@@ -249,6 +249,9 @@ static const rc_game_info *the_game;
 
 /* For the window's title, after the game's: " <version> (<revision>, <language>)". */
 static char title_suffix[64];
+static const char *game_language;
+
+const char *rc_game_language(void) { return game_language; }
 
 /* The language of an install, as it calls itself: GOG's goggame-*.info says it ("language"),
  * else the variant of the lifted executable ("gog-de": German); NULL if neither does. */
@@ -485,6 +488,7 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
             return RC_EXIT_ERROR;
         }
         const char *lang = install_language(game_dir, NULL);
+        game_language = lang;
         snprintf(title_suffix, sizeof title_suffix, lang ? " %s (%s, %s)" : " %s (%s)", RC_VERSION, RC_GIT_HASH,
                  lang ? lang : "");
         rc_log("native code %s (%s)", native, rc_native_target());
@@ -509,6 +513,7 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
         nlifted++;
         if (strcmp(h, exe_hash) == 0) {
             const char *lang = install_language(game_dir, b->variant);
+            game_language = lang;
             snprintf(title_suffix, sizeof title_suffix, lang ? " %s (%s, %s)" : " %s (%s)", RC_VERSION, RC_GIT_HASH,
                      lang ? lang : "");
         }

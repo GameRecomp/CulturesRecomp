@@ -18,6 +18,7 @@
 #define DEFAULT_FPS 60
 #define DEFAULT_FPS_TEXT "60"
 
+#if !defined(__EMSCRIPTEN__) /* (a browser has no settings.ini) */
 static const char DEFAULTS[] =
     "# How the game is shown. Change a value and start the game again.\n"
     "\n"
@@ -33,16 +34,13 @@ static const char DEFAULTS[] =
     "fullscreen = no\n"
     "\n"
     "# The resolution the game plays at (its menus may keep their own).\n"
-    "# window (the default): the size of the window, or of the screen when\n"
-    "# full screen. screen: the size of the screen. A size such as 1920x1080 or\n"
-    "# 2560x1080 (any shape; the game offers common widescreen ones too).\n"
-    "# off: only the game's own resolutions and its own setting.\n"
-    "resolution = window\n"
-    "\n"
-    "# With window or screen: the game screen is that size divided by this,\n"
-    "# shown as large as fits: 1 (as large), 1.5, 2 or 3 (larger interface and\n"
-    "# figures). The game screen is at least 800x600.\n"
-    "game_scale = 1\n"
+    "# window x1 (the default): the size of the window (of the screen when full\n"
+    "# screen), following it when it changes. window x1.5, x2, x2.5, x3: that\n"
+    "# size divided by 1.5, 2, 2.5 or 3 (larger interface and figures). The\n"
+    "# game screen is at least 800x600. screen: the size of the screen. A size\n"
+    "# such as 1920x1080 or 2560x1080 (any shape). off: only the game's own\n"
+    "# resolutions and its own setting. A game's options page may choose too.\n"
+    "resolution = window x1\n"
     "\n"
     "# yes (the default): the mouse pointer is the system's (smooth, at the\n"
     "# screen's rate). no: the game's own setting.\n"
@@ -52,6 +50,20 @@ static const char DEFAULTS[] =
     "# frames (cooler and quieter; fewer are less smooth): for example 30.\n"
     "# max: as many as the screen shows.\n"
     "fps = " DEFAULT_FPS_TEXT "\n";
+#endif
+
+/* A factor such as 1.5 (or 1,5) in tenths, 10 to 80; 10 for anything else. */
+static int scale_tenths(const char *text)
+{
+    char buf[16];
+    snprintf(buf, sizeof buf, "%s", text);
+    char *comma = strchr(buf, ',');
+    if (comma) {
+        *comma = '.';
+    }
+    double v = atof(buf);
+    return v >= 1.0 && v <= 8.0 ? (int)(v * 10.0 + 0.5) : 10;
+}
 
 static void set(rc_display *d, const char *key, const char *value)
 {
@@ -69,17 +81,25 @@ static void set(rc_display *d, const char *key, const char *value)
         if (d->max_fps < 0 || d->max_fps > 1000) {
             d->max_fps = 0;
         }
-    } else if (!strcmp(key, "game_scale")) {
-        double v = atof(value);
-        d->game_scale = v >= 1.0 && v <= 8.0 ? (int)(v * 10.0 + 0.5) : 10;
+    } else if (!strcmp(key, "game_scale")) { /* (an older settings.ini: now `window x1.5`) */
+        d->game_scale = scale_tenths(value);
     } else if (!strcmp(key, "hardware_cursor")) {
         d->hardware_cursor = !strcmp(value, "yes") || !strcmp(value, "1") || !strcmp(value, "true");
     } else if (!strcmp(key, "resolution")) {
         int w = 0, h = 0;
-        if (!strcmp(value, "window")) {
-            d->game_w = d->game_h = -1;
-        } else if (!strcmp(value, "screen")) {
-            d->game_w = d->game_h = -2;
+        bool window = !strncmp(value, "window", 6), screen = !strncmp(value, "screen", 6);
+        if (window || screen) {
+            /* "window", "window x1.5" (also "window 1.5", "window*1.5"). */
+            const char *f = value + 6;
+            while (*f == ' ' || *f == 'x' || *f == '*') {
+                f++;
+            }
+            d->game_w = d->game_h = window ? -1 : -2;
+            if (*f) {
+                d->game_scale = scale_tenths(f);
+            } else if (!d->game_scale) {
+                d->game_scale = 10;
+            }
         } else if (sscanf(value, "%dx%d", &w, &h) == 2 && w > 0 && h > 0 && w <= 8192 && h <= 8192) {
             d->game_w = w;
             d->game_h = h;
@@ -89,6 +109,7 @@ static void set(rc_display *d, const char *key, const char *value)
     }
 }
 
+#if !defined(__EMSCRIPTEN__)
 /* `key = value` lines; '#' starts a comment. */
 static void parse(rc_display *d, FILE *f)
 {
@@ -104,7 +125,20 @@ static void parse(rc_display *d, FILE *f)
         }
         *eq = 0;
         char key[64] = "", value[64] = "";
-        if (sscanf(line, " %63s", key) != 1 || sscanf(eq + 1, " %63s", value) != 1) {
+        if (sscanf(line, " %63s", key) != 1) {
+            continue;
+        }
+        /* The value: the rest of the line, without the spaces around it ("window x1.5"). */
+        const char *v = eq + 1;
+        while (*v == ' ' || *v == '\t') {
+            v++;
+        }
+        snprintf(value, sizeof value, "%s", v);
+        size_t vn = strlen(value);
+        while (vn && (value[vn - 1] == ' ' || value[vn - 1] == '\t' || value[vn - 1] == '\r' || value[vn - 1] == '\n')) {
+            value[--vn] = 0;
+        }
+        if (!vn) {
             continue;
         }
         for (char *p = value; *p; p++) {
@@ -113,6 +147,7 @@ static void parse(rc_display *d, FILE *f)
         set(d, key, value);
     }
 }
+#endif
 
 static char settings_path[1024];
 
@@ -135,17 +170,18 @@ void rc_plat_display_store(void)
     rc_display d = rc_plat_display_get();
     char lines[2][64];
     snprintf(lines[0], sizeof lines[0], "fullscreen = %s\n", d.fullscreen ? "yes" : "no");
-    if (d.game_w == -2) {
-        snprintf(lines[1], sizeof lines[1], "resolution = screen\n");
-    } else if (d.game_w < 0) {
-        snprintf(lines[1], sizeof lines[1], "resolution = window\n");
+    if (d.game_w < 0) {
+        int s = d.game_scale >= 10 ? d.game_scale : 10;
+        snprintf(lines[1], sizeof lines[1], s % 10 ? "resolution = %s x%d.%d\n" : "resolution = %s x%d\n",
+                 d.game_w == -2 ? "screen" : "window", s / 10, s % 10);
     } else if (d.game_w > 0 && d.game_h > 0) {
         snprintf(lines[1], sizeof lines[1], "resolution = %dx%d\n", d.game_w, d.game_h);
     } else {
         snprintf(lines[1], sizeof lines[1], "resolution = off\n");
     }
-    static const char *const keys[2] = {"fullscreen", "resolution"};
-    bool done[2] = {false, false};
+    /* (game_scale, from an older settings.ini, is in the resolution now: its line goes.) */
+    static const char *const keys[3] = {"fullscreen", "resolution", "game_scale"};
+    bool done[3] = {false, false, false};
     char out[8400] = "";
     size_t o = 0;
     for (char *line = text; *line;) {
@@ -158,9 +194,9 @@ void rc_plat_display_store(void)
         const char *eq = strchr(p, '=');
         const char *put = line;
         size_t put_len = len;
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < 3; k++) {
             if (!strncmp(p, keys[k], strlen(keys[k])) && eq && (size_t)(eq - line) < len) {
-                put = lines[k];
+                put = k < 2 ? lines[k] : "";
                 put_len = strlen(put);
                 done[k] = true;
             }
@@ -214,7 +250,9 @@ void rc_plat_display_load(const char *user_dir)
         }
     }
 #else
+    /* In a browser: the page's size, as large (window x1). */
     (void)user_dir;
+    d.game_w = d.game_h = -1;
 #endif
     static const char *const env[][2] = {{"RC_SCALE", "scale"}, {"RC_PIXELS", "pixels"}, {"RC_FULLSCREEN", "fullscreen"},
                                          {"RC_RESOLUTION", "resolution"}, {"RC_FPS", "fps"},

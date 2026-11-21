@@ -235,13 +235,12 @@ installation folder, and maps are saved into the user directory. To play one, co
 ## Display settings
 
 Each game writes `settings.ini` into its user directory on the first start (with comments); the environment
-overrides any value for a run (`RC_RESOLUTION`, `RC_GAME_SCALE`, `RC_HARDWARE_CURSOR`, `RC_SCALE`,
+overrides any value for a run (`RC_RESOLUTION`, `RC_HARDWARE_CURSOR`, `RC_SCALE`,
 `RC_PIXELS`, `RC_FULLSCREEN`, `RC_FPS`).
 
 | Key | Values | Effect |
 |-----|--------|--------|
-| `resolution` | `window` (default), `screen`, `WxH`, `off` | The resolution the game plays at: the window's size (the screen's in full screen), the screen's, a fixed one (any shape), or only the game's own modes. The patches in `games/<id>/patch_resolution.c` and `games/c2engine/` make Cultures 1 and the C2-engine games use it in game; the menus may stay 4:3. |
-| `game_scale` | `1` (default), `1.5`, `2`, `3` | With `window` or `screen`: the game screen is that size divided by this (larger interface and figures), at least 800 × 600, its width a multiple of 8. |
+| `resolution` | `window x1` (default), `window x1.5`, `x2`, `x2.5`, `x3`, `screen`, `WxH`, `off` | The resolution the game plays at: the window's size (the screen's in full screen) divided by the factor (larger interface and figures; at least 800 × 600, its width a multiple of 8), the screen's, a fixed one (any shape), or only the game's own modes. Cultures 1's options pages offer the window sizes first and store a choice here; while a mission plays it follows the window when it is resized. The C2-engine games take the size when they start. The patches are in `games/cultures1/patch_resolution.c` and `games/c2engine/`; the menus stay 4:3. In the browser the player page chooses (default `window x1`). An older `game_scale` line still counts. |
 | `hardware_cursor` | `yes` (default), `no` | The system's mouse pointer instead of the game's own (Cultures 1's setting is patched). |
 | `scale`, `pixels`, `fullscreen`, `fps` | | How the frame is shown: `fit` or whole multiples, sharp or smooth, full screen (Alt+Enter), a frame limit. |
 

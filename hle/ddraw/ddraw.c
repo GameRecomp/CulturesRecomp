@@ -1226,6 +1226,9 @@ void rc_ddraw_extra_mode(uint32_t w, uint32_t h)
 
 static uint32_t added[8][2];
 static unsigned n_added;
+static bool list_settings_size = true;
+
+void rc_ddraw_list_settings_size(bool list) { list_settings_size = list; }
 
 void rc_ddraw_add_mode(uint32_t w, uint32_t h)
 {
@@ -1302,12 +1305,14 @@ static void enum_modes(rc_cpu *c, uint32_t size)
                                         {1280, 720},  {1366, 768},  {1600, 900},  {1920, 1080}, {2560, 1440},
                                         {3840, 2160}, {1280, 800},  {1440, 900},  {1680, 1050}, {1920, 1200},
                                         {2560, 1600}, {2560, 1080}, {3440, 1440}};
-    static const uint32_t depths[] = {8, 16, 32};
+    /* 16 and 32 bits only: a game that offers a choice of depths then has no
+     * resolution twice, once in 256 colours. */
+    static const uint32_t depths[] = {16, 32};
     uint32_t d = rc_heap_alloc(size, true);
     unsigned n = sizeof sizes / sizeof sizes[0];
     /* The resolution the settings choose (rc_plat_game_size), whatever its size. */
     int gw, gh;
-    if (rc_plat_game_size(&gw, &gh)) {
+    if (list_settings_size && rc_plat_game_size(&gw, &gh)) {
         rc_ddraw_add_mode((uint32_t)gw, (uint32_t)gh);
     }
     for (unsigned i = 0; i <= n + n_added; i++) {
@@ -1316,7 +1321,7 @@ static void enum_modes(rc_cpu *c, uint32_t size)
         if (!w || !h) {
             continue;
         }
-        for (unsigned j = 0; j < 3; j++) {
+        for (unsigned j = 0; j < sizeof depths / sizeof depths[0]; j++) {
             mode_desc(d, size, w, h, depths[j]);
             uint32_t args[2] = {d, ctx};
             if (!rc_call_guest(c, fn, 2, args)) {

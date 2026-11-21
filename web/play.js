@@ -249,6 +249,8 @@ function updateCode() {
 }
 
 const prefs = loadPrefs();
+// (An older page saved the window's size as "window": now the default, Window x1.)
+if (prefs.resolution === 'window') prefs.resolution = '';
 document.title = `${GAME.name} Player`;
 $('title').textContent = GAME.full || GAME.name;
 $('convert').href = `./?game=${GAME.id}`;

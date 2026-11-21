@@ -320,6 +320,33 @@ Facts that the lifter (M3/M4) depends on:
 - Labels that need entries of their own are few: SEH filters and handlers and code pointers into function bodies.
   Most labels in the DLLs are relocated jump-table entries, which the lifted `switch` reaches.
 
+## Resolutions
+
+DirectDraw (`hle/ddraw`) lists common 4:3, 5:4 and widescreen sizes at 16 and 32 bits, no 8-bit ones: a game's list
+then has each size once. `settings.ini`'s `resolution` (`window x1` to `x3`: the window's size divided by the factor;
+`screen`, a fixed size or `off`) is what the game projects' patches give the games (`rc_plat_game_size`).
+
+- **Cultures 1** (`games/cultures1/patch_resolution.c`, addresses for GOG EN/DE and Gold DE there). Every mode change
+  goes through one function of the application object (GOG `0x462f21`, object `0x4bd878`): width, height, depth and
+  a flag (1 skips the check against the mode table and the desktop); it does nothing for the current mode, and after
+  the change the game lays itself out again. The mode table (0xb8 into the application object: count at +0xc,
+  12-byte entries from +0x10, at most 80) is filled once from `EnumDisplayModes` and feeds both lists, the main
+  menu's Graphic Options ("%d x %d ... %d") and a mission's "Screen resolutions" (a text from the game's files,
+  "%d * %d pixel - %d bit color depth", formatted at `0x43d378`), whose entries change the mode at once. The
+  registry's settings (an object at `0x4bcb88`: width +0x11, height +0x13, depth +0x15) are checked against the
+  table, the desktop's size and its depth (only 8 bits pass otherwise), with stock sizes as fallbacks; a mission
+  starts with them (`0x45201f`, after setting the dword at `0x4be1b0`, 1 while a mission plays). The patch puts
+  "window" entries (width 0, height 1 to 5) first into the table, writes their labels, turns them into the
+  window's size at the start of the mode change, keeps `settings.ini` and the settings object in step, and calls
+  the mode change from the main loop (`0x497e4b`, between the messages and the frame) when the window's size has
+  stayed different for 300 ms during a mission. Without registry settings (the Gold CD's installer writes none) the
+  game never reads them, so the patch puts the choice into the object when a mission starts or the options page
+  opens.
+- **C2 engine** (`games/c2engine/patch_resolution.c`): the screen size comes from `game.ini` once, in the start-up
+  function, which lays out the menus and the game screen for it; the only other use of `gfx_screen_width` writes
+  `game.ini` back. There is no in-game resolution choice and no path that changes the size later, so the size of
+  the window when the game starts is the one it plays at; a later resize scales the picture.
+
 ## Cultures 1 in 16-bit colour
 
 Cultures 1 runs its menus in 16-bit modes and a mission in the mode of its settings (`Screen Resolution X/Y`,

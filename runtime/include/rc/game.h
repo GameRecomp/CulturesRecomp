@@ -53,6 +53,10 @@ enum {
 int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, int argc,
                  char **argv);
 
+/* The language of the install being played, as it calls itself ("English", "Deutsch", ...); NULL
+ * if unknown. For a game project's patch that writes text into the game. */
+const char *rc_game_language(void);
+
 #ifdef __cplusplus
 }
 #endif

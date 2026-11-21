@@ -58,6 +58,9 @@ void rc_ddraw_extra_mode(uint32_t w, uint32_t h);
 /* Further display modes DirectDraw lists beside its own, kept (up to 8);
  * for a game that enumerates the modes once and looks its size up there. */
 void rc_ddraw_add_mode(uint32_t w, uint32_t h);
+/* Whether DirectDraw lists the resolution of the settings (rc_plat_game_size) among its modes (the
+ * default): off for a game project whose patch offers the window's size its own way. */
+void rc_ddraw_list_settings_size(bool list);
 /* The next Blt from a source one column wide stretches it to `width`
  * columns; the column it takes is, within `range` columns of its own, the
  * one whose colours are closest to theirs on average (neither a shadow nor

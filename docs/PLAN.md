@@ -357,8 +357,12 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 
 ### M15 – Polish and platforms
 
-- [x] Patches for higher resolutions (`resolution`, `game_scale` in `settings.ini`; Cultures 1 and the C2 engine in
-      game, checked at 1280 × 720 and 1920 × 1080); open: `window` and the scale factors tried by hand on a desktop
+- [x] Patches for higher resolutions (`resolution` in `settings.ini`; Cultures 1 and the C2 engine in game, checked at
+      1280 × 720 and 1920 × 1080)
+- [x] Window resolutions: `window x1` (the default, in the browser too) to `window x3`, the window's size divided by
+      the factor. Cultures 1's two lists offer them first ("Window x1.5", "Fenster x1,5"), show only 16-bit modes,
+      store the choice in `settings.ini`, and a mission follows the window when it is resized (scripted: 960 × 672
+      → 1280 × 720). The C2-engine games take the size when they start. open: tried by hand on a desktop
 - [ ] Settings UI outside the game (window mode, scaling, audio device)
 - [ ] Performance: native replacements for hot functions (blitters, `memcpy`-like loops)
 - [ ] Android (touch → mouse), WebAssembly (single-threaded runtime)
@@ -407,6 +411,7 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 | 2026-11-20 | Every unpacked install besides the default one gets a build target of its own (`cultures-<game>-<folder>`, outside `all`) instead of being linked into `cultures-<game>`: debugging another build is a choice of target, and the default build compiles one variant. Each target links its own set (`recomp lift --set`), and each lifted binary is an object library shared by the targets that link it. |
 | 2026-11-20 | Every `HeapCreate` heap reuses only its own freed blocks (`rc_heap_alloc_in`), as on Windows, instead of all heaps sharing one set of free lists: DLLs with their own C runtime (Northland's music driver) may rely on not getting the program's freed and filled blocks. Clearing blocks on free would hide that too, but would break programs that read memory just after freeing it, which Windows leaves intact. |
 | 2026-11-20 | The build lifts, as in TropicoRecomp: configuring lifts a game without lifted code, and building its shell lifts again when its manifest or the lifter changed (`cmake/lift.cmake`, `-DRC_AUTO_LIFT=OFF` to stop it). It takes one install per game by default (`orig/<game>/gog-en`), because every lifted executable is about 40 MB of C; `<GAME>_GAME_DIRS` adds more. `recomp lift` takes a folder and writes only changed files, so a lift that changes nothing compiles nothing. A game whose media lie in `orig/` but that has not been unpacked is unpacked while configuring (`recomp extract --game`). |
+| 2026-11-21 | Resolutions follow the window (`window x1` to `x3`, replacing `game_scale`), and DirectDraw lists no 8-bit modes, so a list of resolutions has each size once. Cultures 1 changes its mode while a mission plays, so it follows a resize there; the C2 engine sets its screen size once at start-up and lays its interface out for it, so it takes the window's size when it starts. |
 | 2026-11-21 | The Saga's `main` is `GameSaga.exe` (2005, without `Game.exe`'s extra checks), the program its shell already ran; `Game.exe` is `alternate`. The converter builds the browser's single code module for `main`, so the two must agree. |
 | 2026-11-21 | The converter for people without a compiler is TropicoRecomp's: templates of a prebuilt shell, the game's code compiled with Cranelift (or to WebAssembly for the browser) and its files beside it, in a zip or a signed APK. The pipeline from bytes to programs lives in `rc-convert` (manifests built in), so the CLI and the browser (rc-web) share it. The browser takes the GOG installers and the Saga's zip of an installed copy (CD images go through `recomp`). |
 | 2026-11-21 | In a browser the game's files can only be read through `rc_host_fread` (the blocks are fetched from the browser's storage first), so HLE code reads game files only through it (registry, file mapping, movies). A zero-timeout wait counts as a poll (yields as `timeGetTime` does): threads switch in microtasks, and a thread spinning on it would starve the page. |
