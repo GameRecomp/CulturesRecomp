@@ -240,7 +240,11 @@ void rc_present_hook(unsigned frame)
     if (shots) {
         static char buf[16384];
         snprintf(buf, sizeof buf, "%s", shots);
-        for (char *tok = strtok(buf, ","); tok; tok = strtok(NULL, ",")) {
+        for (char *tok = buf, *next; tok && *tok; tok = next) {
+            next = strchr(tok, ',');
+            if (next) {
+                *next++ = 0;
+            }
             char *colon = strchr(tok, ':');
             if (colon && (unsigned)strtoul(tok, NULL, 10) == frame) {
                 if (rc_plat_screenshot(colon + 1)) {

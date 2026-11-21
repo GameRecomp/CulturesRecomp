@@ -8,10 +8,19 @@
 # writes OUT_DIR/<game>/png/<size>.png (16 to 512) and OUT_DIR/<game>.ico, which the Windows
 # build puts into cultures-<game>.exe (cmake/lift.cmake). Rendering needs rsvg-convert
 # (librsvg), else a headless Firefox; ImageMagick's own SVG renderer draws no gradients and is
-# the last resort. Packing the .ico needs ImageMagick.
+# the last resort. Packing the .ico needs ImageMagick (7's `magick`, or 6's `convert`, which
+# Ubuntu ships).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 out=${1:-build/icons}
+if command -v magick > /dev/null; then
+    magick() { command magick "$@"; }
+elif command -v convert > /dev/null; then
+    magick() { convert "$@"; }
+else
+    echo "make-icons: needs ImageMagick (magick or convert)" >&2
+    exit 1
+fi
 render() { # svg size png
     if command -v rsvg-convert > /dev/null; then
         rsvg-convert -w "$2" -h "$2" -o "$3" "$1"

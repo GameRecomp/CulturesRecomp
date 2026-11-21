@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+      - run: sudo apt-get update && sudo apt-get install -y librsvg2-bin imagemagick
       - run: tools/make-icons build/icons
       - uses: actions/upload-artifact@v4
         with:
@@ -137,7 +137,7 @@ jobs:
       # The runner has the Android SDK (ANDROID_HOME) and NDK
       # (ANDROID_NDK_LATEST_HOME).
       # The icons (tools/make-icons) for the apps.
-      - run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+      - run: sudo apt-get update && sudo apt-get install -y librsvg2-bin imagemagick
       - run: |
           for g in cultures1 cultures2 northland eighthwonder saga; do
             . tools/game-info "$g"

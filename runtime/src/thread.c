@@ -310,8 +310,10 @@ void rc_thread_exit(uint32_t code)
 #if BACKEND_PTHREAD
     /* The baton has moved on: this host thread ends here. */
     pthread_exit(NULL);
-#endif
+#elif BACKEND_JSPI
     rc_fatal("ExitThread: the thread could not end here");
+#endif
+    /* (With fibers and contexts finish() does not return.) */
 }
 
 /* End the current thread (not the main one) and run another; with fibers
