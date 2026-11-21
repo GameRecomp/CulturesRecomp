@@ -349,9 +349,19 @@ int rc_run(const rc_config *cfg)
         }
         exe = load_file(cfg->exe, 0);
     } else {
+        /* "name" loads at the DLL's preferred base, "name@hex" at that base (a DLL the
+         * recompiler rebased, as the manifest's `base` says). */
         const char *const *mods = rc_native_modules();
         for (const char *const *d = mods ? mods : rc_lifted_modules; *d; d++) {
-            load_file(*d, 0);
+            char name[260];
+            snprintf(name, sizeof name, "%s", *d);
+            char *at = strchr(name, '@');
+            uint32_t base = 0;
+            if (at) {
+                *at = 0;
+                base = (uint32_t)strtoul(at + 1, NULL, 16);
+            }
+            load_file(name, base);
         }
         exe = load_file(cfg->exe, 0);
     }

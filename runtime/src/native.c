@@ -17,6 +17,7 @@
 #define _DEFAULT_SOURCE
 #endif
 
+#include "rc/mmx.h"
 #include "rc/native.h"
 
 #include <stdio.h>
@@ -215,9 +216,23 @@ static void h_fpu(rc_cpu *c, uint32_t code, uint32_t a)
     }
 }
 
+/* One MMX operation by its index in rc_ir::MmxOp (rc/mmx.h, RC_MMX_OPS). */
+typedef uint64_t (*mmx_fn)(uint64_t, uint64_t);
+static uint64_t h_mmx(rc_cpu *c, uint32_t op, uint64_t a, uint64_t b)
+{
+#define ENTRY(name) rc_mmx_##name,
+    static const mmx_fn ops[] = {RC_MMX_OPS(ENTRY)};
+#undef ENTRY
+    (void)c;
+    if (op >= sizeof ops / sizeof ops[0]) {
+        rc_fatal("native code: MMX operation %u", op);
+    }
+    return ops[op](a, b);
+}
+
 /* In the order of rc-emit-native's `helper` module. Function pointers are
  * stored as data pointers, which every platform this runs on allows. */
-static const void *helper_table[7];
+static const void *helper_table[8];
 
 static void init_helpers(void)
 {
@@ -235,6 +250,7 @@ static void init_helpers(void)
     SET(4, h_fpu);
     SET(5, h_fstsw);
     SET(6, h_point);
+    SET(7, h_mmx);
 #undef SET
 }
 

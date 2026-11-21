@@ -20,6 +20,7 @@ rc-discover.workspace = true
 rc-ir.workspace = true
 rc-x86.workspace = true
 rc-emit-c.workspace = true
+rc-emit-native.workspace = true
 serde_json.workspace = true
 
 [lints]

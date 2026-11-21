@@ -128,4 +128,13 @@ static inline uint64_t rc_mmx_psrlq(uint64_t a, uint64_t n) { return n >= 64 ? 0
 #ifdef __cplusplus
 }
 #endif
+/* Every operation, in the order of rc_ir::MmxOp (recomp/crates/rc-ir): native code calls them by
+ * that index (runtime/src/native.c). Keep the two in the same order. */
+#define RC_MMX_OPS(X)                                                                                \
+    X(paddb) X(paddw) X(paddd) X(paddsb) X(paddsw) X(paddusb) X(paddusw) X(psubb) X(psubw) X(psubd)  \
+    X(psubsb) X(psubsw) X(psubusb) X(psubusw) X(pmullw) X(pmulhw) X(pmaddwd) X(pcmpeqb) X(pcmpeqw)   \
+    X(pcmpeqd) X(pcmpgtb) X(pcmpgtw) X(pcmpgtd) X(packsswb) X(packssdw) X(packuswb) X(punpcklbw)     \
+    X(punpcklwd) X(punpckldq) X(punpckhbw) X(punpckhwd) X(punpckhdq) X(psllw) X(pslld) X(psllq)     \
+    X(psrlw) X(psrld) X(psrlq) X(psraw) X(psrad)
+
 #endif

@@ -160,7 +160,7 @@ impl CodePatch {
     pub fn bytes(&self) -> Result<(Vec<u8>, Vec<u8>), String> {
         let hex = |s: &str| -> Result<Vec<u8>, String> {
             let t: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-            if t.len() % 2 != 0 {
+            if !t.len().is_multiple_of(2) {
                 return Err(format!("{s:?}: odd number of hex digits"));
             }
             (0..t.len())

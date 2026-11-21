@@ -128,6 +128,23 @@ generated code); `CMAKE_BUILD_PARALLEL_LEVEL=N` sets the number instead. Unpacki
 to `registry-install.txt` in the unpacked folder (for an install unpacked before, `recomp extract` of the same installer adds it and leaves the files alone, and so does `convert`), which the
 runtime loads before the player's own `registry.txt`.
 
+## Native code without a C compiler
+
+`recomp lift --native host orig/cultures1/gog-en` compiles an install's lifted binaries with
+Cranelift (rc-emit-native, from TropicoRecomp) instead of writing C: one blob per executable, with the
+DLLs lifted with it, in `generated/<game>/native/<exe>-<variant>/code-<target>.bin` (targets: `host`,
+`x86_64-sysv`, `x86_64-windows`, `arm64-linux`, `arm64-apple`; a few seconds per game). A program runs
+it instead of compiled-in C when `RC_NATIVE` names the blob:
+
+```sh
+RC_NATIVE=generated/cultures1/native/cultures.exe-gog-en/code-x86_64-sysv.bin \
+    build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en
+```
+
+The difftest runs every instruction form through both back ends. A DLL the manifest rebases is named
+`file@base` in the blob (process.c loads it there). This is the base of the converter's packages for
+people without a compiler (M14), as in TropicoRecomp.
+
 ## Title and icons
 
 The window's title is the game's, then the version, the build's revision and the install's language, as

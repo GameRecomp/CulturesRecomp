@@ -270,7 +270,7 @@ pub fn liftable_in(ms: &[Manifest], dir: &Path) -> Result<Vec<PathBuf>, String> 
 }
 
 /// The FILEs with every folder replaced by the binaries in it that the manifest lifts.
-fn expand(games: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+pub(crate) fn expand(games: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     if !paths.iter().any(|p| p.is_dir()) {
         return Ok(paths.to_vec());
     }

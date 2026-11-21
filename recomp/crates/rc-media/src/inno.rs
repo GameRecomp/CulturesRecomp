@@ -151,8 +151,10 @@ impl<'a> P<'a> {
             return format_err(format!("odd UTF-16 string length at {:#x}", self.o));
         }
         let units: Vec<u16> = b
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         Ok(String::from_utf16_lossy(&units))
     }
@@ -770,8 +772,10 @@ fn parse_registry_entry(p: &mut P<'_>) -> Result<RegistryEntry> {
     };
     // The value is UTF-16 for strings; numbers and binary data are written as text too.
     let units: Vec<u16> = value
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     Ok(RegistryEntry {
         root,

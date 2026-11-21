@@ -1391,7 +1391,7 @@ impl<'a> Engine<'a> {
 
     /// `va` is 16-byte aligned and follows padding or a `ret`.
     fn after_padding(&self, va: u32) -> bool {
-        va % 16 == 0
+        va.is_multiple_of(16)
             && (self.sp.get(va - 1) == Some(PAD)
                 || matches!(self.img.byte(va - 1), Some(0xcc | 0x90 | 0xc3)))
     }

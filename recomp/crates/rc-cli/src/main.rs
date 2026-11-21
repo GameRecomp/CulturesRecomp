@@ -7,6 +7,7 @@ mod convert;
 mod discover;
 mod lift;
 mod media;
+mod native;
 
 use rc_manifest::{Catalog, Hit};
 use std::collections::BTreeMap;
@@ -80,6 +81,7 @@ struct Opts {
     comments: bool,
     preset: Option<String>,
     set: Option<PathBuf>,
+    native: Vec<String>,
     paths: Vec<PathBuf>,
 }
 
@@ -106,6 +108,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         comments: false,
         preset: None,
         set: None,
+        native: Vec::new(),
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -124,6 +127,12 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--comments" => o.comments = true,
             "--preset" => o.preset = Some(it.next().ok_or("--preset needs a name")?.clone()),
             "--set" => o.set = Some(it.next().ok_or("--set needs a file")?.into()),
+            "--native" => {
+                let t = it
+                    .next()
+                    .ok_or("--native needs targets (host, x86_64-sysv, ...)")?;
+                o.native = t.split(',').map(str::to_string).collect();
+            }
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             p => o.paths.push(p.into()),
         }
@@ -166,6 +175,9 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         "lift" => {
             let o = parse_opts(rest)?;
+            if !o.native.is_empty() {
+                return native::lift_native(&o.games, &o.paths, &o.native, o.out.as_deref());
+            }
             lift::lift(
                 &lift::LiftOpts {
                     games: &o.games,

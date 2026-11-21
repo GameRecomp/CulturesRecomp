@@ -17,6 +17,7 @@
 #include "rc/hle_modules.h"
 #include "rc/hostfs.h"
 #include "rc/log.h"
+#include "rc/native.h"
 #include "rc/platform.h"
 #include "rc/process.h"
 #include "rc/sha256.h"
@@ -366,7 +367,12 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     if (do_check) {
         return check(game, game_dir, exe_name);
     }
-    if (!generated || generated->count == 0) {
+    /* Native code (recomp lift --native) instead of C compiled in: RC_NATIVE names the blob. */
+    const char *native = getenv("RC_NATIVE");
+    if (native && !*native) {
+        native = NULL;
+    }
+    if (!native && (!generated || generated->count == 0)) {
         printf("%s: no lifted code in this build.\n"
                "Lift your copy of the game first; see docs/WORKFLOWS.md.\n",
                game->title);
@@ -387,10 +393,23 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     /* The lifted binaries whose hashes match the files of this install. */
     static rc_lifted_binary lifted[16];
     uint32_t nlifted = 0;
-    bool have_exe = false;
+    bool have_exe = native != NULL;
     char exe_hash[65] = "";
     hash_file(game_dir, exe, exe_hash);
-    for (size_t i = 0; i < generated->count && nlifted < 16; i++) {
+    if (native) {
+        uint32_t size = 0;
+        uint8_t *blob = rc_host_read(native, &size);
+        char err[256];
+        if (!blob || !rc_native_load(blob, size, err, sizeof err)) {
+            fprintf(stderr, "%s: %s\n", native, blob ? err : "cannot read it");
+            return RC_EXIT_ERROR;
+        }
+        const char *lang = install_language(game_dir, NULL);
+        snprintf(title_suffix, sizeof title_suffix, lang ? " %s (%s, %s)" : " %s (%s)", RC_VERSION, RC_GIT_HASH,
+                 lang ? lang : "");
+        rc_log("native code %s (%s)", native, rc_native_target());
+    }
+    for (size_t i = 0; !native && i < generated->count && nlifted < 16; i++) {
         const rc_generated_binary *b = generated->binaries[i];
         /* Of the executables only the one being run (a game may have lifted its
          * multiplayer or editor build too); every lifted DLL whose hash matches. */
@@ -447,7 +466,7 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     cfg.guest_dir = game->guest_dir;
     cfg.args = args;
     cfg.setup = setup;
-    cfg.lifted = lifted;
-    cfg.nlifted = nlifted;
+    cfg.lifted = native ? NULL : lifted;
+    cfg.nlifted = native ? 0 : nlifted;
     return rc_run(&cfg);
 }
