@@ -52,6 +52,14 @@ USAGE:
                                             in one step: unpack (if needed), lift every binary
                                             the manifest lifts, build the game (CMake preset,
                                             default: release) into out/<game>/ with play.sh
+    recomp convert --system SYSTEM [--templates DIR] [-o FILE] INSTALLER_OR_ZIP
+    recomp convert --template TEMPLATE.zip -o FILE INSTALLER_OR_ZIP
+                                            without a compiler, as the converter page: the
+                                            game's code compiled to native code into its shell
+                                            template for SYSTEM (windows, linux, macos,
+                                            android; from DIR, by default templates/ beside
+                                            recomp), with the game's files: <Game>-SYSTEM.zip
+                                            (.apk for android) in the current folder
     recomp help | --help
     recomp version | --version
 
@@ -86,6 +94,7 @@ struct Opts {
     system: Option<String>,
     shell: Option<PathBuf>,
     template: Option<PathBuf>,
+    templates: Option<PathBuf>,
     paths: Vec<PathBuf>,
 }
 
@@ -116,6 +125,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         system: None,
         shell: None,
         template: None,
+        templates: None,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -126,7 +136,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--dest" => o.dest = Some(it.next().ok_or("--dest needs a directory")?.into()),
             "--game" => o.game = Some(it.next().ok_or("--game needs a game id")?.clone()),
             "--force" => o.force = true,
-            "--out" => o.out = Some(it.next().ok_or("--out needs a directory")?.into()),
+            "--out" | "-o" => o.out = Some(it.next().ok_or("--out needs a directory")?.into()),
             "--base" => o.base = Some(parse_u32(it.next().ok_or("--base needs an address")?)?),
             "--no-write" => o.write = false,
             "--no-relocs" => o.no_relocs = true,
@@ -136,6 +146,9 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--set" => o.set = Some(it.next().ok_or("--set needs a file")?.into()),
             "--system" => o.system = Some(it.next().ok_or("--system needs a system")?.clone()),
             "--shell" => o.shell = Some(it.next().ok_or("--shell needs a file")?.into()),
+            "--templates" => {
+                o.templates = Some(it.next().ok_or("--templates needs a folder")?.into())
+            }
             "--template" => o.template = Some(it.next().ok_or("--template needs a file")?.into()),
             "--native" => {
                 let t = it
@@ -234,6 +247,18 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         "convert" => {
             let o = parse_opts(rest)?;
+            if o.system.is_some() || o.template.is_some() {
+                let [media] = o.paths.as_slice() else {
+                    return Err("convert needs exactly one installer or zip".into());
+                };
+                return package::convert_package(
+                    media,
+                    o.system.as_deref(),
+                    o.templates.as_deref(),
+                    o.template.as_deref(),
+                    o.out.as_deref(),
+                );
+            }
             convert::convert(
                 &convert::ConvertOpts {
                     games: &o.games,

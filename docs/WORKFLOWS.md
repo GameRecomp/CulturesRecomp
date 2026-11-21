@@ -153,6 +153,14 @@ recomp package --template Cultures-linux-template.zip orig/cultures1/gog-en   # 
 Unpacked, `Cultures/cultures-cultures1` runs the game from `Cultures/data/`. A shell is built with
 `-DRC_AUTO_LIFT=OFF` and an empty `RC_GENERATED_DIR` (and SDL3).
 
+`recomp convert --system SYSTEM INSTALLER_OR_ZIP` does what the converter page does, from the installer itself (or
+the Saga's zip; manifests built in, no `games/` or `orig/` needed): it takes `<Game>-SYSTEM.zip` from `--templates
+DIR` (by default `templates/` beside the program) and writes `<Game>-SYSTEM.zip` (`.apk` for Android) into the
+current folder (`-o FILE` elsewhere; `--template FILE` names a template). `tools/package-converter RECOMP TEMPLATES
+OUT.zip|OUT.tar.gz` packs the program with every template and a README.txt, as a release offers it; CI makes one
+per desktop system (`converter-<system>` artifacts of `converter.yml`), and `release-upload.yml` (run by hand) puts
+those of the last successful run on the latest GitHub release.
+
 The difftest runs every instruction form through both back ends. A DLL the manifest rebases is named
 `file@base` in the blob (process.c loads it there). This is the base of the converter's packages for
 people without a compiler (M14), as in TropicoRecomp.

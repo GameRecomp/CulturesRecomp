@@ -9,7 +9,9 @@
 # its source.
 #
 # Beside the site, the recomp program for each desktop system that is on
-# (recomp-<system> artifacts) and the templates (for `recomp package`).
+# (recomp-<system> artifacts), the templates, and the converter downloads:
+# each recomp with every template and a README (converter-<system>
+# artifacts; release-upload.yml puts them on the latest release).
 name: converter
 
 # Manual runs only for now; push is off.
@@ -256,6 +258,54 @@ jobs:
         with:
           name: recomp-${{ matrix.system }}
           path: build/recomp
+
+  converters:
+    # Each recomp with every template, as the archive a release offers
+    # (release-upload.yml puts them there):
+    # CulturesRecomp-converter-<system>-<arch>.zip (Windows) or .tar.gz.
+    needs: [platforms, templates, recomp]
+    if: ${{ !cancelled() && !failure() && needs.platforms.outputs.hosts != '[]' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: templates
+          path: build/templates
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: recomp-*
+          path: build/recomp
+      - name: pack
+        env:
+          HOSTS: ${{ needs.platforms.outputs.hosts }}
+        run: |
+          jq -r '.[] | "\(.system) \(.arch)"' <<< "$HOSTS" | while read -r system arch; do
+            name=CulturesRecomp-converter-$system-$arch
+            if [ "$system" = windows ]; then
+              tools/package-converter build/recomp/recomp-windows/recomp.exe build/templates "build/converters/$system/$name.zip"
+            else
+              tools/package-converter "build/recomp/recomp-$system/recomp" build/templates "build/converters/$system/$name.tar.gz"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: contains(needs.platforms.outputs.hosts, '"linux"')
+        with:
+          name: converter-linux
+          path: build/converters/linux
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: contains(needs.platforms.outputs.hosts, '"windows"')
+        with:
+          name: converter-windows
+          path: build/converters/windows
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: contains(needs.platforms.outputs.hosts, '"macos"')
+        with:
+          name: converter-macos
+          path: build/converters/macos
+          compression-level: 0
 
   site:
     needs: [platforms, templates, shell-web]

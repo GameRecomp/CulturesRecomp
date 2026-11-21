@@ -86,3 +86,127 @@ pub fn package(
     );
     Ok(ExitCode::SUCCESS)
 }
+
+/// The systems a converter makes builds for.
+const SYSTEMS: [&str; 4] = ["windows", "linux", "macos", "android"];
+
+/// The templates folder beside the running program (a converter download's).
+fn templates_beside_program() -> Result<std::path::PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("where recomp is: {e}"))?;
+    let exe = exe.canonicalize().unwrap_or(exe);
+    Ok(exe
+        .parent()
+        .ok_or("where recomp is: no folder")?
+        .join("templates"))
+}
+
+/// `recomp convert MEDIA --system SYSTEM [--templates DIR] [--out FILE]` (or `--template T.zip`):
+/// a GOG installer or the Saga's zip into a build for a system, without a compiler, as the
+/// converter page does: the game's code compiled to native code into the shell template of the
+/// game for that system (from DIR, by default the templates folder beside `recomp`), with the
+/// game's files, as a zip or, for Android, an APK.
+pub fn convert_package(
+    media: &Path,
+    system: Option<&str>,
+    templates: Option<&Path>,
+    template: Option<&Path>,
+    out: Option<&Path>,
+) -> Result<ExitCode, String> {
+    use std::io::Write as _;
+    let t0 = std::time::Instant::now();
+    if let Some(s) = system.filter(|s| !SYSTEMS.contains(s)) {
+        return Err(format!("unknown system {s}: one of {}", SYSTEMS.join(", ")));
+    }
+    let ms = rc_convert::lift::manifests()?;
+    let file = fs::File::open(media).map_err(|e| format!("{}: {e}", media.display()))?;
+    let reader = std::io::BufReader::with_capacity(1 << 20, file);
+    let mut inst = rc_convert::install::Install::open(Box::new(reader), &ms)
+        .map_err(|e| format!("{}: {e}", media.display()))?;
+    let (_, files) = inst.plan();
+    let game_bytes: u64 = files.iter().map(|f| f.1).sum();
+    eprintln!(
+        "{} ({}): {} files, {:.0} MiB",
+        inst.manifest.game.title,
+        inst.variant,
+        files.len(),
+        game_bytes as f64 / (1u64 << 20) as f64
+    );
+    let stem = rc_convert::stem(&inst.manifest.game.id);
+    let (tpath, default_out) = match (template, system) {
+        (Some(t), _) => (t.to_path_buf(), None),
+        (None, Some(s)) => {
+            let dir = match templates {
+                Some(d) => d.to_path_buf(),
+                None => templates_beside_program()?,
+            };
+            let t = dir.join(format!("{stem}-{s}.zip"));
+            if !t.is_file() {
+                return Err(format!(
+                    "no template for {} on {s}: {} is missing",
+                    inst.manifest.game.title,
+                    t.display()
+                ));
+            }
+            let ext = if s == "android" { "apk" } else { "zip" };
+            (
+                t,
+                Some(std::path::PathBuf::from(format!("{stem}-{s}.{ext}"))),
+            )
+        }
+        (None, None) => return Err("convert needs --system SYSTEM or --template FILE".into()),
+    };
+    let out = match (out, &default_out) {
+        (Some(o), _) => o.to_path_buf(),
+        (None, Some(o)) => o.clone(),
+        (None, None) => return Err("convert --template needs --out FILE".into()),
+    };
+    let tbytes = fs::read(&tpath).map_err(|e| format!("{}: {e}", tpath.display()))?;
+    let tpl = rc_convert::template(&tbytes)?;
+    let progs = inst.programs(&ms)?;
+    eprintln!(
+        "lifted {} programs ({:.1} s)",
+        progs.len(),
+        t0.elapsed().as_secs_f64()
+    );
+    let mut blobs = Vec::new();
+    for p in &progs {
+        for &t in &tpl.targets {
+            blobs.push((t, p.exe.to_ascii_lowercase(), compile(t, p)?));
+            eprintln!(
+                "compiled {} for {} ({:.1} s)",
+                p.exe,
+                t.name(),
+                t0.elapsed().as_secs_f64()
+            );
+        }
+    }
+    let f = fs::File::create(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let total = game_bytes.max(1);
+    let (mut done, mut shown) = (0u64, 0u64);
+    let w = rc_convert::package(
+        std::io::BufWriter::with_capacity(1 << 20, f),
+        &tpl,
+        &blobs,
+        &mut |sink| inst.files(sink),
+        None,
+        &mut |n| {
+            done += n;
+            let pct = done * 100 / total;
+            if pct != shown {
+                shown = pct;
+                eprint!("\rpackaging {pct}%");
+            }
+        },
+    )?;
+    w.into_inner()
+        .map_err(|e| e.to_string())?
+        .flush()
+        .map_err(|e| e.to_string())?;
+    eprintln!(
+        "\rwrote {} ({:.0} MiB) in {:.1} s",
+        out.display(),
+        fs::metadata(&out).map(|m| m.len()).unwrap_or(0) as f64 / (1u64 << 20) as f64,
+        t0.elapsed().as_secs_f64()
+    );
+    Ok(ExitCode::SUCCESS)
+}

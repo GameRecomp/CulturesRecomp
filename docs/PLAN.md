@@ -352,6 +352,9 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
       the zip reader's sink); it converts in 21 s and reaches its main menu in headless Chrome
 - [x] `.github/workflows/converter.yml`: shells, templates, `recomp` per system and the site on GitHub Pages
       (manual runs; macOS off in `platforms.json`)
+- [x] The converter as a program (`recomp convert --system`, from the installer or the Saga zip with the templates
+      beside it; `tools/package-converter`, the `converters` job, `release-upload.yml`): a Linux package made
+      offline from the packed converter plays to the main menu
 - [ ] CI run of the converter workflow (nothing pushed yet), the Windows and Android shells built there
 - [ ] The browser and Android builds played by hand (touch input, audio, saving)
 
