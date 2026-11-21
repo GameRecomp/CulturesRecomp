@@ -232,6 +232,21 @@ the Saga run this way (`recomp lift <install>/Editor.exe` first, then build); th
 installation folder, and maps are saved into the user directory. To play one, copy its exported `.c2m` into
 `UserMaps/` of the game's user directory: it appears under Single Player → Free Play → User Maps.
 
+## Display settings
+
+Each game writes `settings.ini` into its user directory on the first start (with comments); the environment
+overrides any value for a run (`RC_RESOLUTION`, `RC_GAME_SCALE`, `RC_HARDWARE_CURSOR`, `RC_SCALE`,
+`RC_PIXELS`, `RC_FULLSCREEN`, `RC_FPS`).
+
+| Key | Values | Effect |
+|-----|--------|--------|
+| `resolution` | `window` (default), `screen`, `WxH`, `off` | The resolution the game plays at: the window's size (the screen's in full screen), the screen's, a fixed one (any shape), or only the game's own modes. The patches in `games/<id>/patch_resolution.c` and `games/c2engine/` make Cultures 1 and the C2-engine games use it in game; the menus may stay 4:3. |
+| `game_scale` | `1` (default), `1.5`, `2`, `3` | With `window` or `screen`: the game screen is that size divided by this (larger interface and figures), at least 800 × 600, its width a multiple of 8. |
+| `hardware_cursor` | `yes` (default), `no` | The system's mouse pointer instead of the game's own (Cultures 1's setting is patched). |
+| `scale`, `pixels`, `fullscreen`, `fps` | | How the frame is shown: `fit` or whole multiples, sharp or smooth, full screen (Alt+Enter), a frame limit. |
+
+Scripted runs and regression screenshots use `RC_RESOLUTION=off`, so they do not depend on the window.
+
 ## Inspecting a binary
 
 ```sh

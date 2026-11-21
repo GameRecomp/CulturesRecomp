@@ -351,7 +351,8 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 
 ### M15 – Polish and platforms
 
-- [ ] Opt-in patches for higher resolutions (the C2 engine scales its map view; C1 needs research)
+- [x] Patches for higher resolutions (`resolution`, `game_scale` in `settings.ini`; Cultures 1 and the C2 engine in
+      game, checked at 1280 × 720 and 1920 × 1080); open: `window` and the scale factors tried by hand on a desktop
 - [ ] Settings UI outside the game (window mode, scaling, audio device)
 - [ ] Performance: native replacements for hot functions (blitters, `memcpy`-like loops)
 - [ ] Android (touch → mouse), WebAssembly (single-threaded runtime)
