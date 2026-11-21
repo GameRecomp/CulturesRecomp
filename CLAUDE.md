@@ -74,7 +74,7 @@ third_party/               vendored code under its own licence (pl_mpeg), see it
 tools/                     audit.sh, hooks/ (pre-commit, commit-msg), dev-extract.sh, difftest/ (ref32.c, harness.c)
 web/                       the converter site and the browser player (tools/build-web)
 android/                   the Android shell's manifest and activity (tools/build-android)
-docs/                      PLAN, ARCHITECTURE, TARGETS, RESEARCH, WORKFLOWS
+docs/                      PLAN, ARCHITECTURE, TARGETS, RESEARCH, WORKFLOWS, DEVELOPMENT (README.md is for players)
 orig/                      the user's game media (git-ignored): 10 GOG installers, Gold ISO, Saga zip
 ```
 
