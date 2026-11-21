@@ -919,7 +919,7 @@ static void enum_step(void)
         for (int k = 0; k < d.nreported && !seen; k++) {
             seen = memcmp(d.reported[k], list[i].instance, 16) == 0;
         }
-        static const uint8_t zero[16];
+        static const uint8_t zero[16] = {0};
         if (seen || (memcmp(d.enum_app, zero, 16) && memcmp(d.enum_app, list[i].app, 16))) {
             continue;
         }
@@ -1059,7 +1059,7 @@ static void p_Connect(rc_cpu *c)
     uint32_t ad = RC_ARG(c, 1), host = RC_ARG(c, 2), cdata = RC_ARG(c, 6), csize = RC_ARG(c, 7);
     uint32_t pctx = RC_ARG(c, 8), actx = RC_ARG(c, 9), phandle = RC_ARG(c, 10), flags = RC_ARG(c, 11);
     uint8_t instance[16] = {0};
-    static const uint8_t zero[16];
+    static const uint8_t zero[16] = {0};
     memcpy(instance, rc_ptr(ad + 8), 16);
     addr *ha = addr_of(host);
     comp *hidden = ha ? comp_find(ha, "rc-instance") : NULL;

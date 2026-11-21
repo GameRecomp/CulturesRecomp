@@ -111,7 +111,7 @@ extern const uint32_t rc_program_count;
 #endif
 
 /* Unused here, but the runtime refers to them. */
-const rc_fn_entry rc_lifted_table[1];
+const rc_fn_entry rc_lifted_table[1] = {{0}};
 const uint32_t rc_lifted_count = 0;
 const char *const rc_lifted_modules[] = {0};
 
