@@ -11,6 +11,7 @@
 //! Nothing here touches the file system: the caller reads and writes, so the crate can run in a
 //! browser later as TropicoRecomp's does.
 
+pub mod apk;
 pub mod zip;
 
 use std::io::Write;
@@ -73,6 +74,8 @@ pub struct Template<'a> {
     /// The `data/` directory's path in the zip, ending in `/`.
     pub data: String,
     pub targets: Vec<Target>,
+    /// An Android package: the output is a signed APK, its data under `assets/data/`.
+    pub apk: bool,
 }
 
 /// A target by its name in a template's `targets`.
@@ -105,10 +108,12 @@ pub fn template(bytes: &[u8]) -> Result<Template<'_>, Error> {
     if targets.is_empty() {
         return Err("shell template: no targets".into());
     }
+    let apk = entries.iter().any(|e| e.name == "AndroidManifest.xml");
     Ok(Template {
         entries,
         data,
         targets,
+        apk,
     })
 }
 
@@ -121,45 +126,92 @@ pub struct GameFile<'a> {
 
 /// Write the package: the template's files (but `targets`), `data/code-<target>-<exe>.bin` for
 /// each blob (`blobs`: target, executable's lower-case name, bytes), then the game's files under
-/// `data/game/`. `progress` hears each file written.
+/// `data/game/`. For an Android template the result is an APK signed with `key` (the converter's
+/// built-in one if none), entries aligned as zipalign does, without directory entries, and an
+/// index `files.txt` (a line per file: its size and path; directories end in `/`) that the app
+/// unpacks from on its first start (rc_plat_bundled_data). `progress` hears each file written.
 pub fn package<W: Write>(
     out: W,
     tpl: &Template<'_>,
     blobs: &[(Target, String, Vec<u8>)],
     dirs: &[String],
     files: &mut [GameFile<'_>],
+    key: Option<&apk::ApkKey>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<W, Error> {
     let io = |e: std::io::Error| e.to_string();
-    let mut z = zip::ZipWriter::new(out);
+    if !tpl.apk {
+        let mut z = zip::ZipWriter::new(out);
+        let _ = write_contents(&mut z, tpl, blobs, dirs, files, 1, progress)?;
+        return z.finish().map_err(io);
+    }
+    let builtin;
+    let key = match key {
+        Some(k) => k,
+        None => {
+            builtin = apk::ApkKey::builtin();
+            &builtin
+        }
+    };
+    let mut z = zip::ZipWriter::new(apk::Chunked::new(out));
+    let list = write_contents(&mut z, tpl, blobs, dirs, files, 4, progress)?;
+    z.file_aligned(&format!("{}files.txt", tpl.data), 0o644, list.as_bytes(), 4)
+        .map_err(io)?;
+    apk::finish(z, key).map_err(io)
+}
+
+/// The template's entries, the code and the game's files; returns the APK's index.
+fn write_contents<W: Write>(
+    z: &mut zip::ZipWriter<W>,
+    tpl: &Template<'_>,
+    blobs: &[(Target, String, Vec<u8>)],
+    dirs: &[String],
+    files: &mut [GameFile<'_>],
+    align: u32,
+    progress: &mut dyn FnMut(&str),
+) -> Result<String, Error> {
+    let io = |e: std::io::Error| e.to_string();
+    let apk = align > 1;
     for e in &tpl.entries {
-        if e.name == format!("{}targets", tpl.data) {
+        if e.name == format!("{}targets", tpl.data) || (apk && e.is_dir) {
             continue;
         }
         if e.is_dir {
             z.dir(&e.name).map_err(io)?;
         } else {
-            z.file(&e.name, e.mode, &e.data).map_err(io)?;
+            // Native libraries page-aligned, everything else to 4 bytes, as zipalign does.
+            let a = if apk && e.name.ends_with(".so") {
+                4096
+            } else {
+                align
+            };
+            z.file_aligned(&e.name, e.mode, &e.data, a).map_err(io)?;
         }
     }
+    let mut list = String::new();
     for (t, exe, blob) in blobs {
-        z.file(
-            &format!("{}code-{}-{exe}.bin", tpl.data, t.name()),
-            0o644,
-            blob,
-        )
-        .map_err(io)?;
+        let name = format!("code-{}-{exe}.bin", t.name());
+        z.file_aligned(&format!("{}{name}", tpl.data), 0o644, blob, align)
+            .map_err(io)?;
+        list.push_str(&format!("{} {name}\n", blob.len()));
     }
     let game = format!("{}game/", tpl.data);
-    z.dir(&game).map_err(io)?;
+    if !apk {
+        z.dir(&game).map_err(io)?;
+    }
+    list.push_str("0 game/\n");
     for d in dirs {
-        z.dir(&format!("{game}{d}/")).map_err(io)?;
+        if !apk {
+            z.dir(&format!("{game}{d}/")).map_err(io)?;
+        }
+        list.push_str(&format!("0 game/{d}/\n"));
     }
     for f in files.iter_mut() {
         let data = (f.read)()?;
-        z.file(&format!("{game}{}", f.path), 0o644, &data)
+        z.file_aligned(&format!("{game}{}", f.path), 0o644, &data, align)
             .map_err(io)?;
+        list.push_str(&format!("{} game/{}\n", data.len(), f.path));
         progress(&f.path);
     }
-    z.finish().map_err(io)
+    Ok(list)
 }

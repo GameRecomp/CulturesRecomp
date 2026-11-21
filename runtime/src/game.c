@@ -358,7 +358,22 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     static char data_blob[RC_PATH_MAX], data_game[RC_PATH_MAX];
     const char *base_dir = rc_plat_base_dir();
     static char argv_dir[RC_PATH_MAX];
-    if (!base_dir && argc > 0 && argv[0]) {
+    /* RC_DATA names the folder that holds data/ (for testing); in an AppImage (read-only, mounted
+     * elsewhere) data/ is beside the AppImage file. */
+    const char *appimage = getenv("APPIMAGE");
+    const char *data_env = getenv("RC_DATA");
+    if ((data_env && *data_env) || (appimage && *appimage)) {
+        snprintf(argv_dir, sizeof argv_dir, "%s", data_env && *data_env ? data_env : appimage);
+        if (!(data_env && *data_env)) {
+            char *slash = strrchr(argv_dir, '/');
+            if (slash) {
+                slash[1] = 0;
+            } else {
+                snprintf(argv_dir, sizeof argv_dir, "./");
+            }
+        }
+        base_dir = argv_dir;
+    } else if (!base_dir && argc > 0 && argv[0]) {
         /* (SDL may not know the program's folder before it starts): the folder argv[0] names. */
         snprintf(argv_dir, sizeof argv_dir, "%s", argv[0]);
         char *slash = strrchr(argv_dir, '/');

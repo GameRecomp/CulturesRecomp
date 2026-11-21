@@ -11,6 +11,8 @@ rust-version.workspace = true
 rc-emit-native.workspace = true
 crc32fast = "1"
 miniz_oxide = "0.8"
+sha2 = "0.10"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 
 [lints]
 workspace = true

@@ -110,7 +110,7 @@ pub fn package(
     let f = fs::File::create(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let w = std::io::BufWriter::new(f);
     let n = game_files.len();
-    rc_convert::package(w, &tpl, &blobs, &dirs, &mut game_files, &mut |_| {})?;
+    rc_convert::package(w, &tpl, &blobs, &dirs, &mut game_files, None, &mut |_| {})?;
     println!(
         "package     {id}/{variant}, {n} game files → {}",
         out.display()
