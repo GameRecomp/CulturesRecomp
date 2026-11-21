@@ -12,7 +12,13 @@
 //! browser later as TropicoRecomp's does.
 
 pub mod apk;
+pub mod install;
+pub mod lift;
 pub mod zip;
+
+pub use rc_emit_native;
+pub use rc_manifest;
+pub use rc_media;
 
 use std::io::Write;
 
@@ -139,32 +145,26 @@ pub fn template(bytes: &[u8]) -> Result<Template<'_>, Error> {
     })
 }
 
-/// One game file for a package: its path below the game's folder ('/'-separated) and a way to
-/// read it.
-pub struct GameFile<'a> {
-    pub path: String,
-    pub read: Box<dyn FnMut() -> Result<Vec<u8>, Error> + 'a>,
-}
-
 /// Write the package: the template's files (but `targets`), `data/code-<target>-<exe>.bin` for
 /// each blob (`blobs`: target, executable's lower-case name, bytes), then the game's files under
-/// `data/game/`. For an Android template the result is an APK signed with `key` (the converter's
+/// `data/game/`, which `game` hands to the sink it gets (directories first, then one file after
+/// the other). For an Android template the result is an APK signed with `key` (the converter's
 /// built-in one if none), entries aligned as zipalign does, without directory entries, and an
 /// index `files.txt` (a line per file: its size and path; directories end in `/`) that the app
-/// unpacks from on its first start (rc_plat_bundled_data). `progress` hears each file written.
+/// unpacks from on its first start (rc_plat_bundled_data). `progress` hears the bytes of each
+/// game file written.
 pub fn package<W: Write>(
     out: W,
     tpl: &Template<'_>,
     blobs: &[(Target, String, Vec<u8>)],
-    dirs: &[String],
-    files: &mut [GameFile<'_>],
+    game: &mut dyn FnMut(&mut dyn rc_media::Sink) -> Result<(), Error>,
     key: Option<&apk::ApkKey>,
-    progress: &mut dyn FnMut(&str),
+    progress: &mut dyn FnMut(u64),
 ) -> Result<W, Error> {
     let io = |e: std::io::Error| e.to_string();
     if !tpl.apk {
         let mut z = zip::ZipWriter::new(out);
-        let _ = write_contents(&mut z, tpl, blobs, dirs, files, 1, progress)?;
+        write_contents(&mut z, tpl, blobs, game, 1, progress)?;
         return z.finish().map_err(io);
     }
     let builtin;
@@ -176,10 +176,62 @@ pub fn package<W: Write>(
         }
     };
     let mut z = zip::ZipWriter::new(apk::Chunked::new(out));
-    let list = write_contents(&mut z, tpl, blobs, dirs, files, 4, progress)?;
+    let list = write_contents(&mut z, tpl, blobs, game, 4, progress)?;
     z.file_aligned(&format!("{}files.txt", tpl.data), 0o644, list.as_bytes(), 4)
         .map_err(io)?;
     apk::finish(z, key).map_err(io)
+}
+
+/// The game's files into the zip below `prefix`, each collected whole first (the zip writer
+/// needs its size and CRC up front); the APK's index on the side.
+struct ZipSink<'z, 'p, W: Write> {
+    z: &'z mut zip::ZipWriter<W>,
+    prefix: String,
+    align: u32,
+    path: String,
+    data: Vec<u8>,
+    list: String,
+    progress: &'p mut dyn FnMut(u64),
+}
+
+fn media_err(e: std::io::Error) -> rc_media::Error {
+    rc_media::Error::Io(e)
+}
+
+impl<W: Write> rc_media::Sink for ZipSink<'_, '_, W> {
+    fn dir(&mut self, path: &str) -> rc_media::Result<()> {
+        if self.align == 1 {
+            self.z
+                .dir(&format!("{}{path}/", self.prefix))
+                .map_err(media_err)?;
+        }
+        self.list.push_str(&format!("0 game/{path}/\n"));
+        Ok(())
+    }
+    fn begin(&mut self, path: &str, size: u64) -> rc_media::Result<()> {
+        self.path = path.to_string();
+        self.data.clear();
+        self.data.reserve(size as usize);
+        Ok(())
+    }
+    fn write(&mut self, data: &[u8]) -> rc_media::Result<()> {
+        self.data.extend_from_slice(data);
+        Ok(())
+    }
+    fn end(&mut self) -> rc_media::Result<()> {
+        self.z
+            .file_aligned(
+                &format!("{}{}", self.prefix, self.path),
+                0o644,
+                &self.data,
+                self.align,
+            )
+            .map_err(media_err)?;
+        self.list
+            .push_str(&format!("{} game/{}\n", self.data.len(), self.path));
+        (self.progress)(self.data.len() as u64);
+        Ok(())
+    }
 }
 
 /// The template's entries, the code and the game's files; returns the APK's index.
@@ -187,10 +239,9 @@ fn write_contents<W: Write>(
     z: &mut zip::ZipWriter<W>,
     tpl: &Template<'_>,
     blobs: &[(Target, String, Vec<u8>)],
-    dirs: &[String],
-    files: &mut [GameFile<'_>],
+    game: &mut dyn FnMut(&mut dyn rc_media::Sink) -> Result<(), Error>,
     align: u32,
-    progress: &mut dyn FnMut(&str),
+    progress: &mut dyn FnMut(u64),
 ) -> Result<String, Error> {
     let io = |e: std::io::Error| e.to_string();
     let apk = align > 1;
@@ -217,23 +268,53 @@ fn write_contents<W: Write>(
             .map_err(io)?;
         list.push_str(&format!("{} {name}\n", blob.len()));
     }
-    let game = format!("{}game/", tpl.data);
+    let prefix = format!("{}game/", tpl.data);
     if !apk {
-        z.dir(&game).map_err(io)?;
+        z.dir(&prefix).map_err(io)?;
     }
     list.push_str("0 game/\n");
-    for d in dirs {
-        if !apk {
-            z.dir(&format!("{game}{d}/")).map_err(io)?;
+    let mut sink = ZipSink {
+        z,
+        prefix,
+        align,
+        path: String::new(),
+        data: Vec::new(),
+        list,
+        progress,
+    };
+    game(&mut sink)?;
+    Ok(sink.list)
+}
+
+/// The game's files of an installed folder into `sink`, sorted, directories first in each.
+pub fn folder_files(root: &std::path::Path, sink: &mut dyn rc_media::Sink) -> Result<(), Error> {
+    fn walk(root: &std::path::Path, rel: &str, sink: &mut dyn rc_media::Sink) -> Result<(), Error> {
+        let dir = root.join(rel);
+        let mut entries: Vec<_> = std::fs::read_dir(&dir)
+            .map_err(|e| format!("{}: {e}", dir.display()))?
+            .filter_map(Result::ok)
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let path = if rel.is_empty() {
+                name
+            } else {
+                format!("{rel}/{name}")
+            };
+            if e.path().is_dir() {
+                sink.dir(&path).map_err(|e| e.to_string())?;
+                walk(root, &path, sink)?;
+            } else {
+                let data =
+                    std::fs::read(e.path()).map_err(|x| format!("{}: {x}", e.path().display()))?;
+                let err = |e: rc_media::Error| e.to_string();
+                sink.begin(&path, data.len() as u64).map_err(err)?;
+                sink.write(&data).map_err(err)?;
+                sink.end().map_err(err)?;
+            }
         }
-        list.push_str(&format!("0 game/{d}/\n"));
+        Ok(())
     }
-    for f in files.iter_mut() {
-        let data = (f.read)()?;
-        z.file_aligned(&format!("{game}{}", f.path), 0o644, &data, align)
-            .map_err(io)?;
-        list.push_str(&format!("{} game/{}\n", data.len(), f.path));
-        progress(&f.path);
-    }
-    Ok(list)
+    walk(root, "", sink)
 }

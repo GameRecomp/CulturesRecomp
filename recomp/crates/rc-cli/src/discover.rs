@@ -2,8 +2,7 @@
 //! `recomp discover` and `recomp codediff`: code discovery on one binary, and a function-level
 //! comparison of two builds.
 
-use rc_discover::{CodeMap, Image, Options};
-use rc_manifest::{Binary, Manifest};
+use rc_manifest::Manifest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -17,59 +16,15 @@ pub struct DiscoverOpts<'a> {
     pub no_relocs: bool,
 }
 
-/// A binary as the manifest knows it.
-pub(crate) struct Known {
-    pub game: String,
-    pub binary: Binary,
-}
+pub(crate) use rc_convert::lift::{Known, Loaded};
 
-/// A binary as the manifests know it. One build can belong to several games (Cultures 2 ships
-/// the German Cultures 1 `binkw32.dll`): then the game whose id names a directory of the file's
-/// path (`orig/<game>/<variant>/`) wins, else the first.
+/// A binary as the manifests know it; of several games the one whose id names a directory of the
+/// file's path (`orig/<game>/<variant>/`).
 fn find(manifests: &[Manifest], sha256: &str, file: &Path) -> Option<Known> {
-    let hits: Vec<Known> = manifests
-        .iter()
-        .flat_map(|m| {
-            m.binaries
-                .iter()
-                .filter(|b| b.sha256 == sha256)
-                .map(|b| Known {
-                    game: m.game.id.clone(),
-                    binary: b.clone(),
-                })
-        })
-        .collect();
-    let in_path = |k: &Known| {
-        file.ancestors().any(|a| {
-            a.file_name()
-                .is_some_and(|n| n.eq_ignore_ascii_case(k.game.as_str()))
-        })
-    };
-    let pick = hits.iter().position(in_path).unwrap_or(0);
-    hits.into_iter().nth(pick)
-}
-
-fn options(known: Option<&Known>) -> Options {
-    let mut o = Options::default();
-    if let Some(h) = known.and_then(|k| k.binary.discover.as_ref()) {
-        o.seeds = h.seeds.clone();
-        o.no_return = h.no_return.clone();
-        o.returns = h.returns.clone();
-        o.data = h.data.iter().map(|r| (r.start, r.end)).collect();
-        o.jump_tables = h
-            .jump_tables
-            .iter()
-            .map(|t| (t.at, t.table, t.count))
-            .collect();
-    }
-    o
-}
-
-pub(crate) struct Loaded {
-    pub image: Image,
-    pub map: CodeMap,
-    pub known: Option<Known>,
-    pub sha256: String,
+    rc_convert::lift::find(manifests, sha256, &|game| {
+        file.ancestors()
+            .any(|a| a.file_name().is_some_and(|n| n.eq_ignore_ascii_case(game)))
+    })
 }
 
 pub(crate) fn load(
@@ -82,30 +37,11 @@ pub(crate) fn load(
     let sha256 = rc_manifest::sha256_hex(&data);
     let manifests = rc_manifest::load_dir(games).map_err(|e| e.to_string())?;
     let known = find(&manifests, &sha256, file);
-    let pe = rc_pe::parse(&data).map_err(|e| format!("{}: {e}", file.display()))?;
-    let base = base.or(known.as_ref().and_then(|k| k.binary.base));
-    let mut image =
-        Image::load(&data, &pe, base).map_err(|e| format!("{}: {e}", file.display()))?;
-    // The game project's code patches change the bytes before anything looks at them.
-    if let Some(k) = &known {
-        for c in &k.binary.patch.code {
-            let (from, to) = c.bytes()?;
-            image.patch(c.at, &from, &to)?;
-        }
-    }
     let name = file
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    let name = known.as_ref().map_or(name, |k| k.binary.name.clone());
-    let mut opts = options(known.as_ref());
-    opts.use_relocs = use_relocs;
-    let map = rc_discover::discover(&image, &opts, &name, &sha256);
-    Ok(Loaded {
-        image,
-        map,
-        known,
-        sha256,
-    })
+    rc_convert::lift::load(&data, &name, known, base, use_relocs)
+        .map_err(|e| format!("{}: {e}", file.display()))
 }
 
 /// `generated/<game>/<binary>-<variant>/` next to the `games/` directory.

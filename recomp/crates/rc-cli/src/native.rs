@@ -9,10 +9,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use rc_emit_native::{Compiled, Compiler, Options, Target};
-use rc_manifest::{Role, Treatment};
 
 use crate::discover::{default_out, load};
-use crate::lift::{apply_patches, lift_map};
 
 /// A target by name: `host`, or one of rc-emit-native's (`x86_64-sysv`, `x86_64-windows`,
 /// `arm64-linux`, `arm64-apple`).
@@ -31,12 +29,7 @@ pub fn target(name: &str) -> Result<Target, String> {
     .ok_or_else(|| format!("unknown target {name:?}"))
 }
 
-/// The functions of one executable and the DLLs lifted with it, patched; the DLLs by name, with
-/// `@base` when the manifest rebases them (process.c loads them there).
-pub struct Program {
-    pub functions: Vec<rc_ir::Function>,
-    pub modules: Vec<String>,
-}
+pub use rc_convert::lift::Program;
 
 /// Compile `p` for `target` into a blob, on as many threads as the machine has.
 pub fn compile(target: Target, p: &Program) -> Result<Vec<u8>, String> {
@@ -70,57 +63,64 @@ pub fn compile(target: Target, p: &Program) -> Result<Vec<u8>, String> {
 }
 
 /// The programs of `files` (an install's lifted binaries): one per executable that is not a
-/// multiplayer build, each with all the DLLs lifted with it.
+/// multiplayer build, each with all the DLLs lifted with it, beside the executable's loaded file.
 pub fn programs(
     games: &Path,
     files: &[PathBuf],
 ) -> Result<Vec<(crate::discover::Loaded, Program)>, String> {
-    let mut exes = Vec::new();
-    let mut dlls = Vec::new();
-    for file in files {
-        let l = load(file, games, None, true)?;
-        let Some(k) = l.known.as_ref() else {
-            return Err(format!("{}: not in any manifest", file.display()));
-        };
-        if k.binary.treatment == Treatment::Ignore || matches!(k.binary.role, Role::Multiplayer) {
-            continue;
-        }
-        if matches!(k.binary.role, Role::Library) {
-            dlls.push(l);
-        } else {
-            exes.push(l);
-        }
+    let loaded = files
+        .iter()
+        .map(|f| load(f, games, None, true))
+        .collect::<Result<Vec<_>, _>>()?;
+    let progs = rc_convert::lift::programs(&loaded)?;
+    let mut loaded: Vec<Option<crate::discover::Loaded>> = loaded.into_iter().map(Some).collect();
+    progs
+        .into_iter()
+        .map(|p| {
+            let l = loaded
+                .iter_mut()
+                .find(|l| {
+                    l.as_ref()
+                        .and_then(|l| l.known.as_ref())
+                        .is_some_and(|k| k.binary.name == p.exe)
+                })
+                .and_then(Option::take)
+                .ok_or_else(|| format!("{}: not loaded", p.exe))?;
+            Ok((l, p))
+        })
+        .collect()
+}
+
+/// Compile `p` to the web shell's WebAssembly module (rc-emit-wasm), on as many threads as the
+/// machine has.
+pub fn compile_wasm(p: &Program) -> Result<Vec<u8>, String> {
+    let addrs: BTreeSet<u32> = p.functions.iter().map(|f| f.addr).collect();
+    let compiler = rc_emit_wasm::Compiler::new(&addrs, rc_emit_wasm::Options::default());
+    let n = p.functions.len();
+    let threads = std::thread::available_parallelism().map_or(1, |t| t.get());
+    let chunk = n.div_ceil(threads).max(1);
+    let parts: Vec<Result<Vec<rc_emit_wasm::Compiled>, String>> = std::thread::scope(|s| {
+        let hs: Vec<_> = (0..n)
+            .step_by(chunk)
+            .map(|a| {
+                let (compiler, funcs) = (&compiler, &p.functions);
+                s.spawn(move || {
+                    funcs[a..(a + chunk).min(n)]
+                        .iter()
+                        .map(|f| compiler.compile(f).map_err(|e| e.to_string()))
+                        .collect::<Result<Vec<_>, _>>()
+                })
+            })
+            .collect();
+        hs.into_iter()
+            .map(|h| h.join().unwrap_or_else(|_| Err("a worker panicked".into())))
+            .collect()
+    });
+    let mut all = Vec::with_capacity(n);
+    for part in parts {
+        all.extend(part?);
     }
-    let mut dll_functions = Vec::new();
-    let mut modules = Vec::new();
-    for l in &dlls {
-        let k = l.known.as_ref().expect("known");
-        let mut lifted = lift_map(l);
-        apply_patches(&mut lifted.functions, &k.binary.patch)?;
-        dll_functions.extend(lifted.functions);
-        modules.push(match k.binary.base {
-            Some(b) => format!("{}@{b:x}", k.binary.name),
-            None => k.binary.name.clone(),
-        });
-    }
-    let mut out = Vec::new();
-    for l in exes {
-        let k = l.known.as_ref().expect("known");
-        let mut lifted = lift_map(&l);
-        apply_patches(&mut lifted.functions, &k.binary.patch)?;
-        let mut functions = lifted.functions;
-        functions.extend(dll_functions.iter().cloned());
-        functions.sort_by_key(|f| f.addr);
-        functions.dedup_by_key(|f| f.addr);
-        out.push((
-            l,
-            Program {
-                functions,
-                modules: modules.clone(),
-            },
-        ));
-    }
-    Ok(out)
+    rc_emit_wasm::link(&all, &p.modules).map_err(|e| e.to_string())
 }
 
 pub fn lift_native(
@@ -129,8 +129,11 @@ pub fn lift_native(
     targets: &[String],
     out: Option<&Path>,
 ) -> Result<ExitCode, String> {
+    // `wasm`: the web shell's module, code-wasm.wasm.
+    let wasm = targets.iter().any(|t| t == "wasm");
     let targets: Vec<Target> = targets
         .iter()
+        .filter(|t| *t != "wasm")
         .map(|t| target(t))
         .collect::<Result<_, _>>()?;
     let files = crate::lift::expand(games, paths)?;
@@ -148,6 +151,19 @@ pub fn lift_native(
             }
         };
         fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        if wasm {
+            let module = compile_wasm(&p)?;
+            let path = dir.join("code-wasm.wasm");
+            fs::write(&path, &module).map_err(|e| format!("{}: {e}", path.display()))?;
+            println!(
+                "wasm        {} + {} DLLs, {} functions → {} ({:.1} MB)",
+                k.binary.name,
+                p.modules.len(),
+                p.functions.len(),
+                path.display(),
+                module.len() as f64 / 1e6
+            );
+        }
         for &t in &targets {
             let blob = compile(t, &p)?;
             let path = dir.join(format!("code-{}.bin", t.name()));

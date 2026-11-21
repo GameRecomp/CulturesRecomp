@@ -16,7 +16,7 @@
 //!   ranges of the decompressed chunk. Executables may be stored with Inno's x86
 //!   call-instruction filter, which is reversed here. Every file is SHA-1 checked.
 
-use crate::{format_err, Archive, Entry, Error, Result, SubReader};
+use crate::{format_err, Archive, DirSink, Entry, Error, ReadSeek, Result, Sink, SubReader};
 use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -60,7 +60,7 @@ pub struct SetupInfo {
 }
 
 pub struct Installer {
-    file: File,
+    file: Box<dyn ReadSeek>,
     data_offset: u64,
     info: SetupInfo,
     entries: Vec<Entry>,
@@ -180,7 +180,11 @@ struct Counts {
 
 impl Installer {
     pub fn open(path: &Path) -> Result<Self> {
-        let mut file = File::open(path)?;
+        Self::from_reader(Box::new(File::open(path)?))
+    }
+
+    /// The installer read from `file` (in a browser: the chosen file, read in pieces).
+    pub fn from_reader(mut file: Box<dyn ReadSeek>) -> Result<Self> {
         let (header_offset, data_offset) = find_offset_table(&mut file)?;
         if data_offset == 0 {
             return Err(Error::Unsupported(
@@ -279,7 +283,7 @@ impl Installer {
         &mut self,
         chunk_offset: u32,
         wanted: &[(usize, Vec<usize>)], // (data entry, entry indices)
-        dest: &Path,
+        sink: &mut dyn Sink,
     ) -> Result<()> {
         let first = &self.data[wanted[0].0];
         if first.first_slice != 0 {
@@ -302,23 +306,24 @@ impl Installer {
         let mut targets = Vec::new();
         for (d, idx) in wanted {
             let de = &self.data[*d];
-            let mut sinks = Vec::new();
+            let mut paths = Vec::new();
             for &i in idx {
-                sinks.push(std::io::BufWriter::new(crate::create_output(
-                    dest,
-                    &self.entries[i].path,
-                )?));
+                crate::safe_relative(&self.entries[i].path)?;
+                paths.push(self.entries[i].path.clone());
             }
+            let filtered = de.flags & DATA_FLAG_CALL_FILTER != 0;
             targets.push(Target {
                 start: de.file_offset,
                 end: de.file_offset + de.file_size,
-                filtered: de.flags & DATA_FLAG_CALL_FILTER != 0,
+                // Kept whole when the filter needs look-ahead or the data goes to more files.
+                in_memory: filtered || paths.len() > 1,
+                filtered,
                 mem: Vec::new(),
                 hasher: Sha1::new(),
                 fed: 0,
                 sha1: de.sha1,
-                sinks,
-                name: self.entries[idx[0]].path.clone(),
+                paths,
+                begun: false,
             });
         }
         targets.sort_by_key(|t| t.start);
@@ -329,6 +334,8 @@ impl Installer {
             pos: 0,
             targets,
             first: 0,
+            sink,
+            error: None,
         };
         let method = if compressed {
             self.info.compression
@@ -355,8 +362,12 @@ impl Installer {
                 )))
             }
         }
-        for t in router.targets {
-            t.finish()?;
+        if let Some(e) = router.error.take() {
+            return Err(e);
+        }
+        let Router { targets, sink, .. } = router;
+        for t in targets {
+            t.finish(sink)?;
         }
         Ok(())
     }
@@ -376,7 +387,18 @@ impl Archive for Installer {
     }
 
     fn extract(&mut self, dest: &Path, select: &dyn Fn(&Entry) -> bool) -> Result<usize> {
-        crate::create_dirs(dest, &self.directories)?;
+        self.extract_to(&mut DirSink::new(dest), select)
+    }
+
+    fn extract_to(
+        &mut self,
+        sink: &mut dyn Sink,
+        select: &dyn Fn(&Entry) -> bool,
+    ) -> Result<usize> {
+        for d in &self.directories {
+            crate::safe_relative(d)?;
+            sink.dir(d)?;
+        }
         // Group the selected entries by chunk, then by data entry, so each chunk is
         // decompressed once and identical data is written to all its destinations.
         let mut by_chunk: BTreeMap<u32, BTreeMap<usize, Vec<usize>>> = BTreeMap::new();
@@ -396,7 +418,7 @@ impl Archive for Installer {
         }
         for (chunk, files) in by_chunk {
             let wanted: Vec<(usize, Vec<usize>)> = files.into_iter().collect();
-            self.extract_chunk(chunk, &wanted, dest)?;
+            self.extract_chunk(chunk, &wanted, sink)?;
         }
         Ok(n)
     }
@@ -406,64 +428,82 @@ struct Target {
     start: u64,
     end: u64,
     filtered: bool,
-    /// Whole file, only for filtered files (the filter needs look-ahead; they are small).
+    in_memory: bool,
+    /// The whole file when `in_memory`.
     mem: Vec<u8>,
     hasher: Sha1,
     fed: u64,
     sha1: [u8; 20],
-    sinks: Vec<std::io::BufWriter<File>>,
-    name: String,
+    /// Where the data goes (more than one when the installer stores identical files once).
+    paths: Vec<String>,
+    begun: bool,
 }
 
 impl Target {
-    fn feed(&mut self, b: &[u8]) -> std::io::Result<()> {
+    fn feed(&mut self, b: &[u8], sink: &mut dyn Sink) -> Result<()> {
         self.fed += b.len() as u64;
-        if self.filtered {
+        if self.in_memory {
             self.mem.extend_from_slice(b);
             return Ok(());
         }
+        if !self.begun {
+            sink.begin(&self.paths[0], self.end - self.start)?;
+            self.begun = true;
+        }
         self.hasher.update(b);
-        for s in &mut self.sinks {
-            s.write_all(b)?;
+        sink.write(b)?;
+        // Done once its last byte is in: the next file follows.
+        if self.fed == self.end - self.start {
+            sink.end()?;
         }
         Ok(())
     }
 
-    fn finish(mut self) -> Result<()> {
+    fn finish(mut self, sink: &mut dyn Sink) -> Result<()> {
         if self.fed != self.end - self.start {
             return Err(Error::Checksum(format!(
                 "{}: got {} of {} bytes",
-                self.name,
+                self.paths[0],
                 self.fed,
                 self.end - self.start
             )));
         }
-        if self.filtered {
-            unfilter_calls(&mut self.mem);
-            self.hasher.update(&self.mem);
-            for s in &mut self.sinks {
-                s.write_all(&self.mem)?;
+        if self.in_memory {
+            if self.filtered {
+                unfilter_calls(&mut self.mem);
             }
+            self.hasher.update(&self.mem);
         }
         let digest: [u8; 20] = self.hasher.finalize().into();
         if digest != self.sha1 {
-            return Err(Error::Checksum(format!("{}: SHA-1", self.name)));
+            return Err(Error::Checksum(format!("{}: SHA-1", self.paths[0])));
         }
-        for s in &mut self.sinks {
-            s.flush()?;
+        if self.in_memory {
+            for p in &self.paths {
+                sink.begin(p, self.mem.len() as u64)?;
+                sink.write(&self.mem)?;
+                sink.end()?;
+            }
+        } else if !self.begun {
+            // an empty file
+            sink.begin(&self.paths[0], 0)?;
+            sink.end()?;
         }
         Ok(())
     }
 }
 
 /// Write sink over a decompressed chunk that hands each file its byte range.
-struct Router {
+struct Router<'s> {
     pos: u64,
     targets: Vec<Target>,
     first: usize,
+    sink: &'s mut dyn Sink,
+    /// The sink's error (Write can only carry an io::Error).
+    error: Option<Error>,
 }
 
-impl Write for Router {
+impl Write for Router<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let (lo, hi) = (self.pos, self.pos + buf.len() as u64);
         while self.first < self.targets.len() && self.targets[self.first].end <= lo {
@@ -476,7 +516,10 @@ impl Write for Router {
             let s = t.start.max(lo);
             let e = t.end.min(hi);
             if s < e {
-                t.feed(&buf[(s - lo) as usize..(e - lo) as usize])?;
+                if let Err(e) = t.feed(&buf[(s - lo) as usize..(e - lo) as usize], self.sink) {
+                    self.error = Some(e);
+                    return Err(std::io::Error::other("sink"));
+                }
             }
         }
         self.pos = hi;
@@ -568,7 +611,7 @@ fn strip_app(dest: &str) -> Option<&str> {
 }
 
 /// Locate the setup loader's offset table. Returns (setup-0 offset, setup-1 offset).
-fn find_offset_table(f: &mut File) -> Result<(u64, u64)> {
+fn find_offset_table(f: &mut dyn ReadSeek) -> Result<(u64, u64)> {
     let mut head = Vec::new();
     f.seek(SeekFrom::Start(0))?;
     f.take(16 << 20).read_to_end(&mut head)?;

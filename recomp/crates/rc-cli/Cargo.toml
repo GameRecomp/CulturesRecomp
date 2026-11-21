@@ -21,6 +21,7 @@ rc-ir.workspace = true
 rc-x86.workspace = true
 rc-emit-c.workspace = true
 rc-emit-native.workspace = true
+rc-emit-wasm.workspace = true
 rc-convert.workspace = true
 serde_json.workspace = true
 

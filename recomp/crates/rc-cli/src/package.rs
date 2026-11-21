@@ -3,7 +3,7 @@
 //! TropicoRecomp's converter makes them.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
 use crate::native::{compile, programs};
@@ -19,35 +19,6 @@ pub fn template(game: &str, system: &str, shell: &Path, out: &Path) -> Result<Ex
     fs::write(out, zip).map_err(|e| format!("{}: {e}", out.display()))?;
     println!("template    {game} for {system}: {}", out.display());
     Ok(ExitCode::SUCCESS)
-}
-
-/// Every directory and file below `root`, '/'-separated, sorted.
-fn walk(
-    root: &Path,
-    rel: &str,
-    dirs: &mut Vec<String>,
-    files: &mut Vec<(String, PathBuf)>,
-) -> Result<(), String> {
-    let mut entries: Vec<_> = fs::read_dir(root.join(rel))
-        .map_err(|e| format!("{}: {e}", root.join(rel).display()))?
-        .filter_map(Result::ok)
-        .collect();
-    entries.sort_by_key(|e| e.file_name());
-    for e in entries {
-        let name = e.file_name().to_string_lossy().into_owned();
-        let path = if rel.is_empty() {
-            name
-        } else {
-            format!("{rel}/{name}")
-        };
-        if e.path().is_dir() {
-            dirs.push(path.clone());
-            walk(root, &path, dirs, files)?;
-        } else {
-            files.push((path, e.path()));
-        }
-    }
-    Ok(())
 }
 
 /// `recomp package --template T.zip [-o OUT.zip] INSTALL`: the install's programs compiled for the
@@ -81,16 +52,6 @@ pub fn package(
             blobs.push((t, exe.clone(), blob));
         }
     }
-    let mut dirs = Vec::new();
-    let mut list = Vec::new();
-    walk(install, "", &mut dirs, &mut list)?;
-    let mut game_files: Vec<rc_convert::GameFile> = list
-        .iter()
-        .map(|(rel, path)| rc_convert::GameFile {
-            path: rel.clone(),
-            read: Box::new(move || fs::read(path).map_err(|e| format!("{}: {e}", path.display()))),
-        })
-        .collect();
     let out = match out {
         Some(o) => o.to_path_buf(),
         None => {
@@ -101,16 +62,24 @@ pub fn package(
                 .join(&id);
             fs::create_dir_all(&d).map_err(|e| format!("{}: {e}", d.display()))?;
             d.join(format!(
-                "{}-{variant}-{}.zip",
+                "{}-{variant}-{}.{}",
                 rc_convert::stem(&id),
-                tpl.targets[0].name()
+                tpl.targets[0].name(),
+                if tpl.apk { "apk" } else { "zip" }
             ))
         }
     };
     let f = fs::File::create(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let w = std::io::BufWriter::new(f);
-    let n = game_files.len();
-    rc_convert::package(w, &tpl, &blobs, &dirs, &mut game_files, None, &mut |_| {})?;
+    let mut n = 0;
+    rc_convert::package(
+        w,
+        &tpl,
+        &blobs,
+        &mut |sink| rc_convert::folder_files(install, sink),
+        None,
+        &mut |_| n += 1,
+    )?;
     println!(
         "package     {id}/{variant}, {n} game files → {}",
         out.display()

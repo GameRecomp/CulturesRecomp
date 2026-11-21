@@ -82,6 +82,19 @@ pub trait Archive {
     /// Returns the number of files written.
     fn extract(&mut self, dest: &Path, select: &dyn Fn(&Entry) -> bool) -> Result<usize>;
 
+    /// Extract every entry for which `select` returns true to `sink`, one file after the other
+    /// (the directories first). Returns the number of files written.
+    fn extract_to(
+        &mut self,
+        sink: &mut dyn Sink,
+        select: &dyn Fn(&Entry) -> bool,
+    ) -> Result<usize> {
+        let _ = (sink, select);
+        Err(Error::Unsupported(
+            "extracting this medium to a sink".into(),
+        ))
+    }
+
     /// The registry entries the installer writes (only Inno installers have them).
     fn registry(&self) -> &[inno::RegistryEntry] {
         &[]
@@ -243,6 +256,53 @@ impl<R: Read + Seek> Seek for SubReader<R> {
                 "seek before start",
             )),
         }
+    }
+}
+
+/// Where extracted files go, one after the other: `begin`, its bytes in `write`s, `end`. Paths are
+/// relative to the install directory, `/`-separated and already checked (`safe_relative`).
+pub trait Sink {
+    fn dir(&mut self, path: &str) -> Result<()>;
+    fn begin(&mut self, path: &str, size: u64) -> Result<()>;
+    fn write(&mut self, data: &[u8]) -> Result<()>;
+    fn end(&mut self) -> Result<()>;
+}
+
+/// A sink that writes below a directory.
+pub struct DirSink<'a> {
+    pub dest: &'a Path,
+    current: Option<io::BufWriter<fs::File>>,
+}
+
+impl<'a> DirSink<'a> {
+    pub fn new(dest: &'a Path) -> Self {
+        DirSink {
+            dest,
+            current: None,
+        }
+    }
+}
+
+impl Sink for DirSink<'_> {
+    fn dir(&mut self, path: &str) -> Result<()> {
+        fs::create_dir_all(self.dest.join(safe_relative(path)?))?;
+        Ok(())
+    }
+    fn begin(&mut self, path: &str, _size: u64) -> Result<()> {
+        self.current = Some(io::BufWriter::new(create_output(self.dest, path)?));
+        Ok(())
+    }
+    fn write(&mut self, data: &[u8]) -> Result<()> {
+        match &mut self.current {
+            Some(w) => Ok(w.write_all(data)?),
+            None => format_err("sink: write outside a file"),
+        }
+    }
+    fn end(&mut self) -> Result<()> {
+        if let Some(mut w) = self.current.take() {
+            w.flush()?;
+        }
+        Ok(())
     }
 }
 
