@@ -275,7 +275,7 @@ static uint32_t wasm_table_base;
 EMSCRIPTEN_KEEPALIVE const uint32_t *rc_wasm_helpers(void)
 {
     /* Function pointers are table slots: the module imports these. */
-    static uint32_t slots[7];
+    static uint32_t slots[8];
     slots[0] = (uint32_t)(uintptr_t)h_dispatch;
     slots[1] = (uint32_t)(uintptr_t)h_trap;
     slots[2] = (uint32_t)(uintptr_t)h_cpuid;
@@ -283,6 +283,7 @@ EMSCRIPTEN_KEEPALIVE const uint32_t *rc_wasm_helpers(void)
     slots[4] = (uint32_t)(uintptr_t)h_fpu;
     slots[5] = (uint32_t)(uintptr_t)h_fstsw;
     slots[6] = (uint32_t)(uintptr_t)h_point;
+    slots[7] = (uint32_t)(uintptr_t)h_mmx;
     return slots;
 }
 
