@@ -69,26 +69,20 @@ pub fn compile(target: Target, p: &Program) -> Result<Vec<u8>, String> {
     rc_emit_native::link(target, &all, &p.modules).map_err(|e| e.to_string())
 }
 
-pub fn lift_native(
+/// The programs of `files` (an install's lifted binaries): one per executable that is not a
+/// multiplayer build, each with all the DLLs lifted with it.
+pub fn programs(
     games: &Path,
-    paths: &[PathBuf],
-    targets: &[String],
-    out: Option<&Path>,
-) -> Result<ExitCode, String> {
-    let targets: Vec<Target> = targets
-        .iter()
-        .map(|t| target(t))
-        .collect::<Result<_, _>>()?;
-    let files = crate::lift::expand(games, paths)?;
-    // The executables (each its own program) and the DLLs every one of them loads.
+    files: &[PathBuf],
+) -> Result<Vec<(crate::discover::Loaded, Program)>, String> {
     let mut exes = Vec::new();
     let mut dlls = Vec::new();
-    for file in &files {
+    for file in files {
         let l = load(file, games, None, true)?;
         let Some(k) = l.known.as_ref() else {
             return Err(format!("{}: not in any manifest", file.display()));
         };
-        if k.binary.treatment == Treatment::Ignore {
+        if k.binary.treatment == Treatment::Ignore || matches!(k.binary.role, Role::Multiplayer) {
             continue;
         }
         if matches!(k.binary.role, Role::Library) {
@@ -109,18 +103,40 @@ pub fn lift_native(
             None => k.binary.name.clone(),
         });
     }
-    for l in &exes {
+    let mut out = Vec::new();
+    for l in exes {
         let k = l.known.as_ref().expect("known");
-        let mut lifted = lift_map(l);
+        let mut lifted = lift_map(&l);
         apply_patches(&mut lifted.functions, &k.binary.patch)?;
         let mut functions = lifted.functions;
         functions.extend(dll_functions.iter().cloned());
         functions.sort_by_key(|f| f.addr);
         functions.dedup_by_key(|f| f.addr);
-        let p = Program {
-            functions,
-            modules: modules.clone(),
-        };
+        out.push((
+            l,
+            Program {
+                functions,
+                modules: modules.clone(),
+            },
+        ));
+    }
+    Ok(out)
+}
+
+pub fn lift_native(
+    games: &Path,
+    paths: &[PathBuf],
+    targets: &[String],
+    out: Option<&Path>,
+) -> Result<ExitCode, String> {
+    let targets: Vec<Target> = targets
+        .iter()
+        .map(|t| target(t))
+        .collect::<Result<_, _>>()?;
+    let files = crate::lift::expand(games, paths)?;
+    for (l, p) in programs(games, &files)? {
+        let l = &l;
+        let k = l.known.as_ref().expect("known");
         let dir = match out {
             Some(d) => d.to_path_buf(),
             None => {

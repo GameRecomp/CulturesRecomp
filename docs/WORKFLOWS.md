@@ -141,6 +141,18 @@ RC_NATIVE=generated/cultures1/native/cultures.exe-gog-en/code-x86_64-sysv.bin \
     build/dev/games/cultures1/cultures-cultures1 --game-dir orig/cultures1/gog-en
 ```
 
+Packages that run without a compiler, as TropicoRecomp's converter makes them: a shell (the game's
+program built without lifted code) is made into a template, and `recomp package` puts the install's
+native code (`data/code-<target>-<exe>.bin`) and its files (`data/game/`) beside it:
+
+```sh
+recomp template --game cultures1 --system linux --shell <shell>/cultures-cultures1 --out Cultures-linux-template.zip
+recomp package --template Cultures-linux-template.zip orig/cultures1/gog-en   # → out/cultures1/Cultures-gog-en-x86_64-sysv.zip
+```
+
+Unpacked, `Cultures/cultures-cultures1` runs the game from `Cultures/data/`. A shell is built with
+`-DRC_AUTO_LIFT=OFF` and an empty `RC_GENERATED_DIR` (and SDL3).
+
 The difftest runs every instruction form through both back ends. A DLL the manifest rebases is named
 `file@base` in the blob (process.c loads it there). This is the base of the converter's packages for
 people without a compiler (M14), as in TropicoRecomp.

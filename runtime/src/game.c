@@ -353,6 +353,42 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
             return RC_EXIT_USAGE;
         }
     }
+    /* A converted package (recomp package): the shell, without lifted code, beside data/ with
+     * the native code for this machine and the game's files in data/game. */
+    static char data_blob[RC_PATH_MAX], data_game[RC_PATH_MAX];
+    const char *base_dir = rc_plat_base_dir();
+    static char argv_dir[RC_PATH_MAX];
+    if (!base_dir && argc > 0 && argv[0]) {
+        /* (SDL may not know the program's folder before it starts): the folder argv[0] names. */
+        snprintf(argv_dir, sizeof argv_dir, "%s", argv[0]);
+        char *slash = strrchr(argv_dir, '/');
+        char *back = strrchr(argv_dir, '\\');
+        if (back && (!slash || back > slash)) {
+            slash = back;
+        }
+        if (slash) {
+            slash[1] = 0;
+        } else {
+            snprintf(argv_dir, sizeof argv_dir, "./");
+        }
+        base_dir = argv_dir;
+    }
+    bool packaged = false;
+    if ((!generated || generated->count == 0) && base_dir && !getenv("RC_NATIVE")) {
+        char rel[96];
+        snprintf(rel, sizeof rel, "data/code-%s.bin", rc_native_target());
+        char game_rel[RC_PATH_MAX];
+        packaged = rc_host_resolve(base_dir, "data/game", false, game_rel) && rc_host_exists(game_rel, NULL, NULL);
+        if (packaged && !rc_host_resolve(base_dir, rel, false, data_blob)) {
+            /* the executable's own then (a folder too long for this leaves it empty: not found) */
+            if (snprintf(data_blob, sizeof data_blob, "%s/%s", base_dir, rel) >= (int)sizeof data_blob) {
+                data_blob[0] = 0;
+            }
+        }
+        if (packaged && (!game_dir || !*game_dir) && rc_host_resolve(base_dir, "data/game", false, data_game)) {
+            game_dir = data_game;
+        }
+    }
     if (!game_dir || !*game_dir) {
         static char found[RC_PATH_MAX];
         char path[RC_PATH_MAX];
@@ -371,6 +407,11 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     const char *native = getenv("RC_NATIVE");
     if (native && !*native) {
         native = NULL;
+    }
+    /* (In a package the executable's own blob, data/code-<target>-<exe>.bin, is chosen once the
+     * executable is known; data/code-<target>.bin otherwise.) */
+    if (!native && packaged) {
+        native = data_blob;
     }
     if (!native && (!generated || generated->count == 0)) {
         printf("%s: no lifted code in this build.\n"
@@ -396,6 +437,17 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     bool have_exe = native != NULL;
     char exe_hash[65] = "";
     hash_file(game_dir, exe, exe_hash);
+    if (packaged && native == data_blob) {
+        char rel[160], lower[64], own[RC_PATH_MAX];
+        snprintf(lower, sizeof lower, "%s", exe);
+        for (char *q = lower; *q; q++) {
+            *q = (char)tolower((unsigned char)*q);
+        }
+        snprintf(rel, sizeof rel, "data/code-%s-%s.bin", rc_native_target(), lower);
+        if (rc_host_resolve(base_dir, rel, false, own) && rc_host_exists(own, NULL, NULL)) {
+            snprintf(data_blob, sizeof data_blob, "%s", own);
+        }
+    }
     if (native) {
         uint32_t size = 0;
         uint8_t *blob = rc_host_read(native, &size);

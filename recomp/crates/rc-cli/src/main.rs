@@ -8,6 +8,7 @@ mod discover;
 mod lift;
 mod media;
 mod native;
+mod package;
 
 use rc_manifest::{Catalog, Hit};
 use std::collections::BTreeMap;
@@ -82,6 +83,9 @@ struct Opts {
     preset: Option<String>,
     set: Option<PathBuf>,
     native: Vec<String>,
+    system: Option<String>,
+    shell: Option<PathBuf>,
+    template: Option<PathBuf>,
     paths: Vec<PathBuf>,
 }
 
@@ -109,6 +113,9 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         preset: None,
         set: None,
         native: Vec::new(),
+        system: None,
+        shell: None,
+        template: None,
         paths: Vec::new(),
     };
     let mut it = args.iter();
@@ -127,6 +134,9 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
             "--comments" => o.comments = true,
             "--preset" => o.preset = Some(it.next().ok_or("--preset needs a name")?.clone()),
             "--set" => o.set = Some(it.next().ok_or("--set needs a file")?.into()),
+            "--system" => o.system = Some(it.next().ok_or("--system needs a system")?.clone()),
+            "--shell" => o.shell = Some(it.next().ok_or("--shell needs a file")?.into()),
+            "--template" => o.template = Some(it.next().ok_or("--template needs a file")?.into()),
             "--native" => {
                 let t = it
                     .next()
@@ -189,6 +199,28 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 },
                 &o.paths,
             )
+        }
+        "template" => {
+            let o = parse_opts(rest)?;
+            let game = o.game.as_deref().ok_or("template needs --game ID")?;
+            let system = o
+                .system
+                .as_deref()
+                .ok_or("template needs --system SYSTEM")?;
+            let shell = o.shell.as_deref().ok_or("template needs --shell PROGRAM")?;
+            let out = o.out.as_deref().ok_or("template needs --out FILE")?;
+            package::template(game, system, shell, out)
+        }
+        "package" => {
+            let o = parse_opts(rest)?;
+            let tpl = o
+                .template
+                .as_deref()
+                .ok_or("package needs --template FILE")?;
+            let [install] = o.paths.as_slice() else {
+                return Err("package needs one install folder".into());
+            };
+            package::package(&o.games, tpl, o.out.as_deref(), install)
         }
         "convert" => {
             let o = parse_opts(rest)?;

@@ -8,6 +8,7 @@
 #include "patches.h"
 #include "rc/cpu.h"
 #include "rc/dispatch.h"
+#include "rc/log.h"
 #include "rc/mem.h"
 #include "rc/platform.h"
 
