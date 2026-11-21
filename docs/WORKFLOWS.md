@@ -128,6 +128,18 @@ generated code); `CMAKE_BUILD_PARALLEL_LEVEL=N` sets the number instead. Unpacki
 to `registry-install.txt` in the unpacked folder (for an install unpacked before, `recomp extract` of the same installer adds it and leaves the files alone, and so does `convert`), which the
 runtime loads before the player's own `registry.txt`.
 
+## Title and icons
+
+The window's title is the game's, then the version, the build's revision and the install's language, as
+in TropicoRecomp: "Cultures 2: The Gates of Asgard 0.0.1 (07780ce, Deutsch)". The language comes from
+GOG's `goggame-*.info`, else from the variant (`gold-de`: German). The revision is the commit CMake was
+configured at.
+
+Each game has an icon drawn for this project in the look of its own (`tools/icons/<game>.svg`: the
+round, ringed badges of the GOG icons, with a Viking, a shield, a longship, a lighthouse, a rune stone).
+`tools/make-icons` renders them to `build/icons/<game>/png/` and `build/icons/<game>.ico` (rsvg-convert,
+else a headless Firefox); a Windows build then puts the `.ico` into the program.
+
 ## Running a game
 
 ```sh

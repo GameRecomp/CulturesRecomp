@@ -180,9 +180,24 @@ function(rc_lifted_objects id dir out)
 endfunction()
 
 # The game's shell: an executable that links the lifted binaries of `set_file`.
+# The game's icon (tools/icons/<id>.svg, made into build/icons/<id>.ico by tools/make-icons) in
+# the Windows program, as resource 1, which Windows also shows in the window; none if the file is
+# missing.
+function(rc_game_icon id target)
+  set(ico "${PROJECT_SOURCE_DIR}/build/icons/${id}.ico")
+  if(WIN32 AND EXISTS "${ico}")
+    enable_language(RC)
+    file(TO_CMAKE_PATH "${ico}" ico)
+    set(rc "${CMAKE_CURRENT_BINARY_DIR}/${target}.rc")
+    file(WRITE "${rc}" "1 ICON \"${ico}\"\n")
+    target_sources(${target} PRIVATE "${rc}")
+  endif()
+endfunction()
+
 function(rc_add_shell id target main_c set_file)
   add_executable(${target} "${main_c}" ${G_PATCHES})  # G_PATCHES: rc_add_game's
   target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
+  rc_game_icon(${id} ${target})
   rc_set_dirs("${set_file}" dirs)
   if(dirs)
     # Configure again when a lift changes which binaries the set holds.
@@ -326,6 +341,7 @@ function(rc_add_game id)
   else()
     add_executable(${target} "${main_c}" ${G_PATCHES})
     target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
+    rc_game_icon(${id} ${target})
     file(GLOB_RECURSE gen_sources CONFIGURE_DEPENDS "${gen_dir}/*.c")
     if(gen_sources)
       list(LENGTH gen_sources n)

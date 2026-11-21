@@ -22,6 +22,7 @@
 #include "rc/sha256.h"
 #include "rc_version.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -245,11 +246,68 @@ static int check(const rc_game_info *game, const char *game_dir, const char *exe
 
 static const rc_game_info *the_game;
 
+/* For the window's title, after the game's: " <version> (<revision>, <language>)". */
+static char title_suffix[64];
+
+/* The language of an install, as it calls itself: GOG's goggame-*.info says it ("language"),
+ * else the variant of the lifted executable ("gog-de": German); NULL if neither does. */
+typedef struct info_find {
+    char name[128];
+} info_find;
+
+static void find_info(void *ctx, const char *name, bool is_dir, uint64_t size)
+{
+    (void)size;
+    info_find *f = ctx;
+    size_t n = strlen(name);
+    if (!is_dir && !f->name[0] && n > 13 && !strncmp(name, "goggame-", 8) && !strcmp(name + n - 5, ".info")) {
+        snprintf(f->name, sizeof f->name, "%s", name);
+    }
+}
+
+static const char *install_language(const char *game_dir, const char *variant)
+{
+    static const struct {
+        const char *gog, *code, *own;
+    } langs[] = {{"English", "en", "English"}, {"German", "de", "Deutsch"},  {"Spanish", "es", "Espa\xc3\xb1ol"},
+                 {"French", "fr", "Fran\xc3\xa7" "ais"}, {"Italian", "it", "Italiano"}, {"Polish", "pl", "Polski"}};
+    info_find f = {{0}};
+    rc_host_list(game_dir, find_info, &f);
+    char path[RC_PATH_MAX];
+    uint32_t size = 0;
+    uint8_t *text = f.name[0] && rc_host_resolve(game_dir, f.name, false, path) ? rc_host_read(path, &size) : NULL;
+    if (text) {
+        const char *key = strstr((const char *)text, "\"language\"");
+        for (size_t i = 0; key && i < sizeof langs / sizeof langs[0]; i++) {
+            const char *colon = strchr(key, ':');
+            const char *v = colon && strchr(colon, '"') ? strchr(colon, '"') + 1 : "";
+            size_t k = 0;
+            while (langs[i].gog[k] && tolower((unsigned char)v[k]) == tolower((unsigned char)langs[i].gog[k])) {
+                k++;
+            }
+            if (!langs[i].gog[k] && v[k] == '"') { /* "German", "german": GOG writes either */
+                free(text);
+                return langs[i].own;
+            }
+        }
+        free(text);
+    }
+    const char *dash = variant ? strrchr(variant, '-') : NULL;
+    for (size_t i = 0; dash && i < sizeof langs / sizeof langs[0]; i++) {
+        if (!strcmp(dash + 1, langs[i].code)) {
+            return langs[i].own;
+        }
+    }
+    return NULL;
+}
+
 static void setup(void)
 {
     if (!rc_plat_init(the_game->title)) {
         rc_fatal("no display");
     }
+    rc_plat_title_suffix(title_suffix);
+    rc_log("title: %s%s", the_game->title, title_suffix);
     rc_hle_all();
     if (the_game->patches) {
         the_game->patches();
@@ -350,6 +408,11 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
         lifted[nlifted].table = b->table;
         lifted[nlifted].count = b->count;
         nlifted++;
+        if (strcmp(h, exe_hash) == 0) {
+            const char *lang = install_language(game_dir, b->variant);
+            snprintf(title_suffix, sizeof title_suffix, lang ? " %s (%s, %s)" : " %s (%s)", RC_VERSION, RC_GIT_HASH,
+                     lang ? lang : "");
+        }
         have_exe |= strcmp(h, exe_hash) == 0;
         rc_log("lifted %s (%s) at %#010x", b->name, b->variant, b->image_base);
     }
