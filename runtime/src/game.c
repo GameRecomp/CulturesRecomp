@@ -362,7 +362,15 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
      * elsewhere) data/ is beside the AppImage file. */
     const char *appimage = getenv("APPIMAGE");
     const char *data_env = getenv("RC_DATA");
-    if ((data_env && *data_env) || (appimage && *appimage)) {
+    static char bundled[RC_PATH_MAX];
+    if ((!generated || generated->count == 0) && rc_plat_bundled_data(bundled, sizeof bundled)) {
+        /* Android: the APK's assets/data, unpacked into the app's storage on the first start. */
+        size_t n = strlen(bundled);
+        if (n >= 4 && !strcmp(bundled + n - 4, "data")) {
+            bundled[n - 4] = 0;
+        }
+        base_dir = bundled;
+    } else if ((data_env && *data_env) || (appimage && *appimage)) {
         snprintf(argv_dir, sizeof argv_dir, "%s", data_env && *data_env ? data_env : appimage);
         if (!(data_env && *data_env)) {
             char *slash = strrchr(argv_dir, '/');

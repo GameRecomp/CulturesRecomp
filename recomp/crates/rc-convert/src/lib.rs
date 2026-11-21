@@ -52,6 +52,28 @@ pub fn make_template(
 ) -> Result<Vec<u8>, Error> {
     let targets = default_targets(system).ok_or_else(|| format!("unknown system {system:?}"))?;
     let io = |e: std::io::Error| e.to_string();
+    if system == "android" {
+        // The shell is an APK (tools/build-android): its entries, and assets/data/ for the code
+        // and the game's files.
+        let entries = zip::read_stored(shell)?;
+        let mut z = zip::ZipWriter::new(Vec::new());
+        for e in &entries {
+            if e.is_dir {
+                z.dir(&e.name).map_err(io)?;
+            } else {
+                z.file(&e.name, e.mode, &e.data).map_err(io)?;
+            }
+        }
+        z.dir("assets/").map_err(io)?;
+        z.dir("assets/data/").map_err(io)?;
+        z.file(
+            "assets/data/targets",
+            0o644,
+            format!("{}\n", targets.join(" ")).as_bytes(),
+        )
+        .map_err(io)?;
+        return z.finish().map_err(io);
+    }
     let root = format!("{}/", stem(game));
     let mut z = zip::ZipWriter::new(Vec::new());
     z.dir(&root).map_err(io)?;

@@ -200,6 +200,16 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 &o.paths,
             )
         }
+        "verify-apk" => {
+            let o = parse_opts(rest)?;
+            let [apk] = o.paths.as_slice() else {
+                return Err("verify-apk needs one APK".into());
+            };
+            let mut f = std::fs::File::open(apk).map_err(|e| format!("{}: {e}", apk.display()))?;
+            rc_convert::apk::verify(&mut f)?;
+            println!("{}: the APK signature (v2) is valid", apk.display());
+            Ok(ExitCode::SUCCESS)
+        }
         "template" => {
             let o = parse_opts(rest)?;
             let game = o.game.as_deref().ok_or("template needs --game ID")?;
