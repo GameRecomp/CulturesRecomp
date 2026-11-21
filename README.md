@@ -1,4 +1,18 @@
+<p align="center">
+  <img src="tools/icons/cultures1.svg" width="96" alt="Cultures icon">
+  <img src="tools/icons/cultures2.svg" width="96" alt="Cultures 2 icon">
+  <img src="tools/icons/northland.svg" width="96" alt="Northland icon">
+  <img src="tools/icons/eighthwonder.svg" width="96" alt="8th Wonder icon">
+  <img src="tools/icons/saga.svg" width="96" alt="Saga icon">
+</p>
+
 # CulturesRecomp
+
+## 👉 [**Open the converter: gamerecomp.github.io/CulturesRecomp**](https://gamerecomp.github.io/CulturesRecomp/) 👈
+
+**Turn your own copy of a Cultures game (the GOG installer, or a zip of the installed Saga) into a native build
+for Windows, Linux or Android, or play it right in your browser.** Everything happens in the browser tab: your
+installer is not uploaded anywhere.
 
 A **static recompilation** of the *Cultures* series by Funatics. It translates
 the original 32-bit x86 Windows executables ahead of time into portable C. That C
@@ -14,13 +28,13 @@ which you supply from your own copy.
 
 ## Supported games
 
-| Id             | Game (EN / DE)                                                | Engine | Sources supported                         |
-|----------------|---------------------------------------------------------------|--------|-------------------------------------------|
-| `cultures1`    | Cultures: Discovery of Vinland / Die Entdeckung Vinlands      | C1     | GOG (EN, DE), German *Gold Edition* CD (incl. add-on *Die Rache des Regengottes*) |
-| `cultures2`    | Cultures 2: The Gates of Asgard / Die Tore Asgards            | C2     | GOG (EN, DE)                              |
-| `northland`    | Cultures: Northland / Reise nach Nordland                     | C2     | GOG (EN, DE, ES)                          |
-| `eighthwonder` | Cultures: 8th Wonder of the World / Das Achte Weltwunder      | C2     | GOG (EN, DE, ES)                          |
-| `saga`         | Cultures: The Saga / Die Saga                                 | C2     | German retail CD (installed copy as zip)  |
+|  | Id             | Game (EN / DE)                                                | Engine | Sources supported                         |
+|--|----------------|---------------------------------------------------------------|--------|-------------------------------------------|
+| <img src="tools/icons/cultures1.svg" width="32" alt=""> | `cultures1`    | Cultures: Discovery of Vinland / Die Entdeckung Vinlands      | C1     | GOG (EN, DE), German *Gold Edition* CD (incl. add-on *Die Rache des Regengottes*) |
+| <img src="tools/icons/cultures2.svg" width="32" alt=""> | `cultures2`    | Cultures 2: The Gates of Asgard / Die Tore Asgards            | C2     | GOG (EN, DE)                              |
+| <img src="tools/icons/northland.svg" width="32" alt=""> | `northland`    | Cultures: Northland / Reise nach Nordland                     | C2     | GOG (EN, DE, ES)                          |
+| <img src="tools/icons/eighthwonder.svg" width="32" alt=""> | `eighthwonder` | Cultures: 8th Wonder of the World / Das Achte Weltwunder      | C2     | GOG (EN, DE, ES)                          |
+| <img src="tools/icons/saga.svg" width="32" alt=""> | `saga`         | Cultures: The Saga / Die Saga                                 | C2     | German retail CD (installed copy as zip)  |
 
 There are two engines. *C1* is the engine of the first game. *C2* is the Cultures 2 engine,
 which Northland, 8th Wonder and the Saga reuse. Every executable we support is pinned by
