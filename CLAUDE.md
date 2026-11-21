@@ -3,7 +3,7 @@
 Static recompilation of the *Cultures* games (Funatics) into portable C on an SDL3 runtime, modelled on
 TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, decision log).
 
-## State (2026-11-20)
+## State (2026-11-21)
 
 | Milestone | State | What exists |
 |-----------|-------|-------------|
@@ -19,7 +19,7 @@ TropicoRecomp. Start here, then read `docs/PLAN.md` (milestones, checklists, dec
 | M11 Northland, 8th Wonder, Saga | **in progress** | all lift, play their movies (dshow + pl_mpeg), sound (DirectSound 8) and music (dmusic player + DLS synth), and start their first missions; open: a mission played through |
 | M12 Multiplayer | **in progress** | own network (`hle/dplay/net.c`: UDP discovery, host relay over TCP) under DirectPlay 4 (C1) and 8 (all four C2-engine games): two programs find each other, join and play a match, an hour in lockstep (C1, real clock); open: long games with commands |
 | M13 Editors | **in progress** | a Windows desktop for programs without DirectDraw (`user32` windows, menus, dialogs, controls; `gdi32`; `comctl32`; `comdlg32`); the editors of Northland, 8th Wonder and the Saga create, paint, save and open maps, and Northland plays a map made in its editor; open: the other tools by hand |
-| M14 Converter | **in progress** | `recomp convert`: installer, CD, zip or folder → unpacked, lifted, built, `out/<game>/play.sh`; open: no-compiler packages, browser |
+| M14 Converter | **in progress** | `recomp convert` (→ `out/<game>/play.sh`); without a compiler: Cranelift/WebAssembly back ends, templates and packages (zip, APK), AppImage, the browser converter and player (`web/`, rc-web) for the four GOG games; open: a CI run, Windows/Android shells built there, playing by hand |
 | M10 Cultures 2 | **in progress** | GOG serial from the installer's registry entries; menus, campaign map, the first mission starts and runs; MMX and music done; open: a mission played through |
 
 Check `git log` for the latest work.
@@ -59,6 +59,9 @@ recomp/crates/rc-ir        the lifter's IR (shared with TropicoRecomp)
 recomp/crates/rc-x86       x86 semantics: instructions → IR, functions and label entries from the code map
 recomp/crates/rc-emit-c    IR → C: functions, funcs.h, code_XXXX.c, per-binary table
 recomp/crates/rc-difftest  `difftest`: lifted C against the real CPU in 32-bit mode (dev tool, runs in CI)
+recomp/crates/rc-emit-native, rc-emit-wasm  IR → Cranelift native code / WebAssembly (from TropicoRecomp)
+recomp/crates/rc-convert   the pipeline from bytes (manifests built in), templates, packages, APK signing
+recomp/crates/rc-web       rc-convert for the browser (wasm-bindgen)
 recomp/crates/rc-cli       `recomp`: identify, info, list, extract, discover, codediff, lift (+ ignored tests on orig/)
 runtime/                   TropicoRecomp's runtime: memory/vm/heap, CPU, x87, dispatch (+ one table per lifted binary),
                            imports, process (loader + DLL relocation), threads, clock, host files; rc_shell = game.c
@@ -69,6 +72,8 @@ games/<id>/                game.toml + CMakeLists.txt (rc_add_game → cultures-
 cmake/                     lift.cmake, game_main.c.in
 third_party/               vendored code under its own licence (pl_mpeg), see its README
 tools/                     audit.sh, hooks/ (pre-commit, commit-msg), dev-extract.sh, difftest/ (ref32.c, harness.c)
+web/                       the converter site and the browser player (tools/build-web)
+android/                   the Android shell's manifest and activity (tools/build-android)
 docs/                      PLAN, ARCHITECTURE, TARGETS, RESEARCH, WORKFLOWS
 orig/                      the user's game media (git-ignored): 10 GOG installers, Gold ISO, Saga zip
 ```

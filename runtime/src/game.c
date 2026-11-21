@@ -433,6 +433,11 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     }
     /* (In a package the executable's own blob, data/code-<target>-<exe>.bin, is chosen once the
      * executable is known; data/code-<target>.bin otherwise.) */
+    /* In a browser the page has loaded the game's code before main (rcLoadCode). */
+    bool preloaded = !native && rc_native_loaded();
+    if (preloaded) {
+        native = "(loaded by the page)";
+    }
     if (!native && packaged) {
         native = data_blob;
     }
@@ -473,9 +478,9 @@ int rc_game_main(const rc_game_info *game, const rc_generated_set *generated, in
     }
     if (native) {
         uint32_t size = 0;
-        uint8_t *blob = rc_host_read(native, &size);
+        uint8_t *blob = preloaded ? NULL : rc_host_read(native, &size);
         char err[256];
-        if (!blob || !rc_native_load(blob, size, err, sizeof err)) {
+        if (!preloaded && (!blob || !rc_native_load(blob, size, err, sizeof err))) {
             fprintf(stderr, "%s: %s\n", native, blob ? err : "cannot read it");
             return RC_EXIT_ERROR;
         }

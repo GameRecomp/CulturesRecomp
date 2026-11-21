@@ -346,6 +346,33 @@ function(rc_add_game id)
     target_compile_definitions(${target} PRIVATE main=SDL_main)
     target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
     set(gen_sources "")
+  elseif(EMSCRIPTEN)
+    # The web shell: an ES module (createGame) that web/play.js starts after it has loaded the
+    # game's code (rcLoadCode) and mounted its files. The game owns its loop, so main runs on
+    # JSPI and gives the browser its turn (rc/web.h).
+    add_executable(${target} "${main_c}" ${G_PATCHES})
+    target_link_libraries(${target} PRIVATE rc_shell rc_warnings)
+    target_link_options(${target} PRIVATE
+      -sJSPI=1
+      "-sJSPI_EXPORTS=['main','rc_web_thread_entry']"
+      -sALLOW_MEMORY_GROWTH=1
+      -sMAXIMUM_MEMORY=4GB
+      -sALLOW_TABLE_GROWTH=1
+      -sSTACK_SIZE=8MB
+      -sINITIAL_MEMORY=128MB
+      -sMODULARIZE=1
+      -sEXPORT_ES6=1
+      -sEXPORT_NAME=createGame
+      -sENVIRONMENT=web
+      -sINVOKE_RUN=0
+      -sEXIT_RUNTIME=0
+      -sFORCE_FILESYSTEM=1
+      "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_rc_web_thread_entry','_rc_wasm_helpers','_rc_wasm_register']"
+      "-sEXPORTED_RUNTIME_METHODS=['FS','IDBFS','ENV','callMain','HEAPU8','HEAPU32','addRunDependency','removeRunDependency']"
+      "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$rcLoadCode','$rcGameFS']"
+      -lidbfs.js)
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME ${id})
+    set(gen_sources "")
   else()
     add_executable(${target} "${main_c}" ${G_PATCHES})
     target_link_libraries(${target} PRIVATE rc_shell rc_warnings)

@@ -467,6 +467,22 @@ both contain the lobby library; they differ in the copy protection: `Cultures2.e
   section with that false function gone. **(open)** a general rule: a candidate from data that a code
   immediate or call contradicts later should give way.
 
+## In the browser (M14)
+
+- The web shell runs guest threads on one JavaScript thread: a switch is a JSPI suspension resumed in a
+  microtask, and the browser gets its turn only when the runtime yields (`rc_web_poll`, at most every 16 ms,
+  in polling calls and in the scheduler). Cultures 2's Miles streaming thread polls `WaitForMultipleObjects`
+  with a zero timeout in a loop; that wait returned without yielding, which natively costs nothing but froze
+  the page about 20 s in (once its audio ran). A zero-timeout wait now counts as a poll.
+- The game's files lie in the browser's private storage (OPFS) and are read block by block, asynchronously;
+  only `rc_host_fread` fetches them first. Plain stdio reads of game files fail there with EIO: advapi32's
+  `registry-install.txt` (without it Cultures 1 found no settings key and chose 800 × 600), file mapping and
+  pl_mpeg's movie reader now read through it.
+- The static data of the shell (HLE tables, the DLS synth) needs more than 64 MB of initial memory: 128 MB.
+- Speed: Cultures 1's scripted 3000 frames take 34 s in headless Chrome (about 90 frames a second with the
+  virtual clock); converting an installer in the page takes 27–45 s.
+- **(open)** Touch input on Android and in mobile browsers; audio latency of the ScriptProcessor path.
+
 ## Open questions (summary)
 
 1. Is `.cms_t` in the GOG `Cultures2.exe` executed? Not up to the serial prompt (the entry point is in `.text`, and a

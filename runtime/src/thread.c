@@ -223,7 +223,15 @@ static uint32_t pick(void)
     }
 }
 
-static void schedule(void) { switch_to(pick()); }
+static void schedule(void)
+{
+#if BACKEND_JSPI
+    /* Switching threads runs in microtasks, which never let the browser have its turn: a thread
+     * that polls with Sleep(0) or a zero wait would starve the page. */
+    rc_web_poll();
+#endif
+    switch_to(pick());
+}
 
 void rc_thread_yield(void)
 {
@@ -330,6 +338,8 @@ static void finish(uint32_t code)
 
 #if BACKEND_JSPI
 /* Where the page starts a thread, on its own shadow stack. */
+/* A guest thread's start, called from JavaScript (library_rc.js) on its own stack. */
+void rc_web_thread_entry(uint32_t i);
 EMSCRIPTEN_KEEPALIVE void rc_web_thread_entry(uint32_t i)
 {
     (void)i;

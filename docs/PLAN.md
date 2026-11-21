@@ -330,9 +330,24 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 
 - [x] `recomp convert`: identify (installer, CD image, zip or installed folder) → extract → lift every binary the
       manifest lifts → CMake build of the game's shell → `out/<game>/` with `play.sh`/`play.bat`
-- [ ] Prebuilt runtime packages, so users need no compiler: native back end via Cranelift (as in comparable
-      projects) or shipping a C compiler toolchain (to be decided in M14)
-- [ ] Browser converter (wasm32 build of the pipeline, local only, nothing uploaded)
+- [x] Prebuilt runtime packages, so users need no compiler: native back end via Cranelift (rc-emit-native from
+      TropicoRecomp), `recomp template` and `recomp package` (zip; signed APK for Android)
+- [x] Self-contained shells: `tools/build-shell` (static SDL3, SDL3_ttf, SDL3_mixer), `tools/make-appimage`,
+      `tools/build-android` (CI only: needs the Android SDK and NDK); a package of the Linux shell and of its
+      AppImage draws Cultures 1's mission bit-identical to the compiled C
+- [x] WebAssembly back end (rc-emit-wasm from TropicoRecomp, with MMX); difftest C, native and WebAssembly each
+      21192/21192
+- [x] Browser player: the web shell (`tools/build-web-shell`, Emscripten with JSPI) runs Cultures 1's scripted
+      mission bit-identical to the compiled C in headless Chrome; Cultures 2, Northland and 8th Wonder start and
+      play their intros
+- [x] Browser converter (rc-web, wasm32 build of the pipeline, local only, nothing uploaded): the GOG installer
+      → the game's files and its WebAssembly code in the browser's storage, or a package for a template; under
+      Node it makes the CLI's code and files byte for byte; the site (`tools/build-web`, `web/`) converts and
+      plays all four GOG games end to end in headless Chrome
+- [x] `.github/workflows/converter.yml`: shells, templates, `recomp` per system and the site on GitHub Pages
+      (manual runs; macOS off in `platforms.json`)
+- [ ] CI run of the converter workflow (nothing pushed yet), the Windows and Android shells built there
+- [ ] The browser and Android builds played by hand (touch input, audio, saving)
 
 ### M15 – Polish and platforms
 
@@ -385,6 +400,8 @@ Bink's; CD audio (`winmm` MCI) plays `MUSIC/TrackNN.ogg` through SDL3_mixer.
 | 2026-11-20 | Every unpacked install besides the default one gets a build target of its own (`cultures-<game>-<folder>`, outside `all`) instead of being linked into `cultures-<game>`: debugging another build is a choice of target, and the default build compiles one variant. Each target links its own set (`recomp lift --set`), and each lifted binary is an object library shared by the targets that link it. |
 | 2026-11-20 | Every `HeapCreate` heap reuses only its own freed blocks (`rc_heap_alloc_in`), as on Windows, instead of all heaps sharing one set of free lists: DLLs with their own C runtime (Northland's music driver) may rely on not getting the program's freed and filled blocks. Clearing blocks on free would hide that too, but would break programs that read memory just after freeing it, which Windows leaves intact. |
 | 2026-11-20 | The build lifts, as in TropicoRecomp: configuring lifts a game without lifted code, and building its shell lifts again when its manifest or the lifter changed (`cmake/lift.cmake`, `-DRC_AUTO_LIFT=OFF` to stop it). It takes one install per game by default (`orig/<game>/gog-en`), because every lifted executable is about 40 MB of C; `<GAME>_GAME_DIRS` adds more. `recomp lift` takes a folder and writes only changed files, so a lift that changes nothing compiles nothing. A game whose media lie in `orig/` but that has not been unpacked is unpacked while configuring (`recomp extract --game`). |
+| 2026-11-21 | The converter for people without a compiler is TropicoRecomp's: templates of a prebuilt shell, the game's code compiled with Cranelift (or to WebAssembly for the browser) and its files beside it, in a zip or a signed APK. The pipeline from bytes to programs lives in `rc-convert` (manifests built in), so the CLI and the browser (rc-web) share it. Only the GOG installers are converted in the browser; the Saga (CD) goes through `recomp`. |
+| 2026-11-21 | In a browser the game's files can only be read through `rc_host_fread` (the blocks are fetched from the browser's storage first), so HLE code reads game files only through it (registry, file mapping, movies). A zero-timeout wait counts as a poll (yields as `timeGetTime` does): threads switch in microtasks, and a thread spinning on it would starve the page. |
 | 2026-11-19 | Generated C is compiled with the project's full warning set (unlike TropicoRecomp's `-w`); warnings are fixed in the lifter, not silenced. |
 | 2026-11-19 | As much code as possible is shared between the games: one toolchain, runtime, HLE and platform layer for all of them. Differences between games and builds go into the manifests or small game modules, not into copies of shared code, and changes to shared rules are checked against every target. |
 | 2026-11-19 | M2 closes at TropicoRecomp's bar, not only at ≥ 99 %: no unknown byte in any lifted C1 binary, and every `no-return?` candidate settled by a hint. A function checked to return gets a `returns` hint, so the report only shows unchecked candidates. |

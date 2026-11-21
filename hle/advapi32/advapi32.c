@@ -132,12 +132,21 @@ static bool file_path(char *out)
  * installation directory as the program sees it. */
 static void load_file(const char *path, bool install)
 {
-    FILE *f = fopen(path, "r");
-    if (!f) {
+    /* Read whole through rc_host_read: in a browser the game's files are read only that way. */
+    uint32_t len = 0;
+    uint8_t *text = rc_host_read(path, &len);
+    if (!text) {
         return;
     }
+    text[len] = 0;
     char line[4096];
-    while (fgets(line, sizeof line, f)) {
+    for (const char *at = (const char *)text; *at;) {
+        const char *eol = strchr(at, '\n');
+        size_t used = eol ? (size_t)(eol - at) + 1 : strlen(at);
+        size_t keep = used < sizeof line - 1 ? used : sizeof line - 1;
+        memcpy(line, at, keep);
+        line[keep] = 0;
+        at += used;
         char *k = line, *n = strchr(k, '\t');
         char *t = n ? strchr(n + 1, '\t') : NULL;
         char *h = t ? strchr(t + 1, '\t') : NULL;
@@ -167,11 +176,11 @@ static void load_file(const char *path, bool install)
         uint32_t type = (uint32_t)strtoul(t, NULL, 10);
         if (install && (type == 1 || type == 2) && size && rc_cfg && rc_cfg->guest_dir) {
             /* {app} → the installation directory (strings only; the data ends with its NUL) */
-            char text[2048], out[2048];
-            memcpy(text, data, size);
-            text[size - 1] = 0;
+            char str[2048], out[2048];
+            memcpy(str, data, size);
+            str[size - 1] = 0;
             size_t o = 0;
-            for (const char *p = text; *p && o + 1 < sizeof out;) {
+            for (const char *p = str; *p && o + 1 < sizeof out;) {
                 if (!strncmp(p, "{app}", 5)) {
                     o += (size_t)snprintf(out + o, sizeof out - o, "%s", rc_cfg->guest_dir);
                     o = o < sizeof out ? o : sizeof out - 1;
@@ -186,7 +195,7 @@ static void load_file(const char *path, bool install)
         }
         set_value(key, n, type, data, size);
     }
-    fclose(f);
+    free(text);
 }
 
 /* The installer's entries (registry-install.txt in the game directory, written when it was

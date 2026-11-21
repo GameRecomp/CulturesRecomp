@@ -402,6 +402,21 @@ static void u_Release(rc_cpu *c)
 /* ---- IGraphBuilder ---- */
 
 /* Open the movie at the guest's wide path `w`: S_OK or an error. */
+
+/* pl_mpeg's file loader with the runtime's reads. */
+static void load_movie(plm_buffer_t *self, void *user)
+{
+    (void)user;
+    if (self->discard_read_bytes) {
+        plm_buffer_discard_read_bytes(self);
+    }
+    size_t got = rc_host_fread(self->bytes + self->length, self->capacity - self->length, self->fh);
+    self->length += got;
+    if (got == 0) {
+        self->has_ended = 1;
+    }
+}
+
 static uint32_t open_movie(graph *g, uint32_t w)
 {
     char path[RC_PATH_MAX], rel[RC_PATH_MAX], host[RC_PATH_MAX];
@@ -421,7 +436,13 @@ static uint32_t open_movie(graph *g, uint32_t w)
         rc_log("DirectShow: \"%s\": not found", path);
         return VFW_E_NOT_FOUND;
     }
-    g->plm = plm_create_with_filename(host);
+    /* The file read through rc_host_fread (in a browser the game's files are read only that way). */
+    FILE *fh = fopen(host, "rb");
+    plm_buffer_t *buf = fh ? plm_buffer_create_with_file(fh, 1) : NULL;
+    if (buf) {
+        plm_buffer_set_load_callback(buf, load_movie, NULL);
+    }
+    g->plm = buf ? plm_create_with_buffer(buf, 1) : NULL;
     if (!g->plm || !plm_probe(g->plm, 5000 * 1024)) {
         rc_log("DirectShow: \"%s\": not an MPEG-1 system stream", path);
         close_movie(g);

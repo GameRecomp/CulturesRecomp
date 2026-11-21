@@ -157,6 +157,28 @@ The difftest runs every instruction form through both back ends. A DLL the manif
 `file@base` in the blob (process.c loads it there). This is the base of the converter's packages for
 people without a compiler (M14), as in TropicoRecomp.
 
+### Shells, AppImage and Android
+
+`tools/build-shell OUT GAME` builds a game's shell with SDL3, SDL3_ttf and SDL3_mixer (Vorbis) linked
+statically, from the releases pinned in `tools/sdl-versions`; `tools/make-appimage SHELL OUT.AppImage
+build/icons GAME` wraps it (data/ then lies beside the AppImage). `tools/build-android OUT.apk GAME` builds the
+Android shell APK (libmain.so for arm64-v8a and x86_64, SDL's activity, the game's icon); it needs the Android
+SDK and NDK, which CI has. `recomp template --system android --shell <shell.apk>` and `recomp package` then make
+a signed APK (`recomp verify-apk` checks the signature); the app unpacks its data on the first start.
+
+### In the browser
+
+`recomp lift --native wasm orig/cultures1/gog-en` writes the program's code as a WebAssembly module
+(`code-wasm.wasm`) for the web shell. `tools/build-web-shell OUT GAME` builds the shell with Emscripten (emsdk
+7.0.0, JSPI) into `OUT/<game>.js` and `.wasm` with the Liberation fonts. `tools/build-web SITE [TEMPLATES
+[WEB_SHELLS]]` assembles the converter site: `web/` (the pages), rc-web (the converter, wasm32 through
+wasm-bindgen 0.2.130), the templates and the web shells. On the site the GOG installer is converted in the
+page, without uploading anything: for "Browser" its files and code go into the browser's private storage and
+`play.html` runs them; for a system, the package is saved. Serve it locally with `python3 -m http.server` in
+SITE; it needs a browser with WebAssembly stack switching (current Chrome, Edge, Firefox).
+`.github/workflows/converter.yml` builds all of it and publishes the site to GitHub Pages (manual runs; the
+systems in `platforms.json`).
+
 ## Title and icons
 
 The window's title is the game's, then the version, the build's revision and the install's language, as

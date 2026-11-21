@@ -185,13 +185,17 @@ static uint32_t wait(const uint32_t *h, uint32_t n, bool all, uint32_t timeout)
                 }
             }
         }
+        if (timeout == 0) {
+            /* A poll, as a loop of them waits: the others get their turn (and in a browser the
+             * page; see rc_thread_poll). */
+            rc_thread_yield();
+            rc_thread_poll();
+            return WAIT_TIMEOUT;
+        }
         if (timeout != INFINITE && rc_ticks_peek_ms() - start >= timeout) {
             return WAIT_TIMEOUT;
         }
-        rc_thread_sleep(timeout == 0 ? 0 : 1);
-        if (timeout == 0) {
-            return WAIT_TIMEOUT;
-        }
+        rc_thread_sleep(1);
     }
 }
 
